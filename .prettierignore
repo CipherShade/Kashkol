@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+coverage/
+.data/
+src/generated/
+package-lock.json
+docs/
+madar-teacher-prototype.html

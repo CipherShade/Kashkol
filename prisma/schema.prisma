@@ -1,0 +1,1409 @@
+// Kashkol data model — foundation (M0) plus the core domain schema.
+//
+// One schema, sectioned per module (ADR-0002). Prisma 7 with the explicit
+// `prisma-client` generator output, the PostgreSQL driver adapter, and RLS
+// added in the migration (ADR-0006).
+//
+// Every tenant-scoped table carries a non-null `workspace_id`, an index on it,
+// and a row-level-security policy. `src/lib/db/tenant-tables.ts` is the registry
+// that CI and the isolation tests agree with.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Shared enums
+// ---------------------------------------------------------------------------
+
+enum Locale {
+  ar
+  en
+
+  @@map("locale")
+}
+
+enum Theme {
+  light
+  dark
+  system
+
+  @@map("theme")
+}
+
+enum WorkspaceStatus {
+  active
+  suspended
+  deleted
+
+  @@map("workspace_status")
+}
+
+enum MemberRole {
+  owner
+  assistant
+
+  @@map("member_role")
+}
+
+enum MemberStatus {
+  active
+  invited
+  suspended
+  removed
+
+  @@map("member_status")
+}
+
+enum PermissionResource {
+  students
+  grades
+  groups
+  sessions
+  attendance
+  homework
+  files
+  messages
+  payments
+  exports
+  integrations
+  settings
+  team
+  audit
+
+  @@map("permission_resource")
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+
+  @@map("invitation_status")
+}
+
+enum PermissionAction {
+  read
+  write
+
+  @@map("permission_action")
+}
+
+enum AuditActorType {
+  user
+  system
+  platform_admin
+
+  @@map("audit_actor_type")
+}
+
+enum PortalKind {
+  parent
+  student
+
+  @@map("portal_kind")
+}
+
+enum SessionStatus {
+  scheduled
+  started
+  completed
+  cancelled
+
+  @@map("session_status")
+}
+
+// The table `attendance_mark` already owns the composite type of that name, so
+// the enum is named `attendance_mark_value` and mapped to its own type.
+enum AttendanceMarkValue {
+  present
+  absent
+  late
+  excused
+
+  @@map("attendance_mark_value")
+}
+
+enum AttendanceSource {
+  manual
+  qr
+
+  @@map("attendance_source")
+}
+
+enum HomeworkStatus {
+  active
+  archived
+
+  @@map("homework_status")
+}
+
+enum HomeworkSubmissionStatus {
+  not_submitted
+  submitted
+  late
+  excused
+
+  @@map("homework_submission_status")
+}
+
+enum AssessmentType {
+  paper_exam
+  quiz
+  test
+  other
+
+  @@map("assessment_type")
+}
+
+enum AssessmentResultStatus {
+  graded
+  missing
+  excused
+  not_taken
+
+  @@map("assessment_result_status")
+}
+
+enum FollowUpStatus {
+  open
+  resolved
+
+  @@map("follow_up_status")
+}
+
+enum FollowUpOutcome {
+  contacted
+  no_answer
+  monitoring
+  no_action
+  other
+
+  @@map("follow_up_outcome")
+}
+
+enum PaymentMethod {
+  cash
+  transfer
+  other
+
+  @@map("payment_method")
+}
+
+enum PaymentAdjustmentKind {
+  discount
+  refund
+  correction
+
+  @@map("payment_adjustment_kind")
+}
+
+enum ReportExportStatus {
+  queued
+  processing
+  ready
+  failed
+}
+
+enum FileScope {
+  teacher_only
+  groups
+  students
+
+  @@map("file_scope")
+}
+
+enum ScanStatus {
+  pending
+  clean
+  blocked
+
+  @@map("scan_status")
+}
+
+enum GuardianRelation {
+  mother
+  father
+  other
+  legal_guardian
+
+  @@map("guardian_relation")
+}
+
+enum MessageChannel {
+  whatsapp
+  sms
+  email
+  in_app
+
+  @@map("message_channel")
+}
+
+enum MessageStatus {
+  pending
+  prepared
+  sending
+  sent
+  delivered
+  failed
+  cancelled
+  retried
+
+  @@map("message_status")
+}
+
+enum NotificationType {
+  attendance_present
+  attendance_absent
+  attendance_late
+  attendance_excused
+  session_cancelled
+  session_rescheduled
+  homework_assigned
+  homework_reminder
+  exam_result
+  general
+
+  @@map("notification_type")
+}
+
+enum OutboxState {
+  pending
+  running
+  done
+  failed
+  cancelled
+
+  @@map("outbox_state")
+}
+
+// ---------------------------------------------------------------------------
+// Identity — Better Auth owns `user`, `session`, `account`, `verification`.
+// Kashkol never adds columns to those tables (DATA_MODEL.md §5.1).
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  sessions     Session[]
+  accounts     Account[]
+  preference   UserPreference?
+  memberships  WorkspaceMember[]
+  auditEvents  AuditEvent[]
+  portalGrants PortalGrant[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(6)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity SessionActivity?
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime  @db.Timestamptz(6)
+  createdAt  DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @db.Timestamptz(6)
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model RateLimit {
+  // Better Auth generates its own opaque id for this table; it is not a UUID.
+  id          String @id
+  key         String
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@index([key])
+  @@map("rate_limit")
+}
+
+/**
+ * Per-session activity, so the 12-hour idle timeout can be enforced precisely
+ * without adding a column to the Better Auth-owned `session` table.
+ */
+model SessionActivity {
+  sessionId  String   @id @map("session_id")
+  lastSeenAt DateTime @map("last_seen_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("session_activity")
+}
+
+/**
+ * Authentication events that happen before a workspace is known. This table is
+ * deliberately not tenant-scoped, stores no email address and no raw IP, and is
+ * never rendered to a workspace member.
+ */
+model AuthEvent {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  userId         String?  @map("user_id")
+  identifierHash String?  @map("identifier_hash")
+  event          String
+  ipHash         String?  @map("ip_hash")
+  userAgentHash  String?  @map("user_agent_hash")
+  requestId      String   @map("request_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([identifierHash, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("auth_event")
+}
+
+model UserPreference {
+  userId String @id
+  locale Locale @default(ar)
+  theme  Theme  @default(system)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preference")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  name           String
+  slug           String          @unique
+  teachingName   String          @map("teaching_name")
+  primarySubject String?         @map("primary_subject")
+  gradesTaught   String[]        @map("grades_taught")
+  status         WorkspaceStatus @default(active)
+  deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  settings            WorkspaceSettings?
+  members             WorkspaceMember[]
+  invitations         WorkspaceInvitation[]
+  auditEvents         AuditEvent[]
+  onboardingTasks     OnboardingTask[]
+  students            Student[]
+  portalGrants        PortalGrant[]
+  subjects            Subject[]
+  groups              Group[]
+  enrollments         Enrollment[]
+  teachingSessions    TeachingSession[]
+  attendanceMarks     AttendanceMark[]
+  attendanceRevisions AttendanceRevision[]
+  attendanceTokens    AttendanceToken[]
+  sessionRevisions    SessionRevision[]
+  assessments         Assessment[]
+  assessmentScores    AssessmentScore[]
+  payments            Payment[]
+  paymentRevisions    PaymentRevision[]
+  paymentAdjustments  PaymentAdjustment[]
+  feeRules            FeeRule[]
+  reportExports       ReportExport[]
+  files               File[]
+  fileGroups          FileGroupAccess[]
+  fileStudents        FileStudentAccess[]
+  studentNotes        StudentNote[]
+  guardians           Guardian[]
+  notifications       Notification[]
+  messageOutbox       MessageOutbox[]
+  notificationSettings NotificationSettings?
+  notificationLogs    NotificationLog[]
+  homeworks           Homework[]
+  homeworkSubmissions HomeworkSubmission[]
+  homeworkResources   HomeworkResource[]
+  followUps           StudentFollowUp[]
+  followUpEvents      StudentFollowUpEvent[]
+
+  @@map("workspace")
+}
+
+model WorkspaceSettings {
+  workspaceId        String   @id @map("workspace_id") @db.Uuid
+  atRiskAfter        Int      @default(2) @map("at_risk_after")
+  inactiveAfter      Int      @default(4) @map("inactive_after")
+  locale             Locale   @default(ar)
+  theme              Theme    @default(system)
+  timezone           String   @default("Africa/Cairo")
+  currency           String   @default("EGP")
+  emailDigestEnabled Boolean  @default(false) @map("email_digest_enabled")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@map("workspace_settings")
+}
+
+model WorkspaceMember {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  userId      String       @map("user_id")
+  role        MemberRole
+  status      MemberStatus @default(active)
+  joinedAt    DateTime     @default(now()) @map("joined_at") @db.Timestamptz(6)
+  removedAt   DateTime?    @map("removed_at") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  grants    PermissionGrant[]
+  ownedFollowUps StudentFollowUp[] @relation("FollowUpOwner")
+
+  @@unique([workspaceId, userId])
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_member")
+}
+
+model PermissionGrant {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  workspaceId String             @map("workspace_id") @db.Uuid
+  memberId    String             @map("member_id") @db.Uuid
+  resource    PermissionResource
+  action      PermissionAction
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // The composite reference makes a grant in workspace A unable to point at a
+  // member of workspace B, even if RLS on `workspace_id` alone would allow it.
+  member WorkspaceMember @relation(fields: [workspaceId, memberId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([memberId, resource, action])
+  @@index([workspaceId])
+  @@map("permission_grant")
+}
+
+/// A single-use invitation to join a workspace as an assistant.
+///
+/// Only the SHA-256 hash of the token is stored. The plaintext token exists
+/// once, in the message that the configured email transport prepares; it is
+/// never written to a log, an audit diff, or an HTTP response.
+model WorkspaceInvitation {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  workspaceId     String           @map("workspace_id") @db.Uuid
+  email           String
+  role            MemberRole       @default(assistant)
+  /** The grant set applied when the invitation is accepted. */
+  grants          Json             @default("[]")
+  tokenHash       String           @unique @map("token_hash")
+  status          InvitationStatus @default(pending)
+  invitedByUserId String           @map("invited_by_user_id")
+  expiresAt       DateTime         @map("expires_at") @db.Timestamptz(6)
+  lastSentAt      DateTime         @map("last_sent_at") @db.Timestamptz(6)
+  acceptedAt      DateTime?        @map("accepted_at") @db.Timestamptz(6)
+  acceptedByUserId String?         @map("accepted_by_user_id")
+  revokedAt       DateTime?        @map("revoked_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, email])
+  @@map("workspace_invitation")
+}
+
+model OnboardingTask {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  key         String
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+  @@map("onboarding_task")
+}
+
+// ---------------------------------------------------------------------------
+// Audit — append-only. Written in the same transaction as the mutation.
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  workspaceId      String         @map("workspace_id") @db.Uuid
+  actorUserId      String?        @map("actor_user_id")
+  actorDisplayName String         @map("actor_display_name")
+  actorType        AuditActorType @map("actor_type")
+  entityType       String         @map("entity_type")
+  entityId         String         @map("entity_id")
+  action           String
+  diff             Json?
+  requestId        String         @map("request_id")
+  ipHash           String?        @map("ip_hash")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  actor     User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, action])
+  @@map("audit_event")
+}
+
+// ---------------------------------------------------------------------------
+// Students & Portal Grants
+// ---------------------------------------------------------------------------
+
+model Student {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  workspaceId     String    @map("workspace_id") @db.Uuid
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  grade           String?
+  phoneE164       String?   @map("phone_e164")
+  parentName      String?   @map("parent_name")
+  parentPhoneE164 String?   @map("parent_phone_e164")
+  joinedAt        DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz(6)
+  mergedIntoId    String?   @map("merged_into_id") @db.Uuid
+  searchKey       String?   @map("search_key")
+  phoneticKey     String?   @map("phonetic_key")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  portalGrants        PortalGrant[]
+  enrollments         Enrollment[]
+  attendanceMarks     AttendanceMark[]
+  attendanceRevisions AttendanceRevision[]
+  assessmentScores    AssessmentScore[]
+  homeworkSubmissions HomeworkSubmission[]
+  followUps           StudentFollowUp[]
+  payments            Payment[]
+  paymentAdjustments  PaymentAdjustment[]
+  feeRules            FeeRule[]
+  files               File[]
+  fileAccesses        FileStudentAccess[]
+  notes               StudentNote[]
+  guardians           Guardian[]
+  notifications       Notification[]
+  messageOutbox       MessageOutbox[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, archivedAt])
+  @@map("student")
+}
+
+// ---------------------------------------------------------------------------
+// Guardians (Parents/Authorized Contacts)
+// ---------------------------------------------------------------------------
+
+model Guardian {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  workspaceId String          @map("workspace_id") @db.Uuid
+  studentId   String          @map("student_id") @db.Uuid
+  firstName   String          @map("first_name")
+  lastName    String          @map("last_name")
+  relation    GuardianRelation @default(other)
+  phoneE164   String          @map("phone_e164")
+  email       String?
+  isPrimary   Boolean         @default(false) @map("is_primary")
+  isAuthorized Boolean        @default(true) @map("is_authorized")
+  optOut      Boolean         @default(false) @map("opt_out")
+  consentGiven Boolean        @default(false) @map("consent_given")
+  consentAt   DateTime?       @map("consent_at") @db.Timestamptz(6)
+  notes       String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  notifications Notification[]
+  messageOutbox MessageOutbox[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, studentId, phoneE164])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@index([phoneE164])
+  @@map("guardian")
+}
+
+model PortalGrant {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  workspaceId  String     @map("workspace_id") @db.Uuid
+  portalUserId String     @map("portal_user_id")
+  studentId    String     @map("student_id") @db.Uuid
+  kind         PortalKind
+  issuedBy     String?    @map("issued_by")
+  issuedAt     DateTime   @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt    DateTime?  @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  portalUser User      @relation(fields: [portalUserId], references: [id], onDelete: Restrict)
+  student    Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([portalUserId, studentId, kind])
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([portalUserId])
+  @@map("portal_grant")
+}
+
+/// Teacher-only notes. The body is deliberately absent from audit diffs and
+/// portal projections.
+model StudentNote {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  body        String
+  authorId    String   @map("author_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([studentId, createdAt])
+  @@map("student_note")
+}
+
+// ---------------------------------------------------------------------------
+// Teaching content
+// ---------------------------------------------------------------------------
+
+model Subject {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String
+  searchKey   String?   @map("search_key")
+  phoneticKey String?   @map("phonetic_key")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  groups    Group[]
+  files     File[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, archivedAt])
+  @@map("subject")
+}
+
+model Group {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  subjectId   String?   @map("subject_id") @db.Uuid
+  name        String
+  grade       String?
+  room        String?
+  color       String    @default("indigo")
+  weekday     Int
+  startTime   DateTime  @map("start_time") @db.Time(0)
+  endTime     DateTime? @map("end_time") @db.Time(0)
+  capacity    Int?
+  teacherNote String?   @map("teacher_note")
+  searchKey   String?   @map("search_key")
+  phoneticKey String?   @map("phonetic_key")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  subject          Subject?          @relation(fields: [workspaceId, subjectId], references: [workspaceId, id], onDelete: Restrict)
+  enrollments      Enrollment[]
+  teachingSessions TeachingSession[]
+  assessments      Assessment[]
+  homeworks        Homework[]
+  files            File[]
+  fileAccesses     FileGroupAccess[]
+  feeRules         FeeRule[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, archivedAt])
+  @@index([workspaceId, weekday, startTime])
+  @@map("group")
+}
+
+model Enrollment {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  groupId     String    @map("group_id") @db.Uuid
+  studentId   String    @map("student_id") @db.Uuid
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  leftAt      DateTime? @map("left_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group     Group     @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@index([groupId, studentId])
+  @@map("enrollment")
+}
+
+model TeachingSession {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  workspaceId  String        @map("workspace_id") @db.Uuid
+  groupId      String        @map("group_id") @db.Uuid
+  startsAt     DateTime      @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime?     @map("ends_at") @db.Timestamptz(6)
+  status       SessionStatus @default(scheduled)
+  isOneOff     Boolean       @default(false) @map("is_one_off")
+  room         String?
+  location     String?
+  notes        String?
+  teacherId    String?       @map("teacher_id")
+  assistantId  String?       @map("assistant_id")
+  seriesId     String?       @map("series_id") @db.Uuid
+  occurrenceNo Int?          @map("occurrence_no")
+  cancelledAt  DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy  String?       @map("cancelled_by")
+  startedAt    DateTime?     @map("started_at") @db.Timestamptz(6)
+  completedAt  DateTime?     @map("completed_at") @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group               Group                @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  attendanceMarks     AttendanceMark[]
+  attendanceRevisions AttendanceRevision[]
+  sessionRevisions    SessionRevision[]
+  attendanceTokens    AttendanceToken[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([groupId, startsAt])
+  @@index([workspaceId, startsAt])
+  @@index([seriesId])
+  @@map("teaching_session")
+}
+
+model SessionRevision {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  sessionId   String   @map("session_id") @db.Uuid
+  actorId     String   @map("actor_id")
+  reason      String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  session   TeachingSession @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([sessionId, createdAt])
+  @@map("session_revision")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+model AttendanceMark {
+  id          String              @id @default(uuid(7)) @db.Uuid
+  workspaceId String              @map("workspace_id") @db.Uuid
+  sessionId   String              @map("session_id") @db.Uuid
+  studentId   String              @map("student_id") @db.Uuid
+  mark        AttendanceMarkValue
+  source      AttendanceSource    @default(manual)
+  deviceId    String?             @map("device_id")
+  recordedBy  String              @map("recorded_by")
+  recordedAt  DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  session   TeachingSession     @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student             @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  revisions AttendanceRevision[]
+
+  @@unique([workspaceId, id])
+  @@unique([sessionId, studentId])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@map("attendance_mark")
+}
+
+model AttendanceRevision {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  workspaceId      String               @map("workspace_id") @db.Uuid
+  sessionId        String               @map("session_id") @db.Uuid
+  studentId        String               @map("student_id") @db.Uuid
+  attendanceMarkId String               @map("attendance_mark_id") @db.Uuid
+  oldMark          AttendanceMarkValue? @map("old_mark")
+  newMark          AttendanceMarkValue  @map("new_mark")
+  actorId          String               @map("actor_id")
+  reason           String?
+  batchId          String?              @map("batch_id") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  session        TeachingSession @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
+  student        Student         @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  attendanceMark AttendanceMark  @relation(fields: [workspaceId, attendanceMarkId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([attendanceMarkId, createdAt])
+  @@map("attendance_revision")
+}
+
+model AttendanceToken {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  sessionId   String   @map("session_id") @db.Uuid
+  tokenHash   String   @map("token_hash")
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+  rotatedAt   DateTime? @map("rotated_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  session   TeachingSession @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([tokenHash])
+  @@index([sessionId, expiresAt])
+  @@map("attendance_token")
+}
+
+// ---------------------------------------------------------------------------
+// Assessments
+// ---------------------------------------------------------------------------
+
+model Assessment {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  groupId      String    @map("group_id") @db.Uuid
+  title        String
+  type         AssessmentType @default(paper_exam)
+  note         String?
+  date         DateTime  @db.Date
+  maxScore     Decimal   @default(100) @map("max_score") @db.Decimal(6, 2)
+  extraCreditAllowance Decimal? @map("extra_credit_allowance") @db.Decimal(6, 2)
+  lockedAt     DateTime? @map("locked_at") @db.Timestamptz(6)
+  unlockReason String?   @map("unlock_reason")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group     Group             @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  scores    AssessmentScore[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, date])
+  @@map("assessment")
+}
+
+model AssessmentScore {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  assessmentId String   @map("assessment_id") @db.Uuid
+  studentId    String   @map("student_id") @db.Uuid
+  score        Decimal? @db.Decimal(6, 2)
+  status       AssessmentResultStatus @default(missing)
+  note         String?
+  updatedBy    String   @map("updated_by")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  assessment Assessment @relation(fields: [workspaceId, assessmentId], references: [workspaceId, id], onDelete: Restrict)
+  student    Student    @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([assessmentId, studentId])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@map("assessment_score")
+}
+
+// ---------------------------------------------------------------------------
+// Homework
+// ---------------------------------------------------------------------------
+
+model Homework {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  workspaceId  String        @map("workspace_id") @db.Uuid
+  groupId      String?       @map("group_id") @db.Uuid
+  title        String
+  instructions String?
+  dueAt        DateTime      @map("due_at") @db.Timestamptz(6)
+  maxScore     Decimal?      @map("max_score") @db.Decimal(6, 2)
+  status       HomeworkStatus @default(active)
+  createdBy    String        @map("created_by")
+  archivedAt   DateTime?     @map("archived_at") @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group       Group?              @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  submissions HomeworkSubmission[]
+  resources   HomeworkResource[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, dueAt])
+  @@index([groupId, status])
+  @@map("homework")
+}
+
+model HomeworkSubmission {
+  id              String                  @id @default(uuid(7)) @db.Uuid
+  workspaceId     String                  @map("workspace_id") @db.Uuid
+  homeworkId      String                  @map("homework_id") @db.Uuid
+  studentId       String                  @map("student_id") @db.Uuid
+  status          HomeworkSubmissionStatus @default(not_submitted)
+  teacherFeedback String?                 @map("teacher_feedback")
+  score           Decimal?                @db.Decimal(6, 2)
+  updatedBy       String                  @map("updated_by")
+  submittedAt     DateTime?               @map("submitted_at") @db.Timestamptz(6)
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  homework  Homework  @relation(fields: [workspaceId, homeworkId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([homeworkId, studentId])
+  @@index([workspaceId, studentId])
+  @@index([homeworkId, status])
+  @@map("homework_submission")
+}
+
+model HomeworkResource {
+  workspaceId String @map("workspace_id") @db.Uuid
+  homeworkId  String @map("homework_id") @db.Uuid
+  fileId      String @map("file_id") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  homework  Homework  @relation(fields: [workspaceId, homeworkId], references: [workspaceId, id], onDelete: Restrict)
+  file      File      @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@id([homeworkId, fileId])
+  @@index([workspaceId])
+  @@map("homework_resource")
+}
+
+// ---------------------------------------------------------------------------
+// Student follow-up
+// ---------------------------------------------------------------------------
+
+model StudentFollowUp {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  studentId   String        @map("student_id") @db.Uuid
+  ownerUserId String        @map("owner_user_id")
+  title       String
+  note        String?
+  dueAt       DateTime?     @map("due_at") @db.Timestamptz(6)
+  status      FollowUpStatus @default(open)
+  outcome     FollowUpOutcome?
+  resolvedAt  DateTime?     @map("resolved_at") @db.Timestamptz(6)
+  createdBy   String        @map("created_by")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student     Student         @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  ownerMember WorkspaceMember @relation("FollowUpOwner", fields: [workspaceId, ownerUserId], references: [workspaceId, userId], onDelete: Restrict)
+  events      StudentFollowUpEvent[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, status, dueAt])
+  @@index([studentId, createdAt])
+  @@map("student_follow_up")
+}
+
+model StudentFollowUpEvent {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  workspaceId String         @map("workspace_id") @db.Uuid
+  followUpId  String         @map("follow_up_id") @db.Uuid
+  actorUserId String         @map("actor_user_id")
+  actorDisplayName String    @map("actor_display_name")
+  action      String
+  outcome     FollowUpOutcome?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  followUp  StudentFollowUp @relation(fields: [workspaceId, followUpId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([followUpId, createdAt])
+  @@index([workspaceId])
+  @@map("student_follow_up_event")
+}
+// ---------------------------------------------------------------------------
+// Money
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  studentId   String        @map("student_id") @db.Uuid
+  period      String?
+  amountMinor Int           @map("amount_minor")
+  currency    String        @default("EGP")
+  method      PaymentMethod
+  methodLabel String?       @map("method_label")
+  paidOn      DateTime      @map("paid_on") @db.Date
+  purpose     String?
+  referenceNumber String?   @map("reference_number")
+  idempotencyKey String?    @map("idempotency_key")
+  note        String?
+  voidedAt    DateTime?     @map("voided_at") @db.Timestamptz(6)
+  voidReason  String?       @map("void_reason")
+  createdBy   String        @map("created_by")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student           @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  revisions PaymentRevision[]
+  adjustments PaymentAdjustment[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, id, studentId])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId])
+  @@index([studentId, period])
+  @@index([workspaceId, voidedAt])
+  @@map("payment")
+}
+
+model PaymentAdjustment {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  workspaceId    String                @map("workspace_id") @db.Uuid
+  studentId      String                @map("student_id") @db.Uuid
+  paymentId      String?               @map("payment_id") @db.Uuid
+  kind           PaymentAdjustmentKind
+  amountMinor    Int                   @map("amount_minor")
+  balanceImpact  Int                   @map("balance_impact")
+  currency       String                @default("EGP")
+  paidOn         DateTime              @map("paid_on") @db.Date
+  reason         String
+  idempotencyKey String                @map("idempotency_key")
+  createdBy      String                @map("created_by")
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  payment   Payment?  @relation(fields: [workspaceId, paymentId, studentId], references: [workspaceId, id, studentId], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, paidOn])
+  @@index([workspaceId, studentId, paidOn])
+  @@map("payment_adjustment")
+}
+
+model FeeRule {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  studentId      String?  @map("student_id") @db.Uuid
+  groupId        String?  @map("group_id") @db.Uuid
+  amountMinor    Int      @map("amount_minor")
+  effectiveFrom  DateTime @map("effective_from") @db.Date
+  purpose        String
+  createdBy      String   @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student?  @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  group     Group?    @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, studentId, effectiveFrom])
+  @@index([workspaceId, groupId, effectiveFrom])
+  @@map("fee_rule")
+}
+
+model ReportExport {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  workspaceId String             @map("workspace_id") @db.Uuid
+  type        String
+  query       Json
+  status      ReportExportStatus @default(queued)
+  requestedBy String             @map("requested_by")
+  filename    String
+  storageKey  String?            @map("storage_key")
+  failureCode String?            @map("failure_code")
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt DateTime?          @map("completed_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, createdAt])
+  @@map("report_export")
+}
+
+model PaymentRevision {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  paymentId   String   @map("payment_id") @db.Uuid
+  actorId     String   @map("actor_id")
+  before      Json
+  after       Json
+  reason      String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  payment   Payment   @relation(fields: [workspaceId, paymentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([paymentId, createdAt])
+  @@map("payment_revision")
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+model File {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  workspaceId String     @map("workspace_id") @db.Uuid
+  scope       FileScope
+  groupId     String?    @map("group_id") @db.Uuid
+  studentId   String?   @map("student_id") @db.Uuid
+  title       String
+  description String?
+  subjectId   String?    @map("subject_id") @db.Uuid
+  topic       String?
+  storageKey  String     @unique @map("storage_key")
+  sizeBytes   Int        @map("size_bytes")
+  mime        String
+  scanStatus  ScanStatus @default(pending) @map("scan_status")
+  uploadedBy  String     @map("uploaded_by")
+  archivedAt  DateTime?  @map("archived_at") @db.Timestamptz(6)
+  deletedAt   DateTime?  @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  group     Group?    @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student?  @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  subject   Subject?  @relation(fields: [workspaceId, subjectId], references: [workspaceId, id], onDelete: Restrict)
+  groupAccesses   FileGroupAccess[]
+  studentAccesses FileStudentAccess[]
+  homeworkResources HomeworkResource[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, subjectId])
+  @@index([workspaceId, scanStatus])
+  @@index([workspaceId, archivedAt])
+  @@map("file")
+}
+
+model FileGroupAccess {
+  workspaceId String @map("workspace_id") @db.Uuid
+  fileId      String @map("file_id") @db.Uuid
+  groupId     String @map("group_id") @db.Uuid
+
+  file      File      @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
+  group     Group     @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@id([workspaceId, fileId, groupId])
+  @@index([workspaceId, groupId])
+  @@map("file_group_access")
+}
+
+model FileStudentAccess {
+  workspaceId String @map("workspace_id") @db.Uuid
+  fileId      String @map("file_id") @db.Uuid
+  studentId   String @map("student_id") @db.Uuid
+
+  file      File      @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@id([workspaceId, fileId, studentId])
+  @@index([workspaceId, studentId])
+  @@map("file_student_access")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications & Messaging Outbox
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  studentId   String           @map("student_id") @db.Uuid
+  guardianId  String?          @map("guardian_id") @db.Uuid
+  type        NotificationType
+  title       String
+  body        String
+  isRead      Boolean          @default(false) @map("is_read")
+  readAt      DateTime?        @map("read_at") @db.Timestamptz(6)
+  entityType  String?          @map("entity_type")
+  entityId    String?          @map("entity_id")
+  metadata    Json?
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  guardian  Guardian? @relation(fields: [workspaceId, guardianId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@index([guardianId])
+  @@index([workspaceId, isRead])
+  @@map("notification")
+}
+
+model MessageOutbox {
+  id                String        @id @default(uuid(7)) @db.Uuid
+  workspaceId       String        @map("workspace_id") @db.Uuid
+  studentId         String        @map("student_id") @db.Uuid
+  guardianId        String?       @map("guardian_id") @db.Uuid
+  channel           MessageChannel @default(whatsapp)
+  type              NotificationType
+  templateKey       String        @map("template_key")
+  locale            String        @default("ar")
+  to                String        // E.164
+  body              String
+  status            MessageStatus @default(pending)
+  attempts          Int           @default(0)
+  maxAttempts       Int           @default(5) @map("max_attempts")
+  nextRetryAt       DateTime?     @map("next_retry_at") @db.Timestamptz(6)
+  provider          String?       @default("fake")
+  providerMessageId String?       @map("provider_message_id")
+  lastError         String?       @map("last_error")
+  errorDetails      Json?         @map("error_details")
+  idempotencyKey    String        @unique @map("idempotency_key")
+  metadata          Json?
+  sentAt            DateTime?     @map("sent_at") @db.Timestamptz(6)
+  deliveredAt       DateTime?     @map("delivered_at") @db.Timestamptz(6)
+  failedAt          DateTime?     @map("failed_at") @db.Timestamptz(6)
+  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  guardian  Guardian? @relation(fields: [workspaceId, guardianId], references: [workspaceId, id], onDelete: Restrict)
+  logs      NotificationLog[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@index([guardianId])
+  @@index([status, nextRetryAt])
+  @@index([workspaceId, status])
+  @@index([idempotencyKey])
+  @@map("message_outbox")
+}
+
+model NotificationSettings {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  workspaceId       String   @unique @map("workspace_id") @db.Uuid
+  enabled           Boolean  @default(true)
+  provider          String   @default("fake") // fake, whatsapp_cloud, none
+  providerConfig    Json?    @map("provider_config")
+  quietHoursStart   String?  @map("quiet_hours_start") // HH:MM
+  quietHoursEnd     String?  @map("quiet_hours_end") // HH:MM
+  quietHoursEnabled Boolean  @default(false) @map("quiet_hours_enabled")
+  rateLimitPerHour  Int      @default(100) @map("rate_limit_per_hour")
+  dailyLimit        Int      @default(1000) @map("daily_limit")
+  templateOverrides Json?    @map("template_overrides")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@map("notification_settings")
+}
+
+model NotificationLog {
+  id            String        @id @default(uuid(7)) @db.Uuid
+  workspaceId   String        @map("workspace_id") @db.Uuid
+  outboxId      String?       @map("outbox_id") @db.Uuid
+  action        String
+  status        MessageStatus?
+  details       Json?
+  error         String?
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  outbox    MessageOutbox? @relation(fields: [workspaceId, outboxId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([outboxId])
+  @@index([createdAt])
+  @@map("notification_log")
+}

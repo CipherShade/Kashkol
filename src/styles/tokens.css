@@ -1,0 +1,174 @@
+/*
+ * Kashkol design tokens — PRODUCT_REQUIREMENTS.md §2.1.
+ *
+ * The palette is carried from the reference prototype. Text-bearing tokens
+ * that failed WCAG AA at their prototype value have a separate `*-ink` token
+ * with the nearest accessible value; fills, borders, and icons keep the
+ * prototype value. No component may hardcode a colour outside this file.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #eff0ea;
+  --surface: #ffffff;
+  --surface-2: #f7f7f2;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e9eae3;
+  --ink: #191d1b;
+  --muted: #6e7168;
+  --muted-2: #696c63;
+  --border: #e2e1d6;
+  --border-strong: #cfcec0;
+
+  --primary: #1f4c4a;
+  --primary-strong: #163837;
+  --primary-tint: #e4edec;
+  --primary-contrast: #ffffff;
+
+  --accent: #e0a039;
+  --accent-strong: #b97f1f;
+  --accent-tint: #fbf0dd;
+  --accent-ink: #7a4e0e;
+  --accent-contrast: #191d1b;
+
+  --success: #3c7a5b;
+  --success-tint: #e4f0e8;
+  --success-ink: #2c6247;
+  --danger: #b9483e;
+  --danger-tint: #f8e6e3;
+  --danger-ink: #9e332a;
+  --warn: #b97f1f;
+  --warn-tint: #fbf0dd;
+  --warn-ink: #7a5212;
+
+  --focus: #1f4c4a;
+  --overlay: rgb(20 22 20 / 0.42);
+  --shadow-color: rgb(25 29 27 / 0.08);
+  --shadow-color-strong: rgb(25 29 27 / 0.14);
+  --skeleton: #e6e5db;
+  --skeleton-highlight: #f1f0e8;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 6px 20px var(--shadow-color-strong);
+
+  --sidebar-width: 252px;
+  --topbar-height: 60px;
+  --content-max: 1280px;
+  --tap-target: 44px;
+
+  --font-ui: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-arabic: "Cairo", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --font-body: var(--font-ui);
+
+  --avatar-1: #1f4c4a;
+  --avatar-2: #8a5a2b;
+  --avatar-3: #3c6e8f;
+  --avatar-4: #6b4e9b;
+  --avatar-5: #b0592c;
+  --avatar-6: #33775a;
+}
+
+:root[lang="ar"] {
+  --font-body: var(--font-arabic);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #14171a;
+  --surface: #1c2023;
+  --surface-2: #22262a;
+  --surface-raised: #23272b;
+  --surface-sunken: #171a1d;
+  --ink: #edeee9;
+  --muted: #9ea29a;
+  --muted-2: #92968d;
+  --border: #2c3033;
+  --border-strong: #3a3f42;
+
+  --primary: #4e9b92;
+  --primary-strong: #6cb6ac;
+  --primary-tint: #1e2f2e;
+  --primary-contrast: #0f1a19;
+
+  --accent: #e7b45c;
+  --accent-strong: #f0c87d;
+  --accent-tint: #2e2517;
+  --accent-ink: #f0c87d;
+  --accent-contrast: #191d1b;
+
+  --success: #6bae8b;
+  --success-tint: #1b2c22;
+  --success-ink: #6bae8b;
+  --danger: #e17c71;
+  --danger-tint: #331f1d;
+  --danger-ink: #e17c71;
+  --warn: #e7b45c;
+  --warn-tint: #2e2517;
+  --warn-ink: #e7b45c;
+
+  --focus: #6cb6ac;
+  --overlay: rgb(0 0 0 / 0.62);
+  --shadow-color: rgb(0 0 0 / 0.36);
+  --shadow-color-strong: rgb(0 0 0 / 0.5);
+  --skeleton: #262a2e;
+  --skeleton-highlight: #30353a;
+}
+
+/*
+ * The pre-paint script resolves `system` to light or dark and always sets
+ * `data-theme`. This media query is the no-JavaScript fallback and is
+ * intentionally excluded when an explicit light choice was stored.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #14171a;
+    --surface: #1c2023;
+    --surface-2: #22262a;
+    --surface-raised: #23272b;
+    --surface-sunken: #171a1d;
+    --ink: #edeee9;
+    --muted: #9ea29a;
+    --muted-2: #92968d;
+    --border: #2c3033;
+    --border-strong: #3a3f42;
+
+    --primary: #4e9b92;
+    --primary-strong: #6cb6ac;
+    --primary-tint: #1e2f2e;
+    --primary-contrast: #0f1a19;
+
+    --accent: #e7b45c;
+    --accent-strong: #f0c87d;
+    --accent-tint: #2e2517;
+    --accent-ink: #f0c87d;
+    --accent-contrast: #191d1b;
+
+    --success: #6bae8b;
+    --success-tint: #1b2c22;
+    --success-ink: #6bae8b;
+    --danger: #e17c71;
+    --danger-tint: #331f1d;
+    --danger-ink: #e17c71;
+    --warn: #e7b45c;
+    --warn-tint: #2e2517;
+    --warn-ink: #e7b45c;
+
+    --focus: #6cb6ac;
+    --overlay: rgb(0 0 0 / 0.62);
+    --shadow-color: rgb(0 0 0 / 0.36);
+    --shadow-color-strong: rgb(0 0 0 / 0.5);
+    --skeleton: #262a2e;
+    --skeleton-highlight: #30353a;
+  }
+}

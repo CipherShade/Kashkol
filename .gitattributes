@@ -1,0 +1,16 @@
+# Normalise line endings for every text file in the repository.
+# The repository is developed on Windows and Linux; a mixed convention causes
+# diff noise and, for Arabic content, risks encoding damage on checkout.
+* text=auto eol=lf
+
+# Keep binary assets untouched.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.pdf  binary
+*.zip  binary
+*.xlsx binary
+*.docx binary
+*.pptx binary

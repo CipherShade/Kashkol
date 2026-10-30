@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Generated Prisma client
+src/generated/prisma/
+
+# Local development database (embedded PostgreSQL data directory)
+.data/
+
+# Environment files — only .env.example is committed
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+
+# Test and coverage output
+coverage/
+test-results/
+playwright-report/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript build info
+*.tsbuildinfo
