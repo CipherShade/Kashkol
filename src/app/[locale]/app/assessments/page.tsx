@@ -10,6 +10,7 @@ import { studentQuerySchema } from "@/modules/students/schemas";
 import { isAllowed } from "@/modules/tenancy/types";
 import { listAssessments } from "@/modules/assessments/service";
 import { assessmentQuerySchema } from "@/modules/assessments/schemas";
+import { listOnlineExams, examQuerySchema } from "@/modules/exams";
 
 export const dynamic = "force-dynamic";
 
@@ -38,8 +39,9 @@ export default async function AssessmentsPage({ params }: { params: Promise<{ lo
       </div>
     );
   }
-  const [assessments, groups, studentResult] = await Promise.all([
+  const [assessments, onlineExamsResult, groups, studentResult] = await Promise.all([
     listAssessments(scope, assessmentQuerySchema.parse({})),
+    listOnlineExams(scope, examQuerySchema.parse({})),
     getGroups(scope, groupQuerySchema.parse({})),
     getStudents(scope, studentQuerySchema.parse({ pageSize: 100, status: "active" })),
   ]);
@@ -48,6 +50,14 @@ export default async function AssessmentsPage({ params }: { params: Promise<{ lo
       <PageHeader title={t("title")} description={t("subtitle")} />
       <AssessmentsClient
         initialAssessments={assessments}
+        initialOnlineExams={onlineExamsResult.exams.map((exam) => ({
+          ...exam,
+          availableFrom: exam.availableFrom.toISOString(),
+          availableUntil: exam.availableUntil.toISOString(),
+          publishedAt: exam.publishedAt?.toISOString() ?? null,
+          resultsPublishedAt: exam.resultsPublishedAt?.toISOString() ?? null,
+          createdAt: exam.createdAt.toISOString(),
+        }))}
         groups={groups.map(({ id, name }) => ({ id, name }))}
         students={studentResult.items.map(({ id, firstName, lastName }) => ({
           id,

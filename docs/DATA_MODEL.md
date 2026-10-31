@@ -586,14 +586,26 @@ is reloaded through the tenant-scoped repository when the worker processes the r
 
 #### `portal_grant` (M2)
 
-`workspace_id`, `portal_user_id` (a `user` row used only for portal sessions), `student_id`,
-`kind` (`parent` / `student`), `issued_by`, `issued_at`, `expires_at` (24 h for an issue link),
-`revoked_at`.
+`workspace_id`, `portal_user_id` (a `user` row used for portal sessions), `student_id`,
+nullable `guardian_id` (composite FK to `student_guardian`), `kind` (`parent` / `student`),
+`permissions` jsonb (`showAttendance`, `showGrades`, `showHomework`, `showResources`,
+`showPayments`, `showSchedule`, `showNotifications`), `issued_by`, `issued_at`, `expires_at`,
+`revoked_at`. Enforces tenant isolation RLS plus `portal_grant_self_read` (`portal_user_id = current_user_id()`).
 
-#### `access_code` (M2)
+#### `portal_invitation` (M2)
 
-`workspace_id`, `kind` (`parent` / `student`), `student_id`, `code_hash`, `expires_at`, `used_at`.
-Only the hash is stored (`OQ-03` default (a), `OQ-02` default (a)).
+`workspace_id`, `student_id`, nullable `guardian_id`, `kind` (`parent` / `student`),
+`invited_email` (normalised lower-case), `token_hash` (SHA-256 of the high-entropy secret; raw token is never stored),
+`permissions` jsonb, `expires_at`, `accepted_at`, `accepted_by_user_id`, `revoked_at`, `created_by`.
+Accepting an invitation verifies that the signed-in user's verified email matches `invited_email`
+and atomically creates/updates the `portal_grant` row in the same transaction.
+
+#### `portal_push_subscription` (M2)
+
+`workspace_id`, `user_id`, `portal_kind` (`parent` / `student`), `endpoint`, `p256dh_key`,
+`auth_key`, `include_sensitive_details` (default `false` for lock-screen privacy), `user_agent`,
+`revoked_at`. Enforces both `workspace_id = current_workspace_id()` and `user_id = current_user_id()`
+under forced RLS.
 
 #### `follow_up` (M2)
 
@@ -619,18 +631,18 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 `workspace_id`, `requested_by`, `confirmed_at`, `state` (`requested` / `running` / `completed` /
 `failed`), `scheduled_purge_at` (30 days — `A-14`), `completed_at`, `error`.
 
-### 5.10 Reserved P3 tables
+### 5.10 P3 tables (`20261101120000_p3_videos_and_online_exams` & reserved)
 
 | Table | Purpose |
 |---|---|
-| `exam`, `exam_question`, `exam_option` | Online exam authoring, `draft` → `open` → `closed` |
-| `exam_attempt`, `exam_answer` | Attempts, auto score, manual total, identifying method |
-| `video_asset` | Provider, provider asset id, title, duration, playback reference — never re-hosted |
-| `break_glass_grant` | Ticket reference, reason, actor, expiry (default 1 h) |
-| `platform_admin`, `platform_audit_event` | Platform operators and their own log |
-| `subscription` | Plan, state, provider ids — webhook-driven |
-| `academic_term` | Start/end dates per workspace and grade |
-| `student_merge` | Merge record with both original ids (the tombstone on `student.merged_into_id` is the row) |
+| `video_lesson`, `video_group_access`, `video_student_access` | **Implemented (`F-P3-02`)** — Provider (`cloudflare_stream` / `fake`), `external_asset_id`, title, description, subject/topic, `publication_status` (`draft` / `published` / `archived`), `asset_status` (`pending_upload` / `processing` / `ready` / `failed`), `duration_seconds`, `size_bytes`, `playback_count`, `estimated_bandwidth_bytes`, and composite tenant-scoped group/student access joins under forced RLS |
+| `online_exam`, `online_exam_student_assignment`, `online_exam_question` | **Implemented (`F-P3-01`)** — Online exam & quiz authoring (`draft` → `published` → `closed` → `archived`), availability window (`available_from`, `available_until`, `duration_minutes`), `max_attempts`, `result_visibility` (`after_manual_publish` / `immediate_after_submit` / `after_window_close`), linked `assessment_id` for gradebook synchronization, and structured questions (`mcq_single`, `true_false`, `short_answer`, `essay`) under forced RLS |
+| `online_exam_attempt`, `online_exam_response` | **Implemented (`F-P3-01`)** — Authenticated student attempts (`in_progress` → `submitted` → `graded`), `auto_score`, `manual_score`, `total_score`, per-question answers, deterministic evaluation, and teacher feedback under forced RLS |
+| `break_glass_grant` | Reserved — Ticket reference, reason, actor, expiry (default 1 h) |
+| `platform_admin`, `platform_audit_event` | Reserved — Platform operators and their own log |
+| `subscription` | Reserved — Plan, state, provider ids — webhook-driven |
+| `academic_term` | Reserved — Start/end dates per workspace and grade |
+| `student_merge` | Reserved — Merge record with both original ids (the tombstone on `student.merged_into_id` is the row) |
 
 ---
 
@@ -776,6 +788,9 @@ students, and the balance includes all applicable fee rules for those students.
 | `notification` | `(recipient_user_id, read_at)`, `(recipient_user_id, dedupe_key)` unique where not null | Unread count, cooldown |
 | `outbox_event` | `(state, run_at)` | Worker poll |
 | `message_draft` | `(workspace_id, created_at desc)` | Prepared-messages list |
+| `portal_grant` | `(workspace_id, student_id, kind, revoked_at)`, `(portal_user_id, revoked_at)` | Active portal links per student and per portal user |
+| `portal_invitation` | `token_hash` unique, `(workspace_id, student_id, kind)`, `(workspace_id, invited_email)` | Single-use token lookup and student portal-access listing |
+| `portal_push_subscription` | `(workspace_id, user_id, endpoint)` unique, `(workspace_id, user_id, revoked_at)` | Active Web Push device subscriptions per portal user |
 
 Full-text search for `F-P1-13` is a **M1 scope decision** (`OQ-07` default (b): students + groups).
 Case-insensitive and diacritic-insensitive matching over Arabic names uses `ILIKE` with a
@@ -861,8 +876,10 @@ consolidated form rather than one directory per row above:
 | `20261029141000_learning_materials` | Tenant-scoped file records, target joins, storage metadata, and forced RLS |
 | `20261029150000_manual_payment_ledger` | Append-only fee rules and adjustments, integer-piastre payment metadata, idempotency, and financial RLS |
 | `20261029160000_report_exports` | Asynchronous tenant-scoped export jobs and queue |
+| `20261030120000_team_invitations` | Team invitations, workspace-settings conventions, and forced RLS |
+| `20261031120000_parent_student_portals_pwa` | Parent and student portal grants (`guardian_id`, `permissions`), verified `portal_invitation` tokens, `portal_push_subscription` Web Push records, and forced RLS |
 
-The current local development database has all thirteen tracked migrations applied. `student` and
+The current local development database has all fifteen tracked migrations applied. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

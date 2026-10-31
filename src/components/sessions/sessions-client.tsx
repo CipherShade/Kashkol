@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/feedback";
-import { Field, FormField, Input, SelectField, SubmitButton } from "@/components/ui/form";
+import { Field, FormField, SubmitButton } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
@@ -22,7 +22,7 @@ import {
 import { initialFormState } from "@/lib/forms/action-state";
 import type { GroupListItem } from "@/modules/groups/repository";
 
-type SessionItem = {
+export type SessionItem = {
   id: string;
   groupId: string;
   groupName: string;
@@ -66,8 +66,9 @@ function formatTime(d: Date, locale: string) {
 
 export function SessionsClient({ groups, initialSessions }: { groups: GroupListItem[]; initialSessions: SessionItem[] }) {
   const t = useTranslations("Sessions");
+  const tRoot = useTranslations();
   const locale = useLocale();
-  const { push } = useToast() as any;
+  const push = useToast();
   const [view, setView] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [sessions] = useState<SessionItem[]>(initialSessions);
@@ -83,15 +84,24 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
 
   useEffect(() => {
     if (createState.status === "success") {
-      push?.({ title: t((createState as any).messageKey || "sessionCreated") });
-      setCreateOpen(false);
+      push({ title: createState.noticeKey ? tRoot(createState.noticeKey) : t("sessionCreated") });
     }
-    if (rescheduleState.status === "success") push?.({ title: t((rescheduleState as any).messageKey || "sessionRescheduled") });
-    if (cancelState.status === "success") push?.({ title: t((cancelState as any).messageKey || "sessionCancelled") });
-    if (updateState.status === "success") push?.({ title: t((updateState as any).messageKey || "sessionUpdated") });
-    if (startState.status === "success") push?.({ title: t((startState as any).messageKey || "sessionStarted") });
-    if (completeState.status === "success") push?.({ title: t((completeState as any).messageKey || "sessionCompleted") });
-  }, [createState, rescheduleState, cancelState, updateState, startState, completeState, t, push]);
+    if (rescheduleState.status === "success") {
+      push({ title: rescheduleState.noticeKey ? tRoot(rescheduleState.noticeKey) : t("sessionRescheduled") });
+    }
+    if (cancelState.status === "success") {
+      push({ title: cancelState.noticeKey ? tRoot(cancelState.noticeKey) : t("sessionCancelled") });
+    }
+    if (updateState.status === "success") {
+      push({ title: updateState.noticeKey ? tRoot(updateState.noticeKey) : t("sessionUpdated") });
+    }
+    if (startState.status === "success") {
+      push({ title: startState.noticeKey ? tRoot(startState.noticeKey) : t("sessionStarted") });
+    }
+    if (completeState.status === "success") {
+      push({ title: completeState.noticeKey ? tRoot(completeState.noticeKey) : t("sessionCompleted") });
+    }
+  }, [createState, rescheduleState, cancelState, updateState, startState, completeState, t, tRoot, push]);
 
   const weekStart = useMemo(() => startOfWeekSaturday(currentDate), [currentDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);

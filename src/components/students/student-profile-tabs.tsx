@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/feedback";
 import { FormField, Textarea } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { Link } from "@/i18n/navigation";
+import { StudentPortalAccessPanel } from "./student-portal-access-panel";
 
 type StudentData = {
   id: string;
@@ -111,7 +112,7 @@ export function StudentProfileTabs({
   locale: string;
 }) {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "attendance" | "assessments" | "homework" | "payments" | "notes"
+    "overview" | "attendance" | "assessments" | "homework" | "payments" | "notes" | "portal"
   >("overview");
 
   const [notes, setNotes] = useState(initialNotes);
@@ -212,6 +213,18 @@ export function StudentProfileTabs({
           }`}
         >
           {isAr ? `الملاحظات الداخلية (${notes.length})` : `Internal Notes (${notes.length})`}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("portal")}
+          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "portal"
+              ? "border-indigo-600 text-indigo-600 font-semibold"
+              : "border-transparent text-muted hover:text-foreground"
+          }`}
+        >
+          {isAr ? "بوابة الطالب وولي الأمر" : "Portal Access"}
         </button>
       </div>
 
@@ -580,6 +593,11 @@ export function StudentProfileTabs({
             </div>
           </CardBody>
         </Card>
+      )}
+
+      {/* PORTAL ACCESS TAB */}
+      {activeTab === "portal" && (
+        <StudentPortalAccessPanel studentId={student.id} locale={locale} />
       )}
     </div>
   );

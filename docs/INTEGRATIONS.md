@@ -69,6 +69,7 @@ entry fails the dependency-policy CI check. **[CI]**
 | IN-7 | Railway (hosting, DB, secrets, cron) | Platform | M0 | Fatal |
 | IN-8 | Observability (logs, errors, metrics) | Platform | M0 | Degraded diagnosis, not a user-facing failure |
 | IN-9 | Payments (Kashier / PayMob / Fawry) | Payment gateway | P3 | Deferred |
+| IN-10 | Recorded video hosting (Cloudflare Stream) | Media provider | P3 | Video attachment/playback disabled with explicit setup state (`docs/VIDEO_PROVIDER.md`); core app unaffected |
 
 ---
 

@@ -291,7 +291,13 @@ export async function enqueueNotificationOutbox(
   // Try to use outbox_event if it exists in schema - following pattern of other codebase
   // The table may not exist in schema yet, but we follow the pattern
   try {
-    const outbox = (tx as any).outboxEvent;
+    const outbox = (
+      tx as unknown as {
+        outboxEvent?: {
+          create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+        };
+      }
+    ).outboxEvent;
     if (outbox) {
       await outbox.create({
         data: {

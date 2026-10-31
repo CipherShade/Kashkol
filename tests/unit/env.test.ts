@@ -60,4 +60,36 @@ describe("server environment", () => {
       }).FILE_STORAGE_DRIVER,
     ).toBe("s3");
   });
+
+  it("validates VIDEO_PROVIDER_DRIVER credentials and forbids fake video driver outside local", () => {
+    expect(() =>
+      parseServerEnv({
+        ...valid,
+        VIDEO_PROVIDER_DRIVER: "cloudflare_stream",
+      }),
+    ).toThrow(/VIDEO_PROVIDER_ACCOUNT_ID/);
+
+    const withCloudflare = parseServerEnv({
+      ...valid,
+      VIDEO_PROVIDER_DRIVER: "cloudflare_stream",
+      VIDEO_PROVIDER_ACCOUNT_ID: "cf-acct-123",
+      VIDEO_PROVIDER_API_TOKEN: "t".repeat(24),
+      VIDEO_PROVIDER_SIGNING_SECRET: "s".repeat(32),
+    });
+    expect(withCloudflare.VIDEO_PROVIDER_DRIVER).toBe("cloudflare_stream");
+
+    expect(() =>
+      parseServerEnv({
+        ...valid,
+        APP_ENV: "staging",
+        BETTER_AUTH_URL: "https://app.example.test",
+        FILE_STORAGE_DRIVER: "s3",
+        S3_BUCKET: "private-files",
+        S3_REGION: "eu-west-1",
+        CLAMAV_HOST: "clamav.internal",
+        REPORT_EXPORT_WORKER_TOKEN: "w".repeat(32),
+        VIDEO_PROVIDER_DRIVER: "fake",
+      }),
+    ).toThrow(/VIDEO_PROVIDER_DRIVER/);
+  });
 });

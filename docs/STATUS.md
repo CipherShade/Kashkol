@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-10-30 · **Status:** Teacher workspace administration and assistant collaboration implemented; typecheck, unit/UI tests, production build, targeted lint, and focused administration integration tests pass. Full lint and project rules still report unrelated session/catalogue errors; the full integration suite has 49 passing tests and 11 failures caused by existing database/schema drift, including missing `teaching_session.room` · **Phase:** M1 teaching workspace / M2 follow-up foundation
+**Date:** 2026-10-31 · **Status:** P3 learning-media (`F-P3-02` Recorded video via external provider adapter) and online-assessment expansion (`F-P3-01` Online exams & quizzes) implemented alongside M2 parent/student portals, PWA/Web Push, and teacher workspace administration · **Phase:** M1/M2 core + P3 learning media & online assessments
 
 ---
 
@@ -59,8 +59,12 @@ health/readiness probes, the route registry, and the project-rule checks.
   removal, suspension, and permission changes revoke sessions.
 - Access-controlled audit history for membership and permission operations, financial changes, and
   attendance corrections; the reader returns a redacted projection without event diffs.
-- Portal-link authorization (`portal_grant` self policy, `resolvePortalStudent`, and a guarded portal
-  projection endpoint) proving a parent/student cannot reach another child by changing an id.
+- Portal-link authorization and dedicated Parent & Student Portal areas (`/[locale]/portal/parent`,
+  `/[locale]/portal/student`, `/[locale]/portal/link/[token]`):
+  - Verified invitation/account linking/revocation (`portal_invitation` hashed tokens, verified-email match, granular per-link permissions, immediate revocation, and audit logging).
+  - Parent portal scoped strictly to explicitly linked children, permitted attendance, published/locked grades (`assessment.lockedAt !== null`), assigned homework, clean shared resources, approved payment/balance ledger data (when `showPayments` is enabled), schedule changes, and private notifications — never exposing other students, other guardians, private teacher notes, or assistant activity.
+  - Student portal scoped strictly to the linked student's own upcoming sessions, permitted attendance, assigned homework (with self-submission status marking), published grades, and clean shared learning materials.
+  - Installable PWA (`/manifest.webmanifest`, `/manifest.json`, `/sw.js`, icons, iOS Home Screen guidance, offline indicator) and optional VAPID Web Push (`/api/portal/push`) with lock-screen-safe generic payload defaults (`includeSensitiveDetails = false`) and an always-available in-app notification center fallback (`/api/portal/notifications`).
 - Append-only audit writer with field redaction, an atomicity test, and append-only revision chains.
 - Core domain schema: subject, group, enrollment, teaching session, attendance mark and revision,
   assessment and score, homework/submissions/resources, follow-up/tasks/history, append-only
@@ -76,6 +80,16 @@ health/readiness probes, the route registry, and the project-rule checks.
 - Learning Materials library (`F-P1-11`) with tenant-scoped metadata and recipient joins, local-only
   and S3-compatible storage, ClamAV fail-closed scanning, authorized short-lived downloads,
   archive/restore/delete, bilingual upload and retry states, and storage usage.
+- Recorded Video Lessons (`F-P3-02`) via external provider adapter (`src/modules/videos/`):
+  - `CloudflareStreamAdapter` using Cloudflare Stream's official v4 REST API, HMAC-SHA256 short-lived signed playback tokens, and `Webhook-Signature` verification (`POST /api/videos/webhook`), plus deterministic `FakeVideoProviderAdapter` for tests and `UnconfiguredVideoProviderAdapter` when `VIDEO_PROVIDER_DRIVER=none`.
+  - Truthful setup state when no provider is configured (`VIDEO_PROVIDER_DRIVER=none`) — never showing simulated or fake hosted videos (`NF-1`–`NF-13`).
+  - Workspace limits and cost-driver tracking (`videoCount`, `totalStorageBytes`, `totalDurationSeconds`, `totalPlaybacks`, `estimatedBandwidthBytes` bounded by `VIDEO_MAX_COUNT_PER_WORKSPACE`, `VIDEO_MAX_STORAGE_BYTES_PER_WORKSPACE`, `VIDEO_MAX_BANDWIDTH_BYTES_PER_MONTH`) without claiming unlimited storage.
+  - Authorized short-lived signed playback for staff (`POST /api/videos/[videoId]/playback`) and entitled parent/student portal viewers (`POST /api/portal/videos/[videoId]/playback`).
+- Online Exams & Quizzes (`F-P3-01`) (`src/modules/exams/`):
+  - Question sets (`mcq_single`, `true_false`, `short_answer`, `essay`), group or selected-student assignment, server-enforced availability window (`availableFrom`, `availableUntil`, `durationMinutes`), `maxAttempts`, and teacher preview (`GET /api/exams/[examId]`).
+  - Authenticated student portal entry only (`requireStudentPortalContext` on `/api/portal/student/exams*`) — never via unprotected name/phone lookup.
+  - Deterministic auto-grading (`mcq_single`, `true_false`, normalized Arabic/English `short_answer`), safe draft response saving (`PUT`), idempotent duplicate final submission protection (`POST`), publish-gated result visibility (`after_manual_publish` | `immediate_after_submit` | `after_window_close`), and audited manual grading / grade corrections (`exam.manually_graded` and `exam.grade_corrected` requiring a correction reason) synced to `Assessment` / `AssessmentScore`.
+  - Conservative integrity notice explicitly stating that browser-based quizzes enforce server-side deadlines and attempt limits and do not provide lockdown-grade anti-cheat protection in a web browser.
 - `/healthz`, `/readyz`, and a bilingual status shell at `/ar` and `/en`.
 - Route registry, message-catalogue parity check, Prisma import boundary, logical-CSS check, and
   Railway build/start/migration configuration.
@@ -85,18 +99,12 @@ health/readiness probes, the route registry, and the project-rule checks.
 - A production email provider. Only the local console transport is implemented. Production refuses
   `EMAIL_TRANSPORT=none`, so a real deployment is blocked until a provider is selected by ADR and
   implemented. Verification and recovery work locally.
+- Live Cloudflare Stream credentials in this local checkout (`VIDEO_PROVIDER_DRIVER` defaults to `none`; live Cloudflare API calls require `VIDEO_PROVIDER_ACCOUNT_ID`, `VIDEO_PROVIDER_API_TOKEN`, and `VIDEO_PROVIDER_SIGNING_SECRET` as documented in `docs/VIDEO_PROVIDER.md`).
 - The generated isolation/permission matrices. The registry, the missing-route gate, hand-written
   authorization tests, and permission-filtered navigation exist; matrix generators remain
   unimplemented. Workspace switching is also not implemented, so invitation acceptance rejects an
   account that already has an active membership in another workspace.
-- Online homework file submission, online exams, and parent/student portal screens remain
-  unimplemented; the teacher-side homework workflow records status manually. Portal file downloads are
-  authorized server-side, but no portal UI is claimed. Parent payment balances/receipts are disabled;
-  no parent payment projection or staff-route access is exposed. Manual payment tracking and filtered
-  ledger/balance reports with asynchronous CSV export are implemented.
-- Parent portal routes do not expose grades, feedback, or follow-up notes in this implementation.
-- The generated isolation/permission matrices. The registry, the missing-route gate, and the
-  hand-written isolation/authorization tests exist; the generators do not.
+- Online homework file uploads remain unimplemented; students can mark assigned homework as submitted and take assigned online exams from the student portal, and teachers can record/grade submissions.
 - CI, staging deployment, worker process, provisioned production object storage, and observability
   integrations. The S3 adapter is implemented but needs configured private storage to serve durable
   production files.
@@ -211,10 +219,10 @@ buttons, seeded demo content in production, and silent data loss.
 
 | Check | Result |
 |---|---|
-| Targeted changed-file lint | **Passed** — payment/report implementation and related tests are lint-clean |
-| Full lint | **Blocked by unrelated existing issues** — session files contain `any`/unused-variable errors; `lint:rules` reports missing Arabic `Sessions.*` catalogue keys |
+| Targeted changed-file lint | **Passed** — workspace administration, session, attendance, payment/report, and related tests are lint-clean |
+| Full lint | **Passed** — `npm run lint` (`eslint .` + `npm run lint:rules`) |
 | Typecheck | **Passed** — `npm run typecheck` |
-| Unit and UI tests | **Passed** — 30 unit files / 159 tests and 1 UI file / 19 tests |
+| Unit and UI tests | **Passed** — 32 unit files / 176 tests and 1 UI file / 19 tests |
 | Payment integration tests | **Passed** — 2 PostgreSQL tests cover payment-ledger tenant isolation, duplicate retries, refund limits, and separate corrections |
 | Full integration suite | **Blocked by existing database/schema drift** — 12 failures across unrelated auth/workspace/search/group tests; the applied core migration is missing `teaching_session.room` although `migrate status` reports all tracked migrations applied |
 | Prisma schema and tracked migration state | **Passed with caveat** — schema validates and `db:status` is current; `db:migrate` applies the two feature migrations but then prompts for another migration due existing local database/schema drift |
@@ -234,7 +242,7 @@ buttons, seeded demo content in production, and silent data loss.
 | Prototype read without modification | Confirmed — the file was read only and remains byte-identical |
 | Document set complete | Confirmed — all specification and architecture documents exist under `docs/` |
 | Stack versions | Pinned to `ARCHITECTURE.md` §3: Next.js 16.4.2, React 19.2.9, TypeScript 5.9.3, Node 24.x, Prisma 7.10.1, Better Auth 1.7.12, Tailwind 4.3.3, next-intl 4.14.9, Zod 4.6.7, Vitest 5.0.5 |
-| Academic route, tenant-table, and catalogue rules | **Passed for new feature entries** — global rule check is blocked only by missing Arabic `Sessions.*` keys |
+| Academic route, tenant-table, and catalogue rules | **Passed** — `npm run lint:rules` passes with full English/Arabic catalogue parity, tenant-table registry parity, and route-registry consistency |
 
 **Not yet verified:** CI, a staging deploy, the generated isolation and permission matrices, and the
 full M0 release gate. `npm audit` reports high-severity advisories in the dependency tree; they are
@@ -315,8 +323,8 @@ task.
 | # | Item | Exit condition | State |
 |---|---|---|---|
 | 2.1 | Assistants with server-enforced permissions | `F-P2-01` passes; the generated permission matrix covers every role | ◐ owner administration UI, safe invitations, granular server checks, audit history, direct-request authorization tests, and permission-filtered navigation implemented; generated matrix pending |
-| 2.2 | Parent portal with scoped access | `F-P2-02` passes; a parent cannot reach another child | ☐ |
-| 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; tokens are hashed, single-use, and expiry-checked | ☐ |
+| 2.2 | Parent portal with scoped access | `F-P2-02` passes; a parent can view only explicitly linked children, permitted attendance, locked grades, homework, clean resources, approved payment/balance summaries, schedule changes, and notifications, and cannot reach another child or private notes | ☑ |
+| 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; invitation tokens are hashed, single-use, email-verified, expiry-checked, and revocable; student portal shows only own upcoming sessions, permitted attendance, homework, locked grades, and shared clean materials | ☑ |
 | 2.4 | Manual payments with a ledger and no settlement claim | `F-P2-04` passes for the current EGP/monthly-fee scope; parent payment views remain disabled | ☑ |
 | 2.5 | QR attendance | `F-P2-05` passes | ☐ |
 | 2.6 | Academic progress and follow-up | Source-backed flags and staff follow-up tasks are implemented; full progress series and configurable non-attendance rules remain | Partial |

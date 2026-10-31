@@ -6,6 +6,7 @@ import { getServerEnv } from "@/lib/config/env";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import type { PortalContext } from "@/modules/identity/session";
+import { resolvePortalPermissions } from "@/modules/portals/tokens";
 import { getFileStorageAdapter, getMalwareScanAdapter } from "./adapters";
 import { DOWNLOAD_URL_TTL_SECONDS } from "./constants";
 import { findMaterial, getWorkspaceStorageUsage, listMaterialRows } from "./repository";
@@ -321,7 +322,11 @@ export async function deleteMaterial(scope: Scope, fileId: string, request?: Req
 export async function getPortalMaterialDownloadUrl(portal: PortalContext, fileId: string) {
   for (const workspaceId of portal.workspaceIds) {
     const studentIds = portal.grants
-      .filter((grant) => grant.workspaceId === workspaceId)
+      .filter(
+        (grant) =>
+          grant.workspaceId === workspaceId &&
+          resolvePortalPermissions(grant.kind, grant.permissions).showResources,
+      )
       .map((grant) => grant.studentId);
     if (studentIds.length === 0) continue;
 

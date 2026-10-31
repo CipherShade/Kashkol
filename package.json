@@ -5,10 +5,10 @@
   "description": "Kashkol — a multi-tenant workspace for Egyptian private teachers.",
   "type": "module",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
-    "dev": "npm run db:generate && next dev",
+    "dev": "npm run db:generate && next dev -p 3000 -H 0.0.0.0",
     "build": "npm run db:generate && next build",
     "start": "node scripts/start.mjs",
     "lint": "npm run lint:eslint && npm run lint:rules",

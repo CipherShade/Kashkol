@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requireStaffSession } from "@/modules/identity/session";
 import { getSessions } from "@/modules/sessions/service";
 import { getGroups } from "@/modules/groups/service";
-import { SessionsClient } from "@/components/sessions/sessions-client";
+import { SessionsClient, type SessionItem } from "@/components/sessions/sessions-client";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +54,7 @@ export default async function SessionsPage({
     getGroups(scope, { showArchived: false }),
   ]);
 
-  const serialized = sessions.map((s) => ({
+  const serialized: SessionItem[] = sessions.map((s) => ({
     ...s,
     startsAt: s.startsAt instanceof Date ? s.startsAt.toISOString() : s.startsAt,
     endsAt: s.endsAt instanceof Date ? s.endsAt.toISOString() : s.endsAt,
@@ -68,7 +68,7 @@ export default async function SessionsPage({
         title={t("pageTitle")}
         description={t("pageDescription")}
       />
-      <SessionsClient groups={groups} initialSessions={serialized as any} />
+      <SessionsClient groups={groups} initialSessions={serialized} />
     </div>
   );
 }

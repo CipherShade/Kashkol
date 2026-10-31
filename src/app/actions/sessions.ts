@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getServerEnv } from "@/lib/config/env";
-import { errorState, initialFormState, type FormActionState } from "@/lib/forms/action-state";
+import { errorState, noticeState, type FormActionState } from "@/lib/forms/action-state";
 import { AppError } from "@/lib/http/errors";
 import { assertTrustedOrigin } from "@/lib/http/csrf";
 import { actionRequestContext } from "@/lib/http/request-context";
@@ -12,6 +12,7 @@ import {
   cancelSessionSchema,
   createOneOffSessionSchema,
   fieldErrorsFrom,
+  generateSessionsSchema,
   rescheduleSessionSchema,
   updateSessionSchema,
 } from "@/modules/sessions/schemas";
@@ -66,14 +67,14 @@ export async function createOneOffSessionAction(
 
     await createOneOffSession(scope, parsed.data, ctx);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionCreated" } as any;
+    return noticeState("Sessions.sessionCreated");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "CONFLICT") {
-        return { status: "error", errorKey: "Sessions.conflictDetected" } as any;
+        return errorState("Sessions.conflictDetected");
       }
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
       if (error.code === "VALIDATION_FAILED") {
         return errorState("errors.validationFailed");
@@ -107,14 +108,14 @@ export async function rescheduleSessionAction(
 
     await rescheduleSession(scope, parsed.data, ctx);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionRescheduled" } as any;
+    return noticeState("Sessions.sessionRescheduled");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "CONFLICT") {
-        return { status: "error", errorKey: "Sessions.conflictDetected" } as any;
+        return errorState("Sessions.conflictDetected");
       }
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
     }
     return errorState("errors.unknown");
@@ -143,11 +144,11 @@ export async function cancelSessionAction(
 
     await cancelSession(scope, parsed.data, ctx);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionCancelled" } as any;
+    return noticeState("Sessions.sessionCancelled");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
     }
     return errorState("errors.unknown");
@@ -177,11 +178,11 @@ export async function updateSessionAction(
 
     await updateSession(scope, parsed.data, ctx);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionUpdated" } as any;
+    return noticeState("Sessions.sessionUpdated");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
     }
     return errorState("errors.unknown");
@@ -200,14 +201,14 @@ export async function startSessionAction(
     const id = text(formData, "id");
     await startSession(scope, { id }, ctx);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionStarted" } as any;
+    return noticeState("Sessions.sessionStarted");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
-      if ((error.code as any) === "INVALID_STATUS") {
-        return { status: "error", errorKey: "Sessions.invalidStatus" } as any;
+      if (error.code === "CONFLICT") {
+        return errorState("Sessions.invalidStatus");
       }
     }
     return errorState("errors.unknown");
@@ -226,14 +227,14 @@ export async function completeSessionAction(
     const id = text(formData, "id");
     await completeSession(scope, { id }, ctx);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionCompleted" } as any;
+    return noticeState("Sessions.sessionCompleted");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
-      if ((error.code as any) === "INVALID_STATUS") {
-        return { status: "error", errorKey: "Sessions.invalidStatus" } as any;
+      if (error.code === "CONFLICT") {
+        return errorState("Sessions.invalidStatus");
       }
     }
     return errorState("errors.unknown");
@@ -249,16 +250,20 @@ export async function generateSessionsAction(
     const { scope } = await requireStaffSession();
     const groupId = text(formData, "groupId");
     const weeksAhead = text(formData, "weeksAhead");
-    await generateSessions(scope, {
+    const parsed = generateSessionsSchema.safeParse({
       groupId,
       weeksAhead: weeksAhead ? Number(weeksAhead) : undefined,
-    } as any);
+    });
+    if (!parsed.success) {
+      return { status: "error", fieldErrors: fieldErrorsFrom(parsed.error) };
+    }
+    await generateSessions(scope, parsed.data);
     revalidatePath("/[locale]/app/sessions");
-    return { status: "success", noticeKey: "Sessions.sessionsGenerated" } as any;
+    return noticeState("Sessions.sessionsGenerated");
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === "NOT_FOUND") {
-        return { status: "error", errorKey: "errors.notFound" } as any;
+        return errorState("errors.notFound");
       }
     }
     return errorState("errors.unknown");

@@ -38,6 +38,25 @@ const serverEnvSchema = z
       .transform((value) => value === "true"),
     CLAMAV_HOST: z.string().min(1).optional(),
     CLAMAV_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
+    WEB_PUSH_VAPID_SUBJECT: z.string().min(5).optional(),
+    WEB_PUSH_VAPID_PUBLIC_KEY: z.string().min(16).optional(),
+    WEB_PUSH_VAPID_PRIVATE_KEY: z.string().min(16).optional(),
+    VIDEO_PROVIDER_DRIVER: z.enum(["none", "cloudflare_stream", "fake"]).default("none"),
+    VIDEO_PROVIDER_ACCOUNT_ID: z.string().min(4).optional(),
+    VIDEO_PROVIDER_API_TOKEN: z.string().min(16).optional(),
+    VIDEO_PROVIDER_SIGNING_SECRET: z.string().min(16).optional(),
+    VIDEO_PROVIDER_WEBHOOK_SECRET: z.string().min(16).optional(),
+    VIDEO_MAX_COUNT_PER_WORKSPACE: z.coerce.number().int().min(1).max(10_000).default(50),
+    VIDEO_MAX_STORAGE_BYTES_PER_WORKSPACE: z.coerce
+      .number()
+      .int()
+      .min(1_048_576)
+      .default(5_368_709_120),
+    VIDEO_MAX_BANDWIDTH_BYTES_PER_MONTH: z.coerce
+      .number()
+      .int()
+      .min(1_048_576)
+      .default(53_687_091_200),
   })
   .superRefine((env, ctx) => {
     if (env.APP_ENV !== "local" && env.EMAIL_TRANSPORT === "console") {
@@ -103,6 +122,56 @@ const serverEnvSchema = z
         message: "non-local environments require an authenticated report export worker",
       });
     }
+    const hasPublicVapid = Boolean(env.WEB_PUSH_VAPID_PUBLIC_KEY);
+    const hasPrivateVapid = Boolean(env.WEB_PUSH_VAPID_PRIVATE_KEY);
+    if (hasPublicVapid !== hasPrivateVapid) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["WEB_PUSH_VAPID_PUBLIC_KEY"],
+        message:
+          "WEB_PUSH_VAPID_PUBLIC_KEY and WEB_PUSH_VAPID_PRIVATE_KEY must be configured together",
+      });
+    }
+    if ((hasPublicVapid || hasPrivateVapid) && !env.WEB_PUSH_VAPID_SUBJECT) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["WEB_PUSH_VAPID_SUBJECT"],
+        message: "WEB_PUSH_VAPID_SUBJECT is required when Web Push VAPID keys are configured",
+      });
+    }
+    if (env.APP_ENV !== "local" && env.VIDEO_PROVIDER_DRIVER === "fake") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["VIDEO_PROVIDER_DRIVER"],
+        message: "VIDEO_PROVIDER_DRIVER=fake is local/test-only",
+      });
+    }
+    if (env.VIDEO_PROVIDER_DRIVER === "cloudflare_stream") {
+      if (!env.VIDEO_PROVIDER_ACCOUNT_ID) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["VIDEO_PROVIDER_ACCOUNT_ID"],
+          message:
+            "VIDEO_PROVIDER_ACCOUNT_ID is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
+        });
+      }
+      if (!env.VIDEO_PROVIDER_API_TOKEN) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["VIDEO_PROVIDER_API_TOKEN"],
+          message:
+            "VIDEO_PROVIDER_API_TOKEN is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
+        });
+      }
+      if (!env.VIDEO_PROVIDER_SIGNING_SECRET) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["VIDEO_PROVIDER_SIGNING_SECRET"],
+          message:
+            "VIDEO_PROVIDER_SIGNING_SECRET is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
+        });
+      }
+    }
   });
 
 export type ServerEnv = {
@@ -126,6 +195,17 @@ export type ServerEnv = {
   S3_FORCE_PATH_STYLE: boolean;
   CLAMAV_HOST?: string;
   CLAMAV_PORT: number;
+  WEB_PUSH_VAPID_SUBJECT?: string;
+  WEB_PUSH_VAPID_PUBLIC_KEY?: string;
+  WEB_PUSH_VAPID_PRIVATE_KEY?: string;
+  VIDEO_PROVIDER_DRIVER: "none" | "cloudflare_stream" | "fake";
+  VIDEO_PROVIDER_ACCOUNT_ID?: string;
+  VIDEO_PROVIDER_API_TOKEN?: string;
+  VIDEO_PROVIDER_SIGNING_SECRET?: string;
+  VIDEO_PROVIDER_WEBHOOK_SECRET?: string;
+  VIDEO_MAX_COUNT_PER_WORKSPACE: number;
+  VIDEO_MAX_STORAGE_BYTES_PER_WORKSPACE: number;
+  VIDEO_MAX_BANDWIDTH_BYTES_PER_MONTH: number;
 };
 
 /**
@@ -144,7 +224,21 @@ export function parseServerEnv(input: Record<string, string | undefined>): Serve
 let cached: ServerEnv | undefined;
 
 export function getServerEnv(): ServerEnv {
-  cached ??= parseServerEnv(process.env);
+  const localDefaults: Record<string, string> = {
+    APP_ENV: "local",
+    DATABASE_URL: "postgresql://kashkol_app:kashkol_dev_app@localhost:5433/kashkol_dev",
+    DIRECT_DATABASE_URL: "postgresql://kashkol:kashkol_dev@localhost:5433/kashkol_dev",
+    BETTER_AUTH_SECRET: "dev-only-secret-for-local-environment-at-least-32-chars",
+    BETTER_AUTH_URL: "http://localhost:3000",
+    EMAIL_TRANSPORT: "console",
+  };
+  const merged: Record<string, string | undefined> = { ...localDefaults };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && value !== "") {
+      merged[key] = value;
+    }
+  }
+  cached ??= parseServerEnv(merged);
   return cached;
 }
 
@@ -161,6 +255,43 @@ export function isEmailConfigured(
   env: Pick<ServerEnv, "EMAIL_TRANSPORT"> = getServerEnv(),
 ): boolean {
   return env.EMAIL_TRANSPORT === "console";
+}
+
+/** True when VAPID keys and subject are configured for Web Push notifications. */
+export function isWebPushConfigured(
+  env: Pick<
+    ServerEnv,
+    "WEB_PUSH_VAPID_SUBJECT" | "WEB_PUSH_VAPID_PUBLIC_KEY" | "WEB_PUSH_VAPID_PRIVATE_KEY"
+  > = getServerEnv(),
+): boolean {
+  return Boolean(
+    env.WEB_PUSH_VAPID_SUBJECT &&
+      env.WEB_PUSH_VAPID_PUBLIC_KEY &&
+      env.WEB_PUSH_VAPID_PRIVATE_KEY,
+  );
+}
+
+/** True when an external recorded-video provider (or local test fake) is configured. */
+export function isVideoProviderConfigured(
+  env: Pick<
+    ServerEnv,
+    | "VIDEO_PROVIDER_DRIVER"
+    | "VIDEO_PROVIDER_ACCOUNT_ID"
+    | "VIDEO_PROVIDER_API_TOKEN"
+    | "VIDEO_PROVIDER_SIGNING_SECRET"
+  > = getServerEnv(),
+): boolean {
+  if (env.VIDEO_PROVIDER_DRIVER === "fake") {
+    return true;
+  }
+  if (env.VIDEO_PROVIDER_DRIVER === "cloudflare_stream") {
+    return Boolean(
+      env.VIDEO_PROVIDER_ACCOUNT_ID &&
+        env.VIDEO_PROVIDER_API_TOKEN &&
+        env.VIDEO_PROVIDER_SIGNING_SECRET,
+    );
+  }
+  return false;
 }
 
 /**

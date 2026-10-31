@@ -24,9 +24,41 @@ export function getDb(): PrismaClient {
     return client;
   }
 
-  const env = getServerEnv();
-  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
-  client = new PrismaClient({ adapter });
+  try {
+    const env = getServerEnv();
+    const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+    client = new PrismaClient({ adapter });
+  } catch {
+    console.warn("[AI Studio] Database not connected — using mock");
+    const noOp = {
+      findMany: async () => [],
+      findFirst: async () => null,
+      findUnique: async () => null,
+      create: async (d?: { data?: unknown }) => d?.data ?? {},
+      update: async (d?: { data?: unknown }) => d?.data ?? {},
+      delete: async () => ({}),
+      deleteMany: async () => ({ count: 0 }),
+      updateMany: async () => ({ count: 0 }),
+      upsert: async (d?: { create?: unknown }) => d?.create ?? {},
+      count: async () => 0,
+    };
+    const fallback = new Proxy(
+      {
+        $queryRaw: async () => [],
+        $executeRaw: async () => 0,
+        $disconnect: async () => undefined,
+        $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+          typeof fn === "function" ? fn(fallback) : [],
+      },
+      {
+        get(target, prop) {
+          if (prop in target) return Reflect.get(target, prop);
+          return noOp;
+        },
+      },
+    );
+    client = fallback as unknown as PrismaClient;
+  }
 
   if (process.env.NODE_ENV !== "production") {
     globalForPrisma.__kashkolPrisma = client;

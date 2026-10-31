@@ -147,7 +147,7 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
           await enqueueAttendanceNotification(scope, {
             studentId: m.studentId,
             sessionId: input.sessionId,
-            mark: m.mark as any,
+            mark: m.mark as "present" | "absent" | "late" | "excused",
           }, reqCtx);
         } catch {
           // Never fail attendance due to notification issues

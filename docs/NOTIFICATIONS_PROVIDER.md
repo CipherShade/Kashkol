@@ -37,3 +37,33 @@ Kashkol supports private parent communication via a notification outbox with pro
 - One student's attendance never generates messages containing another student's data.
 - Unauthorized users cannot inspect logs/outbox.
 - Failed messages can be retried where authorized.
+
+---
+
+## Portal Web Push & PWA Notifications
+
+### Overview
+Parent and Student portals include an installable Progressive Web App (PWA) experience (`/manifest.webmanifest`, `/sw.js`) and optional Web Push notifications backed by standard VAPID (RFC 8292) credentials, alongside a persistent in-app notification center (`/api/portal/notifications`) that serves as the primary, always-available fallback.
+
+### Web Push Environment Variables (Secrets)
+Web Push is strictly opt-in and only enabled when all three VAPID variables are configured on the server:
+- `WEB_PUSH_VAPID_SUBJECT` - A `mailto:` or `https:` contact URI for the push service (e.g., `mailto:support@example.com`).
+- `WEB_PUSH_VAPID_PUBLIC_KEY` - URL-safe Base64-encoded P-256 public key (65-byte uncompressed point). Returned via authenticated `GET /api/portal/push` so the browser can call `pushManager.subscribe`.
+- `WEB_PUSH_VAPID_PRIVATE_KEY` - URL-safe Base64-encoded 32-byte P-256 private key (server-only secret; **never** prefix with `NEXT_PUBLIC_`).
+
+To generate a new VAPID keypair locally:
+```bash
+npx web-push generate-vapid-keys
+```
+
+If any of the three variables is omitted, `isWebPushConfigured()` returns `false`, the portal UI disables the push subscription toggle with a clear explanation, and the portal continues to operate normally using the in-app notification center.
+
+### Lock-Screen Privacy & Payload Minimization
+- **Default (`includeSensitiveDetails = false`)**: Push notification payloads never contain student names, grades, attendance marks, balances, or teacher notes. Both the server payload builder (`buildPortalPushPayload`) and the service worker (`public/sw.js`) enforce generic lock-screen-safe text (`"Open your Kashkol portal to view a new update."` / `"افتح بوابة كشكول لعرض التحديث الجديد."`) with a deep link to the authenticated portal (`/[locale]/portal/parent` or `/[locale]/portal/student`).
+- **Explicit Opt-In (`includeSensitiveDetails = true`)**: Even when a user explicitly opts in on their device, the payload includes only a high-level category summary and never raw private notes or unredacted student PII.
+
+### Platform-Specific Limitations & iOS Home Screen Requirements
+- **iOS / iPadOS (Safari 16.4+)**: Web Push is **only** available when the user first installs Kashkol to their Home Screen (*Share → Add to Home Screen*) and launches the installed web app in standalone mode (`display-mode: standalone`). Standard Safari tabs on iOS do not expose `PushManager`. The PWA banner (`PwaInstallBanner`) detects iOS non-standalone mode and displays step-by-step "Add to Home Screen" instructions rather than attempting an unsupported permission prompt.
+- **Permission Denial & Non-Nagging Policy**: Permission is requested **only** when the user explicitly clicks the "Enable push notifications" button in the portal notification panel. If permission is denied (`Notification.permission === "denied"`) or the install banner is dismissed, the app records dismissal in `localStorage` and never repeatedly prompts or blocks navigation.
+- **In-App Notification Center Fallback**: Every portal notification is persisted in the tenant-scoped `notification` table and rendered in the portal's in-app notification center (`GET /api/portal/notifications`, `POST /api/portal/notifications/[notificationId]/read`), ensuring full reliability even when Web Push is unconfigured, unsupported by the browser, or declined by the user.
+

@@ -150,9 +150,12 @@ export async function countAuthEventsSince(
 }
 
 export type PortalGrantRow = {
+  id?: string;
   workspaceId: string;
   studentId: string;
+  guardianId?: string | null;
   kind: "parent" | "student";
+  permissions?: unknown;
   expiresAt: Date | null;
 };
 
@@ -165,7 +168,15 @@ export async function findActivePortalGrants(userId: string, now: Date): Promise
         revokedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
       },
-      select: { workspaceId: true, studentId: true, kind: true, expiresAt: true },
+      select: {
+        id: true,
+        workspaceId: true,
+        studentId: true,
+        guardianId: true,
+        kind: true,
+        permissions: true,
+        expiresAt: true,
+      },
       orderBy: { issuedAt: "asc" },
     }),
   );

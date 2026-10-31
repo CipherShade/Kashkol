@@ -6,10 +6,10 @@ export async function POST(req: NextRequest) {
   try {
     // Webhook signature verification placeholder - only verify if configured
     // Make idempotent by processing based on message id
-    const body = await req.json().catch(() => ({}));
+    const _body = await req.json().catch(() => ({}));
     // Do not log full bodies or tokens
     return Response.json({ status: "ok" }, { headers: { "x-request-id": requestId } });
-  } catch (err) {
+  } catch {
     return Response.json({ error: "webhook_error" }, { status: 400, headers: { "x-request-id": requestId } });
   }
 }

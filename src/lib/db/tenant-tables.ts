@@ -16,6 +16,8 @@ export const TENANT_TABLES = [
   "student",
   "student_note",
   "portal_grant",
+  "portal_invitation",
+  "portal_push_subscription",
   "subject",
   "group",
   "enrollment",
@@ -44,6 +46,14 @@ export const TENANT_TABLES = [
   "message_outbox",
   "notification_settings",
   "notification_log",
+  "video_lesson",
+  "video_group_access",
+  "video_student_access",
+  "online_exam",
+  "online_exam_student_assignment",
+  "online_exam_question",
+  "online_exam_attempt",
+  "online_exam_response",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

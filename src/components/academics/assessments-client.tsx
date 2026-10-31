@@ -61,6 +61,99 @@ type History = {
   trend: "improving" | "steady" | "declining" | "insufficient_data";
 };
 
+type OnlineExamSummaryItem = {
+  id: string;
+  groupId: string;
+  groupName: string;
+  assessmentId: string | null;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  assignScope: "group" | "students";
+  status: "draft" | "published" | "closed" | "archived";
+  resultVisibility: "after_manual_publish" | "immediate_after_submit" | "after_window_close";
+  availableFrom: string;
+  availableUntil: string;
+  durationMinutes: number | null;
+  maxAttempts: number;
+  maxScore: number;
+  questionCount: number;
+  attemptsSummary: {
+    totalAttempts: number;
+    submittedCount: number;
+    gradedCount: number;
+  };
+  assignedStudents: Student[];
+  publishedAt: string | null;
+  resultsPublishedAt: string | null;
+  createdAt: string;
+};
+
+type OnlineExamDetailPayload = {
+  exam: {
+    id: string;
+    groupId: string;
+    groupName: string;
+    assessmentId: string | null;
+    title: string;
+    description: string | null;
+    instructions: string | null;
+    assignScope: "group" | "students";
+    status: "draft" | "published" | "closed" | "archived";
+    resultVisibility: "after_manual_publish" | "immediate_after_submit" | "after_window_close";
+    availableFrom: string;
+    availableUntil: string;
+    durationMinutes: number | null;
+    maxAttempts: number;
+    maxScore: number;
+    publishedAt: string | null;
+    resultsPublishedAt: string | null;
+    assignedStudents: Student[];
+    questions: Array<{
+      id: string;
+      position: number;
+      type: "mcq_single" | "true_false" | "short_answer" | "essay";
+      prompt: string;
+      points: number;
+      options: unknown;
+      answerKey: unknown;
+      explanation: string | null;
+    }>;
+    attempts: Array<{
+      id: string;
+      student: Student;
+      attemptNumber: number;
+      status: "in_progress" | "submitted" | "graded";
+      startedAt: string;
+      submittedAt: string | null;
+      gradedAt: string | null;
+      autoScore: number | null;
+      manualScore: number | null;
+      totalScore: number | null;
+      responses: Array<{
+        id: string;
+        questionId: string;
+        answer: unknown;
+        isCorrect: boolean | null;
+        pointsAwarded: number | null;
+        teacherFeedback: string | null;
+      }>;
+    }>;
+  };
+};
+
+type DraftQuestion = {
+  type: "mcq_single" | "true_false" | "short_answer" | "essay";
+  prompt: string;
+  points: number;
+  mcqOptionA: string;
+  mcqOptionB: string;
+  correctOptionId: "a" | "b";
+  trueFalseAnswer: boolean;
+  acceptedAnswers: string;
+  explanation: string;
+};
+
 async function requestJson<T>(path: string, method?: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -74,21 +167,40 @@ async function requestJson<T>(path: string, method?: string, body?: unknown): Pr
 
 export function AssessmentsClient({
   initialAssessments,
+  initialOnlineExams = [],
   groups,
   students,
   locale,
   canWriteGrades,
 }: {
   initialAssessments: AssessmentCollection;
+  initialOnlineExams?: OnlineExamSummaryItem[];
   groups: Group[];
   students: Student[];
   locale: string;
   canWriteGrades: boolean;
 }) {
   const t = useTranslations("Academics.assessments");
+  const te = useTranslations("Academics.onlineExams");
   const router = useRouter();
+  const [activeMode, setActiveMode] = useState<"paper" | "online">("paper");
   const [assessments, setAssessments] = useState(initialAssessments.assessments);
   const [groupSummary, setGroupSummary] = useState(initialAssessments.groupSummary);
+  const [onlineExams, setOnlineExams] = useState<OnlineExamSummaryItem[]>(initialOnlineExams);
+  const [examDetail, setExamDetail] = useState<OnlineExamDetailPayload["exam"] | null>(null);
+  const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[]>([
+    {
+      type: "mcq_single",
+      prompt: "",
+      points: 10,
+      mcqOptionA: "",
+      mcqOptionB: "",
+      correctOptionId: "a",
+      trueFalseAnswer: true,
+      acceptedAnswers: "",
+      explanation: "",
+    },
+  ]);
   const [selectedGroup, setSelectedGroup] = useState("");
   const [detail, setDetail] = useState<AssessmentDetail | null>(null);
   const [history, setHistory] = useState<History | null>(null);
@@ -215,8 +327,175 @@ export function AssessmentsClient({
     }
   }
 
+  async function reloadOnlineExams() {
+    const updated = await requestJson<{ exams: OnlineExamSummaryItem[] }>("/api/exams");
+    setOnlineExams(updated.exams);
+    if (examDetail) {
+      const refreshed = await requestJson<OnlineExamDetailPayload>(`/api/exams/${examDetail.id}`);
+      setExamDetail(refreshed.exam);
+    }
+    await reload();
+  }
+
+  async function createOnlineExamHandler(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const data = new FormData(formEl);
+    const assignScope = String(data.get("assignScope") ?? "group");
+    const durationRaw = String(data.get("durationMinutes") ?? "").trim();
+
+    const formattedQuestions = draftQuestions.map((q) => {
+      if (q.type === "mcq_single") {
+        return {
+          type: "mcq_single" as const,
+          prompt: q.prompt.trim(),
+          points: Number(q.points),
+          options: [
+            { id: "a", text: q.mcqOptionA.trim() },
+            { id: "b", text: q.mcqOptionB.trim() },
+          ],
+          answerKey: { correctOptionId: q.correctOptionId },
+          explanation: q.explanation.trim() || null,
+        };
+      }
+      if (q.type === "true_false") {
+        return {
+          type: "true_false" as const,
+          prompt: q.prompt.trim(),
+          points: Number(q.points),
+          answerKey: { correctBoolean: q.trueFalseAnswer },
+          explanation: q.explanation.trim() || null,
+        };
+      }
+      if (q.type === "short_answer") {
+        return {
+          type: "short_answer" as const,
+          prompt: q.prompt.trim(),
+          points: Number(q.points),
+          answerKey: {
+            acceptedAnswers: q.acceptedAnswers
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            caseSensitive: false,
+          },
+          explanation: q.explanation.trim() || null,
+        };
+      }
+      return {
+        type: "essay" as const,
+        prompt: q.prompt.trim(),
+        points: Number(q.points),
+        explanation: q.explanation.trim() || null,
+      };
+    });
+
+    setBusy(true);
+    setError(false);
+    try {
+      await requestJson("/api/exams", "POST", {
+        groupId: String(data.get("groupId")),
+        title: String(data.get("title") ?? "").trim(),
+        description: String(data.get("description") ?? "").trim() || null,
+        instructions: String(data.get("instructions") ?? "").trim() || null,
+        assignScope,
+        studentIds: assignScope === "students" ? data.getAll("studentIds").map(String) : [],
+        availableFrom: new Date(String(data.get("availableFrom"))).toISOString(),
+        availableUntil: new Date(String(data.get("availableUntil"))).toISOString(),
+        durationMinutes: durationRaw ? Number(durationRaw) : null,
+        maxAttempts: Number(data.get("maxAttempts") ?? 1),
+        resultVisibility: String(data.get("resultVisibility") ?? "after_manual_publish"),
+        questions: formattedQuestions,
+      });
+      formEl.reset();
+      await reloadOnlineExams();
+      router.refresh();
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openOnlineExam(examId: string) {
+    setBusy(true);
+    setError(false);
+    try {
+      const loaded = await requestJson<OnlineExamDetailPayload>(`/api/exams/${examId}`);
+      setExamDetail(loaded.exam);
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateOnlineExamAction(
+    examId: string,
+    action: "publish" | "close" | "publish_results",
+  ) {
+    setBusy(true);
+    setError(false);
+    try {
+      await requestJson(`/api/exams/${examId}`, "PATCH", { action });
+      await reloadOnlineExams();
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAttemptGrading(
+    examId: string,
+    attemptId: string,
+    formEl: HTMLFormElement,
+    questions: OnlineExamDetailPayload["exam"]["questions"],
+  ) {
+    const formData = new FormData(formEl);
+    const reason = String(formData.get("reason") ?? "").trim() || undefined;
+    const grades = questions.map((q) => ({
+      questionId: q.id,
+      pointsAwarded: Number(formData.get(`points_${q.id}`) ?? 0),
+      teacherFeedback: String(formData.get(`feedback_${q.id}`) ?? "").trim() || null,
+    }));
+
+    setBusy(true);
+    setError(false);
+    try {
+      await requestJson(`/api/exams/${examId}/attempts/${attemptId}/grade`, "POST", {
+        grades,
+        reason,
+      });
+      await reloadOnlineExams();
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+        <Button
+          type="button"
+          variant={activeMode === "paper" ? "primary" : "secondary"}
+          onClick={() => setActiveMode("paper")}
+        >
+          {te("tabPaper")}
+        </Button>
+        <Button
+          type="button"
+          variant={activeMode === "online" ? "primary" : "secondary"}
+          onClick={() => setActiveMode("online")}
+        >
+          {te("tabOnline")}
+        </Button>
+      </div>
+
+      {activeMode === "paper" ? (
+        <>
       {canWriteGrades ? (
         <Card>
           <CardBody className="space-y-4">
@@ -521,6 +800,505 @@ export function AssessmentsClient({
           ) : null}
         </CardBody>
       </Card>
+        </>
+      ) : (
+        <div className="space-y-6">
+          <Card>
+            <CardBody className="space-y-2">
+              <h2 className="text-sm font-semibold">{te("honestyNoticeTitle")}</h2>
+              <p className="text-sm text-muted">{te("honestyNoticeBody")}</p>
+            </CardBody>
+          </Card>
+
+          {canWriteGrades ? (
+            <Card>
+              <CardBody className="space-y-4">
+                <h2 className="ui-card-title">{te("createTitle")}</h2>
+                <form
+                  onSubmit={(event) => void createOnlineExamHandler(event)}
+                  className="grid gap-4 md:grid-cols-2"
+                >
+                  <label className="grid gap-1 text-sm">
+                    <span>{t("group")}</span>
+                    <Select name="groupId" required defaultValue="">
+                      <option value="" disabled>
+                        {t("chooseGroup")}
+                      </option>
+                      {groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{te("titleLabel")}</span>
+                    <Input name="title" required maxLength={160} />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{te("assignScopeLabel")}</span>
+                    <Select name="assignScope" defaultValue="group">
+                      <option value="group">{te("scopeGroup")}</option>
+                      <option value="students">{te("scopeStudents")}</option>
+                    </Select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{t("student")}</span>
+                    <select
+                      name="studentIds"
+                      multiple
+                      className="ui-input"
+                      size={Math.min(4, Math.max(2, students.length))}
+                    >
+                      {students.map((student) => (
+                        <option key={student.id} value={student.id}>
+                          {student.firstName} {student.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{te("availableFromLabel")}</span>
+                    <Input name="availableFrom" type="datetime-local" required />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{te("availableUntilLabel")}</span>
+                    <Input name="availableUntil" type="datetime-local" required />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{te("durationMinutesLabel")}</span>
+                    <Input name="durationMinutes" type="number" min="1" max="360" />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span>{te("maxAttemptsLabel")}</span>
+                    <Input
+                      name="maxAttempts"
+                      type="number"
+                      min="1"
+                      max="10"
+                      required
+                      defaultValue="1"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm md:col-span-2">
+                    <span>{te("resultVisibilityLabel")}</span>
+                    <Select name="resultVisibility" defaultValue="after_manual_publish">
+                      <option value="after_manual_publish">{te("visibilityManual")}</option>
+                      <option value="immediate_after_submit">{te("visibilityImmediate")}</option>
+                      <option value="after_window_close">{te("visibilityWindowClose")}</option>
+                    </Select>
+                  </label>
+                  <label className="grid gap-1 text-sm md:col-span-2">
+                    <span>{te("instructionsLabel")}</span>
+                    <Textarea name="instructions" maxLength={4000} rows={2} />
+                  </label>
+
+                  <div className="space-y-4 md:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold">{te("questionsSectionTitle")}</h3>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          setDraftQuestions((prev) => [
+                            ...prev,
+                            {
+                              type: "mcq_single",
+                              prompt: "",
+                              points: 10,
+                              mcqOptionA: "",
+                              mcqOptionB: "",
+                              correctOptionId: "a",
+                              trueFalseAnswer: true,
+                              acceptedAnswers: "",
+                              explanation: "",
+                            },
+                          ])
+                        }
+                      >
+                        {te("addQuestionAction")}
+                      </Button>
+                    </div>
+
+                    {draftQuestions.map((q, index) => (
+                      <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <strong className="text-sm">#{index + 1}</strong>
+                          {draftQuestions.length > 1 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() =>
+                                setDraftQuestions((prev) => prev.filter((_, i) => i !== index))
+                              }
+                            >
+                              {te("removeQuestionAction")}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="grid gap-1 text-sm">
+                            <span>{te("questionTypeLabel")}</span>
+                            <Select
+                              value={q.type}
+                              onChange={(e) => {
+                                const val = e.target.value as DraftQuestion["type"];
+                                setDraftQuestions((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index ? { ...item, type: val } : item,
+                                  ),
+                                );
+                              }}
+                            >
+                              <option value="mcq_single">{te("qType.mcq_single")}</option>
+                              <option value="true_false">{te("qType.true_false")}</option>
+                              <option value="short_answer">{te("qType.short_answer")}</option>
+                              <option value="essay">{te("qType.essay")}</option>
+                            </Select>
+                          </label>
+                          <label className="grid gap-1 text-sm">
+                            <span>{te("questionPointsLabel")}</span>
+                            <Input
+                              type="number"
+                              min="0.5"
+                              max="1000"
+                              step="0.5"
+                              value={q.points}
+                              onChange={(e) => {
+                                const pts = Number(e.target.value);
+                                setDraftQuestions((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index ? { ...item, points: pts } : item,
+                                  ),
+                                );
+                              }}
+                              required
+                            />
+                          </label>
+                          <label className="grid gap-1 text-sm md:col-span-2">
+                            <span>{te("questionPromptLabel")}</span>
+                            <Input
+                              value={q.prompt}
+                              onChange={(e) => {
+                                const prompt = e.target.value;
+                                setDraftQuestions((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index ? { ...item, prompt } : item,
+                                  ),
+                                );
+                              }}
+                              required
+                            />
+                          </label>
+
+                          {q.type === "mcq_single" ? (
+                            <>
+                              <label className="grid gap-1 text-sm">
+                                <span>{te("mcqOptionLabel", { index: 1 })}</span>
+                                <Input
+                                  value={q.mcqOptionA}
+                                  onChange={(e) => {
+                                    const mcqOptionA = e.target.value;
+                                    setDraftQuestions((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index ? { ...item, mcqOptionA } : item,
+                                      ),
+                                    );
+                                  }}
+                                  required
+                                />
+                              </label>
+                              <label className="grid gap-1 text-sm">
+                                <span>{te("mcqOptionLabel", { index: 2 })}</span>
+                                <Input
+                                  value={q.mcqOptionB}
+                                  onChange={(e) => {
+                                    const mcqOptionB = e.target.value;
+                                    setDraftQuestions((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index ? { ...item, mcqOptionB } : item,
+                                      ),
+                                    );
+                                  }}
+                                  required
+                                />
+                              </label>
+                              <label className="grid gap-1 text-sm">
+                                <span>{te("correctOptionLabel")}</span>
+                                <Select
+                                  value={q.correctOptionId}
+                                  onChange={(e) => {
+                                    const correctOptionId = e.target.value as "a" | "b";
+                                    setDraftQuestions((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index ? { ...item, correctOptionId } : item,
+                                      ),
+                                    );
+                                  }}
+                                >
+                                  <option value="a">A</option>
+                                  <option value="b">B</option>
+                                </Select>
+                              </label>
+                            </>
+                          ) : null}
+
+                          {q.type === "true_false" ? (
+                            <label className="grid gap-1 text-sm">
+                              <span>{te("correctOptionLabel")}</span>
+                              <Select
+                                value={q.trueFalseAnswer ? "true" : "false"}
+                                onChange={(e) => {
+                                  const trueFalseAnswer = e.target.value === "true";
+                                  setDraftQuestions((prev) =>
+                                    prev.map((item, i) =>
+                                      i === index ? { ...item, trueFalseAnswer } : item,
+                                    ),
+                                  );
+                                }}
+                              >
+                                <option value="true">{te("trueLabel")}</option>
+                                <option value="false">{te("falseLabel")}</option>
+                              </Select>
+                            </label>
+                          ) : null}
+
+                          {q.type === "short_answer" ? (
+                            <label className="grid gap-1 text-sm md:col-span-2">
+                              <span>{te("acceptedAnswersLabel")}</span>
+                              <Input
+                                value={q.acceptedAnswers}
+                                onChange={(e) => {
+                                  const acceptedAnswers = e.target.value;
+                                  setDraftQuestions((prev) =>
+                                    prev.map((item, i) =>
+                                      i === index ? { ...item, acceptedAnswers } : item,
+                                    ),
+                                  );
+                                }}
+                                required
+                              />
+                            </label>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <Button type="submit" disabled={busy}>
+                      {busy ? t("saving") : te("createDraftAction")}
+                    </Button>
+                  </div>
+                </form>
+              </CardBody>
+            </Card>
+          ) : null}
+
+          <Card>
+            <CardBody className="space-y-4">
+              <h2 className="ui-card-title">{te("listTitle")}</h2>
+              {onlineExams.length === 0 ? (
+                <p className="text-sm text-muted">{te("empty")}</p>
+              ) : (
+                <div className="space-y-3">
+                  {onlineExams.map((exam) => (
+                    <div
+                      key={exam.id}
+                      className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border p-4"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <strong>{exam.title}</strong>
+                          <span className="rounded border border-border px-2 py-0.5 text-xs">
+                            {te(`status.${exam.status}`)}
+                          </span>
+                          {exam.resultsPublishedAt ? (
+                            <span className="rounded border border-border px-2 py-0.5 text-xs font-semibold">
+                              {te("resultsPublishedBadge")}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-muted">
+                          {exam.groupName} ·{" "}
+                          {te("attemptsSummary", {
+                            submitted: exam.attemptsSummary.submittedCount,
+                            total: exam.attemptsSummary.totalAttempts,
+                            maxScore: exam.maxScore,
+                          })}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => void openOnlineExam(exam.id)}
+                        >
+                          {te("previewAction")}
+                        </Button>
+                        {canWriteGrades && exam.status === "draft" ? (
+                          <Button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void updateOnlineExamAction(exam.id, "publish")}
+                          >
+                            {te("publishExamAction")}
+                          </Button>
+                        ) : null}
+                        {canWriteGrades && exam.status === "published" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => void updateOnlineExamAction(exam.id, "close")}
+                          >
+                            {te("closeExamAction")}
+                          </Button>
+                        ) : null}
+                        {canWriteGrades && !exam.resultsPublishedAt ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => void updateOnlineExamAction(exam.id, "publish_results")}
+                          >
+                            {te("publishResultsAction")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+          {examDetail ? (
+            <Card>
+              <CardBody className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="ui-card-title">
+                      {te("teacherPreviewTitle")}: {examDetail.title}
+                    </h2>
+                    <p className="text-xs text-muted">
+                      {examDetail.groupName} · {te(`status.${examDetail.status}`)}
+                    </p>
+                  </div>
+                  <Button variant="secondary" onClick={() => setExamDetail(null)}>
+                    {t("close")}
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {examDetail.questions.map((q) => (
+                    <div key={q.id} className="rounded border border-border p-3 text-sm space-y-1">
+                      <div className="flex justify-between gap-2">
+                        <strong>
+                          {q.position}. {q.prompt}
+                        </strong>
+                        <span className="text-xs text-muted">
+                          {q.points} pts · {te(`qType.${q.type}`)}
+                        </span>
+                      </div>
+                      {q.explanation ? (
+                        <p className="text-xs text-muted">{q.explanation}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-3 border-t border-border pt-4">
+                  <h3 className="text-sm font-semibold">{te("attemptsSectionTitle")}</h3>
+                  {examDetail.attempts.length === 0 ? (
+                    <p className="text-sm text-muted">{te("noAttempts")}</p>
+                  ) : (
+                    examDetail.attempts.map((attempt) => (
+                      <form
+                        key={attempt.id}
+                        className="rounded-lg border border-border p-4 space-y-3"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void submitAttemptGrading(
+                            examDetail.id,
+                            attempt.id,
+                            e.currentTarget,
+                            examDetail.questions,
+                          );
+                        }}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <strong className="text-sm">
+                            {attempt.student.firstName} {attempt.student.lastName} (#
+                            {attempt.attemptNumber})
+                          </strong>
+                          <span className="text-xs text-muted">
+                            {te(`attemptStatus.${attempt.status}`)} ·{" "}
+                            {attempt.totalScore ?? "—"} / {examDetail.maxScore}
+                          </span>
+                        </div>
+
+                        {examDetail.questions.map((q) => {
+                          const resp = attempt.responses.find((r) => r.questionId === q.id);
+                          return (
+                            <div
+                              key={q.id}
+                              className="grid gap-2 border-t border-border pt-2 md:grid-cols-3 text-xs"
+                            >
+                              <div>
+                                <p className="font-semibold">{q.prompt}</p>
+                                <p className="text-muted">
+                                  {JSON.stringify(resp?.answer ?? null)}
+                                </p>
+                              </div>
+                              <label className="grid gap-1">
+                                <span>
+                                  {te("pointsAwardedLabel")} (max {q.points})
+                                </span>
+                                <Input
+                                  name={`points_${q.id}`}
+                                  type="number"
+                                  min="0"
+                                  max={q.points}
+                                  step="0.25"
+                                  defaultValue={resp?.pointsAwarded ?? 0}
+                                  disabled={!canWriteGrades || attempt.status === "in_progress"}
+                                />
+                              </label>
+                              <label className="grid gap-1">
+                                <span>{te("teacherFeedbackLabel")}</span>
+                                <Input
+                                  name={`feedback_${q.id}`}
+                                  defaultValue={resp?.teacherFeedback ?? ""}
+                                  disabled={!canWriteGrades || attempt.status === "in_progress"}
+                                />
+                              </label>
+                            </div>
+                          );
+                        })}
+
+                        {attempt.status === "graded" ? (
+                          <label className="grid gap-1 text-xs">
+                            <span>{te("correctionReasonLabel")}</span>
+                            <Input name="reason" required maxLength={500} />
+                          </label>
+                        ) : null}
+
+                        {canWriteGrades && attempt.status !== "in_progress" ? (
+                          <Button type="submit" variant="secondary" disabled={busy}>
+                            {te("saveGradesAction")}
+                          </Button>
+                        ) : null}
+                      </form>
+                    ))
+                  )}
+                </div>
+              </CardBody>
+            </Card>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

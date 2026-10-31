@@ -11,6 +11,7 @@ import { studentQuerySchema } from "@/modules/students/schemas";
 import { isAllowed } from "@/modules/tenancy/types";
 import { isScannerConfigured, isStorageConfigured, listMaterials } from "@/modules/files";
 import { filesQuerySchema } from "@/modules/files/schemas";
+import { listVideoLessons, videoLessonsQuerySchema } from "@/modules/videos";
 import { FilesClient } from "@/components/files/files-client";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +34,9 @@ export default async function FilesPage({ params }: { params: Promise<{ locale: 
     );
   }
 
-  const [materials, groups, students, subjects] = await Promise.all([
+  const [materials, videoData, groups, students, subjects] = await Promise.all([
     listMaterials(scope, filesQuerySchema.parse({})),
+    listVideoLessons(scope, videoLessonsQuerySchema.parse({})),
     isAllowed(scope, "grades", "read")
       ? getGroups(scope, groupQuerySchema.parse({}))
       : Promise.resolve([]),
@@ -53,6 +55,17 @@ export default async function FilesPage({ params }: { params: Promise<{ locale: 
           createdAt: material.createdAt.toISOString(),
         }))}
         initialUsedBytes={materials.usedBytes}
+        initialVideoData={{
+          providerStatus: videoData.providerStatus,
+          usage: videoData.usage,
+          limits: videoData.limits,
+          items: videoData.items.map((v) => ({
+            ...v,
+            publishedAt: v.publishedAt?.toISOString() ?? null,
+            archivedAt: v.archivedAt?.toISOString() ?? null,
+            createdAt: v.createdAt.toISOString(),
+          })),
+        }}
         groups={groups.map(({ id, name }) => ({ id, name }))}
         students={students.items.map(({ id, firstName, lastName }) => ({
           id,

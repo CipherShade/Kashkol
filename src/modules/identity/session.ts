@@ -37,6 +37,7 @@ export type StaffGate =
 
 export type PortalContext = {
   userId: string;
+  user?: AuthUser;
   grants: PortalGrantRow[];
   /** Distinct workspaces in which this user has a live portal link. */
   workspaceIds: string[];
@@ -85,9 +86,13 @@ export async function getVerifiedSession(requestHeaders?: Headers) {
   return result;
 }
 
-export async function getOptionalUser(): Promise<AuthUser | null> {
-  const result = await getVerifiedSession();
+export async function getOptionalUser(requestHeaders?: Headers): Promise<AuthUser | null> {
+  const result = await getVerifiedSession(requestHeaders);
   return result ? toAuthUser(result.user) : null;
+}
+
+export async function getAuthenticatedUser(requestHeaders?: Headers): Promise<AuthUser | null> {
+  return getOptionalUser(requestHeaders);
 }
 
 function toAuthUser(user: {
@@ -171,7 +176,8 @@ export async function getPortalContext(requestHeaders?: Headers): Promise<Portal
   const result = await getVerifiedSession(requestHeaders);
   if (!result) throw new AppError("UNAUTHORIZED");
 
-  const userId = result.user.id;
+  const user = toAuthUser(result.user);
+  const userId = user.id;
   const grants = await findActivePortalGrants(userId, new Date());
   if (grants.length === 0) {
     throw new AppError("FORBIDDEN", { messageKey: "errors.notPortalActor" });
@@ -179,9 +185,48 @@ export async function getPortalContext(requestHeaders?: Headers): Promise<Portal
 
   return {
     userId,
+    user,
     grants,
     workspaceIds: [...new Set(grants.map((grant) => grant.workspaceId))],
     studentIds: new Set(grants.map((grant) => grant.studentId)),
+  };
+}
+
+/**
+ * Require a verified parent portal session. A student portal actor or staff
+ * member without a parent grant is denied (`403 FORBIDDEN`).
+ */
+export async function requireParentPortalContext(requestHeaders?: Headers): Promise<PortalContext> {
+  const portal = await getPortalContext(requestHeaders);
+  const parentGrants = portal.grants.filter((grant) => grant.kind === "parent");
+  if (parentGrants.length === 0) {
+    throw new AppError("FORBIDDEN", { messageKey: "errors.notParentPortalActor" });
+  }
+  return {
+    userId: portal.userId,
+    user: portal.user,
+    grants: parentGrants,
+    workspaceIds: [...new Set(parentGrants.map((grant) => grant.workspaceId))],
+    studentIds: new Set(parentGrants.map((grant) => grant.studentId)),
+  };
+}
+
+/**
+ * Require a verified student portal session. A parent portal actor or staff
+ * member without a student grant is denied (`403 FORBIDDEN`).
+ */
+export async function requireStudentPortalContext(requestHeaders?: Headers): Promise<PortalContext> {
+  const portal = await getPortalContext(requestHeaders);
+  const studentGrants = portal.grants.filter((grant) => grant.kind === "student");
+  if (studentGrants.length === 0) {
+    throw new AppError("FORBIDDEN", { messageKey: "errors.notStudentPortalActor" });
+  }
+  return {
+    userId: portal.userId,
+    user: portal.user,
+    grants: studentGrants,
+    workspaceIds: [...new Set(studentGrants.map((grant) => grant.workspaceId))],
+    studentIds: new Set(studentGrants.map((grant) => grant.studentId)),
   };
 }
 
@@ -193,8 +238,23 @@ export async function getPortalContext(requestHeaders?: Headers): Promise<Portal
  * `403` (the link is missing). An unknown or foreign id returns `404`, so the
  * portal cannot be used to discover whether a student exists elsewhere.
  */
-export async function resolvePortalStudent(portal: PortalContext, studentId: string) {
-  const grant = portal.grants.find((candidate) => candidate.studentId === studentId);
+export async function resolvePortalStudent(
+  portal: PortalContext,
+  studentId: string,
+  requiredKind?: "parent" | "student",
+) {
+  const matchingKindGrants = requiredKind
+    ? portal.grants.filter((candidate) => candidate.kind === requiredKind)
+    : portal.grants;
+
+  if (requiredKind && matchingKindGrants.length === 0) {
+    throw new AppError("FORBIDDEN", {
+      messageKey:
+        requiredKind === "parent" ? "errors.notParentPortalActor" : "errors.notStudentPortalActor",
+    });
+  }
+
+  const grant = matchingKindGrants.find((candidate) => candidate.studentId === studentId);
   if (grant) {
     const projection = await findPortalStudentProjection(grant.workspaceId, studentId);
     if (!projection) throw new AppError("NOT_FOUND");

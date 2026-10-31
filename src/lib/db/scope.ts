@@ -60,3 +60,17 @@ export async function withInvitationScope<T>(
     return fn(tx);
   });
 }
+
+/**
+ * Resolve one portal invitation by its token hash before a workspace scope exists.
+ */
+export async function withPortalInvitationScope<T>(
+  tokenHash: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return getDb().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.portal_invitation_token_hash', ${tokenHash}, true)`;
+    return fn(tx);
+  });
+}
+

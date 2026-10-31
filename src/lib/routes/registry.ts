@@ -431,21 +431,197 @@ export const ROUTES: RouteEntry[] = [
     description: "Notification settings and provider config status.",
   },
   {
-    path: "/api/messaging/logs",
-    methods: ["GET"],
-    access: "workspace",
-    tenantScoped: true,
-    description: "Delivery logs (sanitized).",
-  },
-  {
     path: "/api/messaging/webhook",
     methods: ["GET", "POST"],
     access: "public",
     tenantScoped: false,
     description: "Provider webhook with signature verification.",
   },
+  {
+    path: "/api/students/[studentId]/portal-access",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "List active portal grants and pending invitations for a student, or issue a verified single-use portal invitation link.",
+  },
+  {
+    path: "/api/students/[studentId]/portal-access/invitations/[invitationId]/revoke",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Revoke a pending parent or student portal invitation before it is accepted.",
+  },
+  {
+    path: "/api/students/[studentId]/portal-access/grants/[grantId]",
+    methods: ["PATCH", "DELETE"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Update granular portal visibility permissions or immediately revoke a parent/student portal grant and invalidate active sessions.",
+  },
+  {
+    path: "/api/portal/invitations/[token]",
+    methods: ["GET"],
+    access: "capability",
+    tenantScoped: true,
+    description:
+      "Inspect a single-use portal verification token via its SHA-256 hash before acceptance.",
+  },
+  {
+    path: "/api/portal/invitations/accept",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Accept a single-use parent or student portal invitation after verified sign-in with the invited email.",
+  },
+  {
+    path: "/api/portal/parent",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Parent portal overview and linked children list. Restricted strictly to verified parent grants.",
+  },
+  {
+    path: "/api/portal/parent/children/[studentId]",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Parent portal single-child projection (permitted attendance, published grades, homework, clean resources, approved payments, schedule changes, notifications).",
+  },
+  {
+    path: "/api/portal/student",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Student portal self-projection (upcoming sessions, own attendance, homework, published grades, shared clean materials). Restricted strictly to verified student grants.",
+  },
+  {
+    path: "/api/portal/student/homework/[homeworkId]/submit",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Mark the authenticated student's own active homework assignment as submitted.",
+  },
+  {
+    path: "/api/portal/notifications",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "In-app portal notification center fallback for linked parent and student grants.",
+  },
+  {
+    path: "/api/portal/notifications/[notificationId]/read",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description: "Mark one portal notification as read for the authenticated parent or student.",
+  },
+  {
+    path: "/api/portal/push",
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Manage Web Push subscriptions and explicit lock-screen detail opt-in preferences for the portal user.",
+  },
+  {
+    path: "/api/videos",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "List recorded video lessons, provider setup state, and storage/bandwidth usage, or register an external provider asset.",
+  },
+  {
+    path: "/api/videos/[videoId]",
+    methods: ["PATCH", "DELETE"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Update recorded video lesson metadata, scope, or publication state, or soft-delete.",
+  },
+  {
+    path: "/api/videos/[videoId]/playback",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Verify staff permission and workspace bandwidth limits before issuing a short-lived signed video playback token.",
+  },
+  {
+    path: "/api/videos/webhook",
+    methods: ["POST"],
+    access: "public",
+    tenantScoped: true,
+    description:
+      "Verify signed external video provider webhooks and update recorded video asset status.",
+  },
+  {
+    path: "/api/portal/videos/[videoId]/playback",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Verify portal grant entitlement and publication status before issuing a short-lived signed video playback token.",
+  },
+  {
+    path: "/api/exams",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "List online exams and attempts or create a teacher-authored online exam.",
+  },
+  {
+    path: "/api/exams/[examId]",
+    methods: ["GET", "PATCH"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Preview an online exam as a teacher without creating a student attempt, or update exam lifecycle and availability window.",
+  },
+  {
+    path: "/api/exams/[examId]/attempts/[attemptId]/grade",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Manually grade or correct an online exam attempt with required audit reason on corrections.",
+  },
+  {
+    path: "/api/portal/student/exams",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "List online exams assigned to the authenticated student portal user.",
+  },
+  {
+    path: "/api/portal/student/exams/[examId]/attempts",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Start or resume an online exam attempt for the authenticated student after server-side window and attempt-limit checks.",
+  },
+  {
+    path: "/api/portal/student/exams/[examId]/attempts/[attemptId]",
+    methods: ["PUT", "POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Save draft responses or submit the authenticated student's online exam attempt with duplicate-submission protection.",
+  },
 ];
 
 export function findRoute(path: string): RouteEntry | undefined {
   return ROUTES.find((route) => route.path === path);
 }
+
