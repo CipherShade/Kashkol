@@ -254,7 +254,7 @@
 
 .ui-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
   gap: 0.9rem;
   align-items: start;
 }
@@ -647,6 +647,7 @@
 /* Skeletons -------------------------------------------------------------- */
 .ui-skeleton {
   display: block;
+  max-inline-size: 100%;
   min-block-size: 0.85rem;
   border-radius: var(--radius-sm);
   background: linear-gradient(
@@ -1243,6 +1244,38 @@
 
   .ui-action-bar[data-sticky="true"] .ui-button {
     flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .ui-card-grid,
+  .ui-form-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+
+  .ui-card-header {
+    padding-block: 0.85rem 0;
+    padding-inline: 0.8rem;
+  }
+
+  .ui-card-body {
+    padding-block: 0.75rem 0.95rem;
+    padding-inline: 0.8rem;
+  }
+
+  .ui-card-footer {
+    padding-block: 0.7rem;
+    padding-inline: 0.8rem;
+  }
+
+  .ui-stat {
+    padding-block: 0.75rem;
+    padding-inline: 0.85rem;
+  }
+
+  .ui-stat-value {
+    font-size: 1.4rem;
   }
 }
 

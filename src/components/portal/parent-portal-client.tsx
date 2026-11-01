@@ -545,7 +545,7 @@ export function ParentPortalClient({
         {/* Tab 2: Permitted Attendance */}
         {activeTab === "attendance" && activeChild.attendance && (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-3 sm:grid-cols-5">
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3.5">
                 <span className="text-xs text-[var(--text-secondary)]">
                   {t("attendanceStats.rate")}

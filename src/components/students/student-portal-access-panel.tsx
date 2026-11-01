@@ -302,7 +302,7 @@ export function StudentPortalAccessPanel({
               <p className="text-xs font-semibold text-foreground mb-2.5">
                 {t("permittedSectionsTitle")}
               </p>
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 text-xs">
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-2.5 sm:grid-cols-4 text-xs">
                 {(
                   [
                     "showSchedule",

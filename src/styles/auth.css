@@ -294,6 +294,13 @@
   }
 }
 
+@media (max-width: 480px) {
+  .form-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+}
+
 @media (max-width: 420px) {
   .auth-page {
     padding-inline: 0.75rem;

@@ -3,10 +3,7 @@ import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
-import {
-  resolvePortalStudent,
-  type PortalContext,
-} from "@/modules/identity/session";
+import { type PortalContext } from "@/modules/identity/session";
 import { resolvePortalPermissions } from "@/modules/portals/tokens";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import {
@@ -481,6 +478,7 @@ export async function updateOnlineExamLifecycle(
       },
       select: {
         id: true,
+        status: true,
         availableFrom: true,
         availableUntil: true,
         durationMinutes: true,
@@ -728,10 +726,10 @@ function resolveAuthenticatedStudentGrant(portal: PortalContext, requestedStuden
     throw new AppError("FORBIDDEN");
   }
   const targetStudentId = requestedStudentId ?? studentGrants[0]!.studentId;
-  const grant = resolvePortalStudent(
-    { ...portal, grants: studentGrants },
-    targetStudentId,
-  );
+  const grant = studentGrants.find((candidate) => candidate.studentId === targetStudentId);
+  if (!grant) {
+    throw new AppError("FORBIDDEN");
+  }
   const perms = resolvePortalPermissions("student", grant.permissions);
   if (!perms.showGrades && !perms.showHomework) {
     throw new AppError("FORBIDDEN");

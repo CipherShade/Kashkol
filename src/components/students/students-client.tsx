@@ -351,7 +351,7 @@ export function StudentsClient({
       )}
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-5 gap-3">
         <button
           type="button"
           onClick={() => {
@@ -1019,7 +1019,7 @@ export function StudentsClient({
           {importStep === "preview" && importPreview && (
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
               {/* Summary of findings */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-2 text-center text-xs">
                 <div className="p-2 bg-[var(--color-surface-subtle)] rounded">
                   <div className="font-semibold text-sm">{importPreview.totalRows}</div>
                   <div className="text-muted">{labels.totalRows ?? "Total Rows"}</div>
@@ -1269,7 +1269,7 @@ export function StudentsClient({
               "Download your current student list. Export files are protected against spreadsheet formula injection."}
           </p>
 
-          <div className="grid grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-1 min-[480px]:grid-cols-2 gap-3 pt-2">
             <a
               href={`/api/students/export?format=csv&locale=${locale}${
                 selectedGroup ? `&groupId=${selectedGroup}` : ""

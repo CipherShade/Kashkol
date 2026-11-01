@@ -4,7 +4,7 @@ import { assertTrustedOrigin } from "@/lib/http/csrf";
 import { errorResponse } from "@/lib/http/errors";
 import { getServerEnv } from "@/lib/config/env";
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
-import { requirePortalContext } from "@/modules/identity/session";
+import { getPortalContext } from "@/modules/identity/session";
 import { issuePortalVideoPlayback } from "@/modules/videos";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function POST(
   const requestId = request.headers.get(REQUEST_ID_HEADER) ?? newRequestId();
   try {
     assertTrustedOrigin(await headers(), getServerEnv().BETTER_AUTH_URL);
-    const portal = await requirePortalContext();
+    const portal = await getPortalContext();
     const { videoId } = await context.params;
     const result = await issuePortalVideoPlayback(portal, videoId, { requestId });
     return NextResponse.json(result, {

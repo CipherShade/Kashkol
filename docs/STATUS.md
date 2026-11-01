@@ -148,7 +148,7 @@ Line counts are **non-blank** lines.
 | Database | Prisma schema, one committed migration, forced RLS, audit append-only grant, embedded PostgreSQL 17.9.0-beta.16 |
 | Tenancy | `withScope()`, tenant-table registry, tenancy repository/service, permission evaluation, RLS integration tests |
 | HTTP and auth | Request-id ULID, error envelope, `/healthz`, `/readyz`, Better Auth handler |
-| UI shell | Arabic/English routing, RTL/LTR layout, design tokens, light/dark/system theme script, bilingual status page |
+| UI shell | Arabic/English routing, RTL/LTR layout, design tokens, light/dark/system theme script, bilingual status page, and `< 480px` mobile single-column CSS grid card stacking |
 | Local development | Guarded seed, idempotent seed data, standalone start script, Railway configuration |
 | Quality gates | Unit tests, RLS/readiness integration tests, message parity, route registry, Prisma import boundary, logical-CSS and secret-name checks |
 

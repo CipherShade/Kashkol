@@ -11,7 +11,7 @@ import { studentQuerySchema } from "@/modules/students/schemas";
 import { isAllowed } from "@/modules/tenancy/types";
 import { isScannerConfigured, isStorageConfigured, listMaterials } from "@/modules/files";
 import { filesQuerySchema } from "@/modules/files/schemas";
-import { listVideoLessons, videoLessonsQuerySchema } from "@/modules/videos";
+import { listVideoLessons, videosQuerySchema } from "@/modules/videos";
 import { FilesClient } from "@/components/files/files-client";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ export default async function FilesPage({ params }: { params: Promise<{ locale: 
 
   const [materials, videoData, groups, students, subjects] = await Promise.all([
     listMaterials(scope, filesQuerySchema.parse({})),
-    listVideoLessons(scope, videoLessonsQuerySchema.parse({})),
+    listVideoLessons(scope, videosQuerySchema.parse({})),
     isAllowed(scope, "grades", "read")
       ? getGroups(scope, groupQuerySchema.parse({}))
       : Promise.resolve([]),
@@ -57,13 +57,45 @@ export default async function FilesPage({ params }: { params: Promise<{ locale: 
         initialUsedBytes={materials.usedBytes}
         initialVideoData={{
           providerStatus: videoData.providerStatus,
-          usage: videoData.usage,
-          limits: videoData.limits,
+          usage: {
+            videoCount: videoData.usage.videoCount,
+            totalStorageBytes: videoData.usage.storageBytes,
+            totalDurationSeconds: videoData.usage.totalDurationSeconds,
+            totalPlaybacks: videoData.usage.totalPlaybacks,
+            estimatedBandwidthBytes: videoData.usage.estimatedBandwidthBytes,
+          },
+          limits: {
+            maxCount: videoData.usage.limits.maxVideoCount,
+            maxStorageBytes: videoData.usage.limits.maxStorageBytes,
+            maxBandwidthBytesPerMonth: videoData.usage.limits.maxBandwidthBytesPerMonth,
+          },
           items: videoData.items.map((v) => ({
-            ...v,
-            publishedAt: v.publishedAt?.toISOString() ?? null,
-            archivedAt: v.archivedAt?.toISOString() ?? null,
-            createdAt: v.createdAt.toISOString(),
+            id: v.id,
+            provider: v.provider,
+            externalAssetId: v.providerAssetId,
+            title: v.title,
+            description: v.description,
+            topic: v.topic,
+            subject: v.subject,
+            scope: v.scope,
+            publicationStatus: v.publicationStatus,
+            assetStatus:
+              v.assetStatus === "pending"
+                ? "pending_upload"
+                : v.assetStatus === "unavailable"
+                  ? "failed"
+                  : v.assetStatus,
+            durationSeconds: v.durationSeconds,
+            sizeBytes: v.sizeBytes,
+            thumbnailUrl: v.thumbnailPath,
+            playbackCount: v.playbackCount,
+            estimatedBandwidthBytes: v.estimatedBandwidthBytes,
+            ownerId: scope.actorUserId,
+            publishedAt: v.publishedAt,
+            archivedAt: v.archivedAt,
+            createdAt: v.createdAt,
+            groups: v.groups,
+            students: v.students,
           })),
         }}
         groups={groups.map(({ id, name }) => ({ id, name }))}

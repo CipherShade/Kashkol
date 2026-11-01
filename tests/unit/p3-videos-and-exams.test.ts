@@ -883,6 +883,7 @@ const enrolledStudentContext: PortalContext = {
       studentId: ENROLLED_STUDENT,
       guardianId: null,
       kind: "student",
+      expiresAt: null,
       permissions: {
         showSchedule: true,
         showAttendance: true,
@@ -913,6 +914,7 @@ const unassignedStudentContext: PortalContext = {
       studentId: UNASSIGNED_STUDENT,
       guardianId: null,
       kind: "student",
+      expiresAt: null,
       permissions: {
         showSchedule: true,
         showAttendance: true,
@@ -952,7 +954,7 @@ describe("P3 Recorded Videos via External Provider Adapter (F-P3-02)", () => {
         studentIds: [],
       }),
     ).rejects.toMatchObject({
-      status: 409,
+      code: "CONFLICT",
       messageKey: "errors.videoProviderNotConfigured",
     });
   });
@@ -1006,7 +1008,7 @@ describe("P3 Recorded Videos via External Provider Adapter (F-P3-02)", () => {
     await expect(
       issuePortalVideoPlayback(unassignedStudentContext, created.id),
     ).rejects.toMatchObject({
-      status: 404,
+      code: "NOT_FOUND",
       messageKey: "errors.notFound",
     });
   });
@@ -1033,7 +1035,7 @@ describe("P3 Recorded Videos via External Provider Adapter (F-P3-02)", () => {
         studentIds: [],
       }),
     ).rejects.toMatchObject({
-      status: 409,
+      code: "CONFLICT",
       messageKey: "errors.videoNotReadyForPublish",
     });
 
@@ -1269,7 +1271,7 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
         undefined,
         duringWindow,
       ),
-    ).rejects.toMatchObject({ status: 403 });
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     // 2. Teacher previews before publishing (includes honesty boundary notice and questions)
     const preview = await previewOnlineExamForTeacher(ownerScope, exam.id);
@@ -1301,7 +1303,7 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
         beforeWindow,
       ),
     ).rejects.toMatchObject({
-      status: 409,
+      code: "CONFLICT",
       messageKey: "errors.examWindowClosed",
     });
 
@@ -1315,7 +1317,7 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
         duringWindow,
       ),
     ).rejects.toMatchObject({
-      status: 404,
+      code: "NOT_FOUND",
       messageKey: "errors.notFound",
     });
 
@@ -1398,7 +1400,7 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
         duringWindow,
       ),
     ).rejects.toMatchObject({
-      status: 409,
+      code: "CONFLICT",
       messageKey: "errors.examMaxAttemptsReached",
     });
 
@@ -1439,7 +1441,7 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
         undefined,
         afterWindow,
       ),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
 
     const corrected = await gradeOnlineExamAttempt(
       ownerScope,
