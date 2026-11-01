@@ -878,8 +878,10 @@ consolidated form rather than one directory per row above:
 | `20261029160000_report_exports` | Asynchronous tenant-scoped export jobs and queue |
 | `20261030120000_team_invitations` | Team invitations, workspace-settings conventions, and forced RLS |
 | `20261031120000_parent_student_portals_pwa` | Parent and student portal grants (`guardian_id`, `permissions`), verified `portal_invitation` tokens, `portal_push_subscription` Web Push records, and forced RLS |
+| `20261101100000_p3_learning_media_and_online_exams` | Recorded video lessons (`video_lesson`, `video_lesson_group`, `video_lesson_student`, `video_playback_grant`), online exams (`online_exam`, `online_exam_student`, `online_exam_question`, `online_exam_attempt`, `online_exam_response`), and forced RLS |
+| `20261101140000_p3_platform_admin_and_plans` | Centralized workspace plan/status columns (`plan_tier`, `plan_status`, `plan_limit_overrides`, `status_reason`), global `platform_admin` and append-only `platform_audit_event` tables, tenant-scoped `break_glass_grant` with forced RLS, and platform-admin workspace read policy |
 
-The current local development database has all fifteen tracked migrations applied. `student` and
+The current local development database tracks all seventeen migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

@@ -4,6 +4,7 @@ import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { getServerEnv } from "@/lib/config/env";
 import { writeAuditEvent } from "@/modules/audit/service";
+import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import type { PortalContext } from "@/modules/identity/session";
 import { resolvePortalPermissions } from "@/modules/portals/tokens";
@@ -98,6 +99,10 @@ export async function createMaterial(
 
   try {
     return await withScope(scope, async (tx) => {
+      await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+        kind: "files",
+        additionalBytes: upload.sizeBytes,
+      });
       if (input.groupIds.length) {
         const count = await tx.group.count({
           where: {

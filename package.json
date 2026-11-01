@@ -32,6 +32,7 @@
     "db:studio": "prisma studio",
     "db:dev:start": "node scripts/dev-db.mjs start",
     "db:dev:stop": "node scripts/dev-db.mjs stop",
+    "platform-admin": "tsx scripts/platform-admin.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {

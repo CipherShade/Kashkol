@@ -54,6 +54,7 @@ export const TENANT_TABLES = [
   "online_exam_question",
   "online_exam_attempt",
   "online_exam_response",
+  "break_glass_grant",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

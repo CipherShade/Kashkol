@@ -3,6 +3,7 @@ import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
+import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
 import {
   parseSpreadsheetBuffer,
@@ -93,6 +94,10 @@ export async function createStudent(
   const studentId = newUuidV7();
 
   return withScope(scope, async (tx) => {
+    await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "students",
+      additionalCount: 1,
+    });
     if (input.groupIds && input.groupIds.length > 0) {
       const count = await tx.group.count({
         where: { workspaceId: scope.workspaceId, id: { in: input.groupIds }, archivedAt: null },
@@ -499,6 +504,11 @@ export async function commitStudentsImport(
   }
 
   return withScope(scope, async (tx) => {
+    const newStudentsCount = rowsToProcess.filter((r) => r.action === "create").length;
+    await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "students",
+      additionalCount: newStudentsCount,
+    });
     // 1. Resolve or create groups
     const groupNameToId = new Map<string, string>();
     const existingGroups = await tx.group.findMany({

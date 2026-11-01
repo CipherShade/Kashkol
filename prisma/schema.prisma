@@ -343,6 +343,24 @@ enum OnlineExamAttemptStatus {
   @@map("online_exam_attempt_status")
 }
 
+enum WorkspacePlanTier {
+  pilot
+  standard
+  expanded
+
+  @@map("workspace_plan_tier")
+}
+
+enum WorkspacePlanStatus {
+  pilot_active
+  active
+  past_due
+  suspended
+  cancelled
+
+  @@map("workspace_plan_status")
+}
+
 // ---------------------------------------------------------------------------
 // Identity — Better Auth owns `user`, `session`, `account`, `verification`.
 // Kashkol never adds columns to those tables (DATA_MODEL.md §5.1).
@@ -364,6 +382,7 @@ model User {
   auditEvents  AuditEvent[]
   portalGrants PortalGrant[]
   portalPushSubscriptions PortalPushSubscription[]
+  platformAdmin PlatformAdmin?
 
   @@map("user")
 }
@@ -484,11 +503,20 @@ model Workspace {
   slug           String          @unique
   teachingName   String          @map("teaching_name")
   primarySubject String?         @map("primary_subject")
-  gradesTaught   String[]        @map("grades_taught")
-  status         WorkspaceStatus @default(active)
-  deletedAt      DateTime?       @map("deleted_at") @db.Timestamptz(6)
-  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  gradesTaught       String[]            @map("grades_taught")
+  status             WorkspaceStatus     @default(active)
+  planTier           WorkspacePlanTier   @default(pilot) @map("plan_tier")
+  planStatus         WorkspacePlanStatus @default(pilot_active) @map("plan_status")
+  planLimitOverrides Json?               @map("plan_limit_overrides")
+  planAssignedAt     DateTime?           @map("plan_assigned_at") @db.Timestamptz(6)
+  planAssignedBy     String?             @map("plan_assigned_by")
+  planNote           String?             @map("plan_note")
+  statusReason       String?             @map("status_reason")
+  statusUpdatedAt    DateTime?           @map("status_updated_at") @db.Timestamptz(6)
+  statusUpdatedBy    String?             @map("status_updated_by")
+  deletedAt          DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   settings            WorkspaceSettings?
   members             WorkspaceMember[]
@@ -536,6 +564,7 @@ model Workspace {
   onlineExamQuestions OnlineExamQuestion[]
   onlineExamAttempts  OnlineExamAttempt[]
   onlineExamResponses OnlineExamResponse[]
+  breakGlassGrants    BreakGlassGrant[]
 
   @@map("workspace")
 }
@@ -1754,3 +1783,67 @@ model OnlineExamResponse {
   @@index([attemptId])
   @@map("online_exam_response")
 }
+
+// ---------------------------------------------------------------------------
+// P3 — Platform Administration & Subscription Plans (`F-P3-03`, `F-P3-04`)
+// ---------------------------------------------------------------------------
+
+model PlatformAdmin {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  userId          String    @unique @map("user_id")
+  grantedByUserId String?   @map("granted_by_user_id")
+  grantReason     String    @map("grant_reason")
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedByUserId String?   @map("revoked_by_user_id")
+  revokeReason    String?   @map("revoke_reason")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("platform_admin")
+}
+
+model PlatformAuditEvent {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  actorUserId       String?  @map("actor_user_id")
+  actorDisplayName  String   @map("actor_display_name")
+  targetWorkspaceId String?  @map("target_workspace_id") @db.Uuid
+  entityType        String   @map("entity_type")
+  entityId          String   @map("entity_id")
+  action            String
+  reason            String
+  diff              Json?
+  requestId         String   @map("request_id")
+  ipHash            String?  @map("ip_hash")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([targetWorkspaceId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("platform_audit_event")
+}
+
+model BreakGlassGrant {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  adminUserId      String    @map("admin_user_id")
+  adminDisplayName String    @map("admin_display_name")
+  ticketRef        String    @map("ticket_ref")
+  reason           String
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedByUserId  String?   @map("revoked_by_user_id")
+  revokeReason     String?   @map("revoke_reason")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, expiresAt, revokedAt])
+  @@index([adminUserId, expiresAt])
+  @@map("break_glass_grant")
+}
+

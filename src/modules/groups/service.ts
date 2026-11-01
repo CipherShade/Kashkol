@@ -4,6 +4,7 @@ import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { addNewEnrollmentToHomework } from "@/modules/homework";
+import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import {
   archiveGroupTx,
@@ -77,6 +78,10 @@ export async function createGroup(
   const groupId = newUuidV7();
 
   return withScope(scope, async (tx) => {
+    await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "groups",
+      additionalCount: 1,
+    });
     let resolvedSubjectId = input.subjectId ?? null;
     if (!resolvedSubjectId && input.subjectName && input.subjectName.trim()) {
       const subject = await findOrCreateSubjectTx(tx, scope, input.subjectName);

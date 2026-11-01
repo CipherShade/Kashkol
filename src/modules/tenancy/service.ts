@@ -3,6 +3,7 @@ import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { getServerEnv, isEmailConfigured } from "@/lib/config/env";
 import { writeAuditEvent } from "@/modules/audit/service";
+import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { getEmailTransport, workspaceInvitationEmail } from "@/modules/identity/email";
 import { deleteSessionsForUserTx, findActiveMemberships, findGrantedPermissions, findUser, findWorkspaceState } from "@/modules/identity/repository";
 import {
@@ -456,6 +457,11 @@ export async function inviteMember(
   if (!workspace) throw new AppError("NOT_FOUND");
 
   const invitation = await withScope(scope, async (tx) => {
+    await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "assistants",
+      additionalCount: 1,
+      now,
+    });
     const existingMember = await findMemberByEmail(tx, scope.workspaceId, email);
     if (existingMember) {
       throw new AppError("CONFLICT", { messageKey: "team.errors.alreadyMember" });

@@ -1,6 +1,8 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { getDb } from "./client";
 
+export type DbTransactionClient = Prisma.TransactionClient;
+
 export type TenantScope = {
   workspaceId: string;
   actorUserId: string | null;
@@ -73,4 +75,23 @@ export async function withPortalInvitationScope<T>(
     return fn(tx);
   });
 }
+
+/**
+ * Run a transaction scoped to a verified platform admin (`F-P3-03`).
+ *
+ * The matching SELECT-only RLS policy on `workspace` checks that `adminUserId`
+ * corresponds to an active (`revoked_at IS NULL`) row in `platform_admin`.
+ * Tenant tables (`student`, `student_note`, `assessment_score`, `guardian`, etc.)
+ * do not carry a platform-admin bypass policy.
+ */
+export async function withPlatformAdminScope<T>(
+  adminUserId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return getDb().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.platform_admin_user_id', ${adminUserId}, true)`;
+    return fn(tx);
+  });
+}
+
 

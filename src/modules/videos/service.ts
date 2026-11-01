@@ -4,6 +4,7 @@ import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { getServerEnv } from "@/lib/config/env";
 import { writeAuditEvent } from "@/modules/audit/service";
+import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import type { PortalContext } from "@/modules/identity/session";
 import { resolvePortalPermissions } from "@/modules/portals/tokens";
 import { authorize, type Scope } from "@/modules/tenancy/types";
@@ -144,6 +145,13 @@ export async function createVideoLesson(
 
   const id = newUuidV7();
   return withScope(scope, async (tx) => {
+    await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "videos",
+      currentVideoCount: currentUsage.videoCount,
+      currentStorageBytes: currentUsage.storageBytes,
+      currentBandwidthBytes: currentUsage.estimatedBandwidthBytes,
+      additionalSizeBytes: inspected.sizeBytes,
+    });
     const duplicate = await tx.videoLesson.findFirst({
       where: {
         workspaceId: scope.workspaceId,

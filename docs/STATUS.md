@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-10-31 · **Status:** P3 learning-media (`F-P3-02` Recorded video via external provider adapter) and online-assessment expansion (`F-P3-01` Online exams & quizzes) implemented alongside M2 parent/student portals, PWA/Web Push, and teacher workspace administration · **Phase:** M1/M2 core + P3 learning media & online assessments
+**Date:** 2026-11-01 · **Status:** P3 platform administration (`F-P3-03`) and centralized workspace plans/limits (`F-P3-04`), recorded video (`F-P3-02`), online exams (`F-P3-01`), M2 parent/student portals, PWA/Web Push, and teacher workspace administration implemented · **Phase:** M1/M2 core + P3 learning media, online assessments & platform operations
 
 ---
 
@@ -90,6 +90,11 @@ health/readiness probes, the route registry, and the project-rule checks.
   - Authenticated student portal entry only (`requireStudentPortalContext` on `/api/portal/student/exams*`) — never via unprotected name/phone lookup.
   - Deterministic auto-grading (`mcq_single`, `true_false`, normalized Arabic/English `short_answer`), safe draft response saving (`PUT`), idempotent duplicate final submission protection (`POST`), publish-gated result visibility (`after_manual_publish` | `immediate_after_submit` | `after_window_close`), and audited manual grading / grade corrections (`exam.manually_graded` and `exam.grade_corrected` requiring a correction reason) synced to `Assessment` / `AssessmentScore`.
   - Conservative integrity notice explicitly stating that browser-based quizzes enforce server-side deadlines and attempt limits and do not provide lockdown-grade anti-cheat protection in a web browser.
+- Platform Administration & Centralized Workspace Plans (`F-P3-03` & `F-P3-04`) (`src/modules/platform-admin/`, `scripts/platform-admin.ts`, `docs/SUPPORT_RUNBOOK.md`):
+  - Non-public CLI provisioning (`npm run platform-admin -- grant|revoke|list`) requiring verified email and audit reason — never auto-promoting the first user or hardcoded emails.
+  - Metadata-only workspace inspection (`/api/platform-admin/overview`, `/api/platform-admin/workspaces/[workspaceId]`, `/[locale]/platform-admin`) exposing high-level status, created date, plan/status metadata, integration readiness, and usage summaries (`isEstimate` badges on video bandwidth and outbox counts) without exposing student notes, grades, or guardian contact details.
+  - Time-limited, reasoned, confirmation-gated break-glass support diagnostics (max 60 minutes, operational error codes only, visible to workspace owners via `/api/workspace/subscription`).
+  - Centralized plan catalog (`pilot`, `standard`, `expanded` in `manual_pilot` mode without card billing or hardcoded retail prices), per-workspace quota overrides, and server-side write/limit enforcement (`assertWorkspaceWriteAllowedTx`) across students, groups, assistant invitations, files, videos, and online exams.
 - `/healthz`, `/readyz`, and a bilingual status shell at `/ar` and `/en`.
 - Route registry, message-catalogue parity check, Prisma import boundary, logical-CSS check, and
   Railway build/start/migration configuration.
@@ -342,10 +347,10 @@ task.
 
 | # | Item | Exit condition | State |
 |---|---|---|---|
-| 3.1 | Online exams | `F-P3-01` passes | ☐ |
-| 3.2 | Recorded video through an external provider | `F-P3-02` passes, gated on `OQ-08` | ☐ |
-| 3.3 | Admin console: metadata only, break-glass access | `F-P3-03` passes; no bulk tenant export exists | ☐ |
-| 3.4 | Subscription and billing | `F-P3-04` passes; no card data is stored | ☐ |
+| 3.1 | Online exams | `F-P3-01` passes | ☑ |
+| 3.2 | Recorded video through an external provider | `F-P3-02` passes, gated on `OQ-08` | ☑ |
+| 3.3 | Admin console: metadata only, break-glass access | `F-P3-03` passes; no bulk tenant export exists | ☑ |
+| 3.4 | Subscription and billing | `F-P3-04` passes (manual pilot plans & server-enforced limits; no card data is stored or charged) | ☑ |
 | 3.5 | Scale, performance, and reliability hardening | `F-P3-05` passes; the budgets in `ARCHITECTURE.md` §21 are met with evidence | ☐ |
 | 3.6 | Rich notification channels | `F-P3-06` passes; every channel states only what it can observe | ☐ |
 | 3.7 | Advanced reporting and academic-year handling | `F-P3-07` passes | ☐ |

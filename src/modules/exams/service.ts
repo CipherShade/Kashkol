@@ -3,6 +3,7 @@ import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
+import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { type PortalContext } from "@/modules/identity/session";
 import { resolvePortalPermissions } from "@/modules/portals/tokens";
 import { authorize, type Scope } from "@/modules/tenancy/types";
@@ -174,6 +175,9 @@ export async function createOnlineExam(
     ) / 100;
 
   return withScope(scope, async (tx) => {
+    await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "online_exams",
+    });
     const group = await tx.group.findFirst({
       where: {
         id: input.groupId,

@@ -619,6 +619,30 @@ export const ROUTES: RouteEntry[] = [
     description:
       "Save draft responses or submit the authenticated student's online exam attempt with duplicate-submission protection.",
   },
+  {
+    path: "/api/workspace/subscription",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Read workspace plan tier, manual pilot status, quota utilization, and any active break-glass support banner.",
+  },
+  {
+    path: "/api/platform-admin/overview",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: false,
+    description:
+      "Platform administration overview: system integration readiness, metadata-only workspace list, usage summaries, and platform audit log.",
+  },
+  {
+    path: "/api/platform-admin/workspaces/[workspaceId]",
+    methods: ["GET", "PATCH"],
+    access: "session",
+    tenantScoped: false,
+    description:
+      "Platform administration workspace detail, manual plan/limit assignment, account status change, and time-limited reasoned break-glass support grant.",
+  },
 ];
 
 export function findRoute(path: string): RouteEntry | undefined {

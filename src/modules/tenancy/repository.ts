@@ -43,6 +43,21 @@ export async function findWorkspaceProfile(scope: Scope) {
   );
 }
 
+export async function findWorkspaceSubscriptionRow(scope: Scope) {
+  return withScope(scope, (tx) =>
+    tx.workspace.findFirst({
+      where: { id: scope.workspaceId, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        planTier: true,
+        planStatus: true,
+        planLimitOverrides: true,
+      },
+    }),
+  );
+}
+
 export async function listOnboardingTasks(scope: Scope) {
   return withScope(scope, (tx) =>
     tx.onboardingTask.findMany({
