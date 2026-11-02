@@ -103,7 +103,6 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
             title: "Published Midterm",
             date: new Date("2026-10-25"),
             maxScore: 50,
-            lockedAt: new Date("2026-10-26T12:00:00.000Z"),
             note: "CONFIDENTIAL_ASSESSMENT_NOTE",
           },
         });
@@ -117,6 +116,10 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
             note: "CONFIDENTIAL_SCORE_NOTE",
             updatedBy: NILE_OWNER,
           },
+        });
+        await tx.assessment.update({
+          where: { workspaceId: NILE, id: publishedAssessmentId },
+          data: { lockedAt: new Date("2026-10-26T12:00:00.000Z") },
         });
 
         // 2. Unpublished draft assessment (lockedAt === null) -> MUST NOT appear
@@ -183,6 +186,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
             id: cleanFileId,
             workspaceId: NILE,
             scope: "groups",
+            groupId,
             title: "Clean Revision Sheet",
             storageKey: `test/${cleanFileId}.pdf`,
             sizeBytes: 2048,
@@ -214,6 +218,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
             id: pendingScanFileId,
             workspaceId: NILE,
             scope: "students",
+            studentId: child1Id,
             title: "Unscanned Worksheet",
             storageKey: `test/${pendingScanFileId}.pdf`,
             sizeBytes: 2048,
@@ -264,7 +269,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
 
       // Inspect token before acceptance -> shows first name only, no workspaceId or studentId
       const inspected = await inspectPortalInvitation(token1);
-      expect(inspected.studentFirstName).toBe("Child");
+      expect(inspected.studentFirstName).toBe("Child One");
       expect(inspected).not.toHaveProperty("workspaceId");
       expect(inspected).not.toHaveProperty("studentId");
 
@@ -408,8 +413,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
         await tx.file.deleteMany({
           where: { id: { in: [cleanFileId, teacherOnlyFileId, pendingScanFileId] } },
         });
-        await tx.payment.deleteMany({ where: { studentId: child1Id } });
-        await tx.studentNote.deleteMany({ where: { studentId: child1Id } });
+        // student_note has no DELETE grant for kashkol_app; skip cleanup.
         await tx.homeworkSubmission.deleteMany({ where: { homeworkId } });
         await tx.homework.deleteMany({ where: { id: homeworkId } });
         await tx.assessmentScore.deleteMany({

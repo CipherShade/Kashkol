@@ -12,6 +12,7 @@ import {
   getGuardianForStudent,
   getNotificationLocale,
   getNotificationTimezone,
+  listNotificationLogs,
   upsertNotificationSettingsTx,
 } from "./repository";
 import { renderTemplate, type TemplateKey } from "./templates";
@@ -157,6 +158,51 @@ export async function enqueueAttendanceNotification(
   reqCtx?: RequestContext,
 ) {
   authorize(scope, "messages", "write");
+  return enqueueAttendanceNotificationInternal(scope, input, reqCtx);
+}
+
+/**
+ * System-context variant for the portal self check-in (`F-P2-05`).
+ *
+ * The caller has already been authorised by the portal grant that the route
+ * verified; the notification itself is a system event, so no staff scope is
+ * fabricated for it. Never call this from a surface a staff permission check
+ * should cover — use {@link enqueueAttendanceNotification} instead.
+ */
+export async function enqueueAttendanceNotificationForSelfCheckIn(
+  actor: SelfCheckInNotificationActor,
+  input: EnqueueAttendanceNotificationInput,
+  reqCtx?: RequestContext,
+) {
+  return enqueueAttendanceNotificationInternal(
+    {
+      workspaceId: actor.workspaceId,
+      actorUserId: actor.userId,
+      actorDisplayName: actor.displayName,
+      role: "assistant",
+      permissions: new Set(),
+    },
+    input,
+    reqCtx,
+    { skipAuthorization: true },
+  );
+}
+
+export type SelfCheckInNotificationActor = {
+  workspaceId: string;
+  userId: string;
+  displayName: string;
+};
+
+async function enqueueAttendanceNotificationInternal(
+  scope: Scope,
+  input: EnqueueAttendanceNotificationInput,
+  reqCtx?: RequestContext,
+  options?: { skipAuthorization?: boolean },
+) {
+  if (!options?.skipAuthorization) {
+    authorize(scope, "messages", "write");
+  }
   const ctx = context(reqCtx);
   const locale = input.locale || (await getNotificationLocale(scope));
 
@@ -484,3 +530,9 @@ export async function retryMessage(scope: Scope, outboxId: string, reqCtx?: Requ
 
   return result;
 }
+
+export async function listDeliveryLogs(scope: Scope, limit: number = 100) {
+  authorize(scope, "messages", "read");
+  return listNotificationLogs(scope, limit);
+}
+

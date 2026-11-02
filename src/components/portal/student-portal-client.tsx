@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
@@ -202,18 +202,29 @@ type StudentTabKey =
   | "resources"
   | "notifications";
 
+export type StudentCheckInStatus =
+  | { state: "success"; sessionId: string }
+  | { state: "already" }
+  | { state: "invalid" }
+  | { state: "failed" };
+
 export function StudentPortalClient({
   userEmail,
   userName,
   initialDetail,
+  initialCheckin = null,
 }: {
   userEmail: string;
   userName: string;
   initialDetail: StudentPortalDetail;
+  /** The scanned QR token from `?checkin=`, consumed exactly once on mount. */
+  initialCheckin: string | null;
 }) {
   const t = useTranslations("Portal.student");
   const [detail, setDetail] = useState<StudentPortalDetail>(initialDetail);
   const [activeTab, setActiveTab] = useState<StudentTabKey>("sessions");
+  const [checkinStatus, setCheckinStatus] = useState<StudentCheckInStatus | null>(null);
+  const checkinStarted = useRef(false);
   const [submittingHomeworkId, setSubmittingHomeworkId] = useState<
     string | null
   >(null);
@@ -233,6 +244,49 @@ export function StudentPortalClient({
   const [examError, setExamError] = useState(false);
 
   const perms = detail.permissions;
+
+  // The QR check-in (F-P2-05, OQ-05 default (a)) fires exactly once per page
+  // load: the token is single-use on the server, and a re-submit would only
+  // produce a redundant audit entry. The server is the authority on every
+  // outcome; the client only reports what the server said.
+  useEffect(() => {
+    if (!initialCheckin || checkinStarted.current) return;
+    checkinStarted.current = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/portal/attendance/checkin", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            token: initialCheckin,
+            studentId: detail.student.id,
+          }),
+        });
+        if (res.ok) {
+          const payload = (await res.json()) as { sessionId?: string };
+          setCheckinStatus({
+            state: "success",
+            sessionId: payload.sessionId ?? "",
+          });
+          if (perms.showAttendance) setActiveTab("attendance");
+          return;
+        }
+        const payload = (await res.json().catch(() => null)) as
+          | { error?: { code?: string } }
+          | null;
+        const code = payload?.error?.code;
+        if (res.status === 409 || code === "CONFLICT") {
+          setCheckinStatus({ state: "already" });
+        } else if (res.status === 403 || code === "FORBIDDEN") {
+          setCheckinStatus({ state: "invalid" });
+        } else {
+          setCheckinStatus({ state: "failed" });
+        }
+      } catch {
+        setCheckinStatus({ state: "failed" });
+      }
+    })();
+  }, [initialCheckin, detail.student.id, perms.showAttendance]);
 
   const loadStudentExams = async () => {
     setExamBusy(true);
@@ -492,6 +546,37 @@ export function StudentPortalClient({
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <PWAInstallBanner />
+
+        {checkinStatus ? (
+          <div
+            role="status"
+            className="mb-6 rounded-2xl border p-5 text-sm font-semibold"
+            style={
+              checkinStatus.state === "success"
+                ? {
+                    borderColor: "var(--success)",
+                    background: "var(--success-tint)",
+                    color: "var(--success-ink)",
+                  }
+                : checkinStatus.state === "failed"
+                  ? {
+                      borderColor: "var(--danger)",
+                      background: "var(--danger-tint)",
+                      color: "var(--danger-ink)",
+                    }
+                  : {
+                      borderColor: "var(--warn)",
+                      background: "var(--warn-tint)",
+                      color: "var(--warn-ink)",
+                    }
+            }
+          >
+            {checkinStatus.state === "success" ? t("checkinSuccess") : null}
+            {checkinStatus.state === "already" ? t("checkinAlready") : null}
+            {checkinStatus.state === "invalid" ? t("checkinInvalid") : null}
+            {checkinStatus.state === "failed" ? t("checkinFailed") : null}
+          </div>
+        ) : null}
 
         {/* Student Profile Banner */}
         <section className="mb-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-5 shadow-xs">

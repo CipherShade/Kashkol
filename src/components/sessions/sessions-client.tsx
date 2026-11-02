@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useFormState } from "react-dom";
+import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -13,7 +14,6 @@ import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import {
   cancelSessionAction,
-  completeSessionAction,
   createOneOffSessionAction,
   rescheduleSessionAction,
   startSessionAction,
@@ -80,7 +80,6 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
   const [cancelState, cancelAction] = useFormState(cancelSessionAction, initialFormState);
   const [updateState, updateAction] = useFormState(updateSessionAction, initialFormState);
   const [startState, startSessionFormAction] = useFormState(startSessionAction, initialFormState);
-  const [completeState, completeSessionFormAction] = useFormState(completeSessionAction, initialFormState);
 
   useEffect(() => {
     if (createState.status === "success") {
@@ -98,10 +97,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
     if (startState.status === "success") {
       push({ title: startState.noticeKey ? tRoot(startState.noticeKey) : t("sessionStarted") });
     }
-    if (completeState.status === "success") {
-      push({ title: completeState.noticeKey ? tRoot(completeState.noticeKey) : t("sessionCompleted") });
-    }
-  }, [createState, rescheduleState, cancelState, updateState, startState, completeState, t, tRoot, push]);
+  }, [createState, rescheduleState, cancelState, updateState, startState, t, tRoot, push]);
 
   const weekStart = useMemo(() => startOfWeekSaturday(currentDate), [currentDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
@@ -310,12 +306,19 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
                 </form>
               )}
               {(selectedSession.status === "scheduled" || selectedSession.status === "started") && (
-                <form action={completeSessionFormAction}>
-                  <input type="hidden" name="id" value={selectedSession.id} />
-                  <Button type="submit" size="sm" variant="outline">
-                    {t("completeSession")}
+                <Link href={`/app/sessions/${selectedSession.id}`}>
+                  <Button type="button" size="sm" variant="outline">
+                    <Icon name="check" size={16} />
+                    {t("openAttendance")}
                   </Button>
-                </form>
+                </Link>
+              )}
+              {selectedSession.status === "completed" && (
+                <Link href={`/app/sessions/${selectedSession.id}`}>
+                  <Button type="button" size="sm" variant="outline">
+                    {t("viewAttendance")}
+                  </Button>
+                </Link>
               )}
             </div>
 

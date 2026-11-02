@@ -1,6 +1,7 @@
 import { MessageAdapter } from "./interface";
 import { fakeAdapter } from "./fake";
 import { whatsappCloudAdapter } from "./whatsapp-cloud";
+import { smtpAdapter } from "./smtp";
 
 let currentAdapter: MessageAdapter = fakeAdapter;
 
@@ -12,6 +13,9 @@ export function getMessageAdapter(): MessageAdapter {
     const provider = process.env.MESSAGING_PROVIDER;
     if (provider === "whatsapp_cloud") {
       return whatsappCloudAdapter;
+    }
+    if (provider === "smtp" || process.env.EMAIL_TRANSPORT === "smtp") {
+      return smtpAdapter;
     }
   }
   return currentAdapter;

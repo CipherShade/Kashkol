@@ -85,7 +85,7 @@ export async function findStudentForPortalAccess(scope: Scope, studentId: string
 }
 
 export async function findPortalInvitationByTokenHash(tokenHash: string) {
-  return withPortalInvitationScope(tokenHash, (tx) =>
+  const invitation = await withPortalInvitationScope(tokenHash, (tx) =>
     tx.portalInvitation.findUnique({
       where: { tokenHash },
       select: {
@@ -104,29 +104,43 @@ export async function findPortalInvitationByTokenHash(tokenHash: string) {
         acceptedByUserId: true,
         revokedAt: true,
         createdAt: true,
-        workspace: {
-          select: {
-            id: true,
-            name: true,
-            teachingName: true,
-            primarySubject: true,
-            status: true,
-            deletedAt: true,
-          },
-        },
-        student: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            grade: true,
-            archivedAt: true,
-            mergedIntoId: true,
-          },
-        },
       },
     }),
   );
+
+  if (!invitation) {
+    return invitation;
+  }
+
+  const workspace = await withScope({ workspaceId: invitation.workspaceId }, (tx) =>
+    tx.workspace.findFirst({
+      where: { id: invitation.workspaceId },
+      select: {
+        id: true,
+        name: true,
+        teachingName: true,
+        primarySubject: true,
+        status: true,
+        deletedAt: true,
+      },
+    }),
+  );
+
+  const student = await withScope({ workspaceId: invitation.workspaceId }, (tx) =>
+    tx.student.findFirst({
+      where: { id: invitation.studentId, archivedAt: null, mergedIntoId: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        grade: true,
+        archivedAt: true,
+        mergedIntoId: true,
+      },
+    }),
+  );
+
+  return { ...invitation, workspace, student };
 }
 
 export async function createOrRotatePortalInvitationTx(

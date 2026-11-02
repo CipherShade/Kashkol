@@ -27,10 +27,10 @@ export default async function StudentPortalPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ studentId?: string }>;
+  searchParams: Promise<{ studentId?: string; checkin?: string }>;
 }) {
   const { locale } = await params;
-  const { studentId } = await searchParams;
+  const { studentId, checkin } = await searchParams;
 
   let portal;
   try {
@@ -54,6 +54,7 @@ export default async function StudentPortalPage({
       userEmail={portal.user?.email ?? ""}
       userName={portal.user?.name ?? ""}
       initialDetail={overview}
+      initialCheckin={checkin ?? null}
     />
   );
 }

@@ -53,6 +53,7 @@ describe("application navigation", () => {
       "/app",
       "/app/students",
       "/app/groups",
+      "/app/sessions",
       "/app/homework",
       "/app/assessments",
       "/app/reports",
@@ -115,7 +116,8 @@ describe("application navigation", () => {
   });
 
   it("resolves every planned slug and rejects a built or unknown slug", () => {
-    expect(findPlannedModule("sessions")?.href).toBe("/app/sessions");
+    expect(findPlannedModule("sessions")).toBeUndefined();
+    expect(findPlannedModule("parent-updates")?.href).toBe("/app/parent-updates");
     expect(findPlannedModule("students")).toBeUndefined();
     expect(findPlannedModule("groups")).toBeUndefined();
     expect(findPlannedModule("settings")).toBeUndefined();
@@ -155,6 +157,10 @@ describe("application navigation", () => {
       }
       if (href === "/app/homework" || href === "/app/assessments" || href === "/app/follow-ups") {
         expect(fs.existsSync(path.join(appRoot, href.replace("/app/", ""), "page.tsx"))).toBe(true);
+        continue;
+      }
+      if (href === "/app/sessions") {
+        expect(fs.existsSync(path.join(appRoot, "sessions", "page.tsx"))).toBe(true);
         continue;
       }
       expect(findPlannedModule(href.replace("/app/", ""))).toBeDefined();

@@ -60,6 +60,16 @@ describe("production app-path guard", () => {
       "/app/account",
       "/app/students",
       "/app/groups",
+      "/app/sessions",
+      "/app/homework",
+      "/app/assessments",
+      "/app/payments",
+      "/app/files",
+      "/app/reports",
+      "/app/follow-ups",
+      "/app/audit",
+      "/app/team",
+      "/app/parent-updates",
     ]);
   });
 });

@@ -41,6 +41,7 @@ Every ADR uses the same sections:
 | [0016](0016-spreadsheet-library-exceljs.md) | Spreadsheet processing with exceljs | Accepted | M1–M3 |
 | [0017](0017-clamav-and-learning-materials.md) | ClamAV scanning and the learning-materials library | Accepted | M1 |
 | [0018](0018-monthly-fees-and-cancelled-sessions.md) | Period-based fees and session cancellation | Accepted | M2 |
+| [0020](0020-qr-rendering-library.md) | QR rendering uses `qrcode-generator`, pinned | Accepted | M2 |
 
 ## Conventions
 
@@ -81,3 +82,4 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0016 | `F-P1-03`, `F-P2-10`, `NF-13` |
 | 0017 | `F-P1-11`, `F-P0-01`, `A-09` |
 | 0018 | `F-P2-04`, `R-02`, `NF-1` |
+| 0020 | `F-P2-05`, `OQ-05` |

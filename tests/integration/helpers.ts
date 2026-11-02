@@ -100,7 +100,9 @@ export async function createStudent(
 
 export async function deleteStudent(workspaceId: string, studentId: string): Promise<void> {
   await withScope({ workspaceId }, async (tx) => {
-    await tx.payment.deleteMany({ where: { workspaceId, studentId } });
+    // Payments are append-only (prevent_financial_record_rewrite trigger) and
+    // the application role has no DELETE privilege on payment; do not attempt
+    // to delete them in fixtures.
     // The revision chain is append-only for the application role, so test
     // fixtures that create a revision intentionally leave it behind.
     await tx.attendanceMark.deleteMany({
@@ -110,7 +112,14 @@ export async function deleteStudent(workspaceId: string, studentId: string): Pro
     await tx.file.deleteMany({ where: { workspaceId, studentId } });
     await tx.enrollment.deleteMany({ where: { workspaceId, studentId } });
     await tx.portalGrant.deleteMany({ where: { workspaceId, studentId } });
-    await tx.student.deleteMany({ where: { workspaceId, id: studentId } });
+    // The student may reference append-only payments; if the FK blocks
+    // deletion, the student stays (append-only record semantics) and
+    // cleanup continues for all other fixtures.
+    try {
+      await tx.student.deleteMany({ where: { workspaceId, id: studentId } });
+    } catch {
+      // ignore FK from append-only payment
+    }
   });
 }
 

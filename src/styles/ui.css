@@ -1309,6 +1309,109 @@
   background: var(--border);
 }
 
+/* Attendance ------------------------------------------------------------- */
+.ui-attendance-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-attendance-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-block-end: 1px solid var(--border);
+  padding-block: 0.6rem;
+}
+
+.ui-attendance-row:last-child {
+  border-block-end: none;
+}
+
+.ui-attendance-mark {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  padding-block: 0.25rem;
+  padding-inline: 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.ui-attendance-mark:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.ui-attendance-mark:disabled {
+  opacity: 0.55;
+}
+
+.ui-attendance-mark.is-active {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+  color: var(--primary-strong);
+}
+
+.ui-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ui-summary-chips > span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
+  padding-block: 0.2rem;
+  padding-inline: 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.ui-summary-chips > span[data-tone="present"] {
+  border-color: var(--success);
+  color: var(--success-ink);
+  background: var(--success-tint);
+}
+
+.ui-summary-chips > span[data-tone="late"] {
+  border-color: var(--warn);
+  color: var(--warn-ink);
+  background: var(--warn-tint);
+}
+
+.ui-summary-chips > span[data-tone="absent"] {
+  border-color: var(--danger);
+  color: var(--danger-ink);
+  background: var(--danger-tint);
+}
+
+.ui-summary-chips > span[data-tone="excused"] {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+@media (max-width: 480px) {
+  .ui-attendance-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ui-attendance-mark {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}
+
 /* Focus ------------------------------------------------------------------ */
 :where(
   a,

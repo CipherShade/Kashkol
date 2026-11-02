@@ -925,7 +925,7 @@
   },
   "Academics": {
     "homework": {
-      "title": "الواجبات",
+      "title": "العنوان",
       "subtitle": "أنشئ واجبات بإدارة المعلّم، وسجّل حالة كل طالب وملاحظات المعلّم الخاصة.",
       "needStudentPermission": "تحتاج إلى صلاحية قراءة الطلاب لعرض قوائم الواجبات.",
       "needHomeworkPermission": "تحتاج إلى صلاحية قراءة الطلاب والواجبات لعرض الواجبات.",
@@ -940,7 +940,6 @@
       "students": "الطلاب",
       "selectMultipleHelp": "اختر طالبًا واحدًا أو أكثر.",
       "titleLabel": "العنوان",
-      "title": "العنوان",
       "dueDate": "موعد التسليم",
       "instructions": "التعليمات",
       "maxScore": "الدرجة القصوى الاختيارية",
@@ -1270,7 +1269,51 @@
     "expectedCount": "المتوقع",
     "quickActions": "إجراءات سريعة",
     "startsAtTime": "وقت البداية",
-    "scope": "النطاق"
+    "scope": "النطاق",
+    "attendance": {
+      "eyebrow": "الحضور",
+      "pageTitle": "حضور الحصة",
+      "pageDescription": "سجّل حضور كل طالب، وراجع الملخص، ثم أغلق الحصة. التعديل بعد الإغلاق يتطلب سببًا.",
+      "rosterTitle": "كشف الحضور",
+      "refresh": "تحديث",
+      "marksSaved": "تم حفظ الحضور",
+      "allPresent": "الحاضرون جميعًا",
+      "closeSession": "إغلاق الحصة",
+      "sessionClosed": "أُغلقت الحصة",
+      "noStudents": "لا يوجد طلاب مسجلون",
+      "noStudentsHint": "أضِف طلابًا إلى المجموعة لتسجيل حضورهم لهذه الحصة.",
+      "sourceQr": "تسجيل عبر رمز QR",
+      "sourceManual": "سُجل بواسطتك",
+      "unrecorded": "غير مسجَّل",
+      "mark_present": "حاضر",
+      "mark_late": "متأخر",
+      "mark_absent": "غائب",
+      "mark_excused": "بعذر",
+      "closeConfirmTitle": "إغلاق هذه الحصة؟",
+      "closeConfirmBody": "الإغلاق يثبّت الكشف كما هو ويجهّز إشعارًا لأولياء الأمور؛ الطلاب غير المسجلين تبقى بدون سجل.",
+      "closeKeepOpen": "إبقاء الحصة مفتوحة",
+      "closeConfirmSubmit": "إغلاق الحصة",
+      "incompleteWarning": "{count, plural, =1 {يوجد طالب واحد بلا تسجيل حضور.} other {يوجد # طلاب بلا تسجيل حضور.}}",
+      "correctionTitle": "تصحيح سجل حضور",
+      "correctionHint": "يُحفظ السجل السابق في سجل التصحيحات. السبب إلزامي وموثّق.",
+      "correctionReasonLabel": "سبب التصحيح",
+      "cancelCorrection": "إلغاء",
+      "correctionSubmit": "حفظ التصحيح",
+      "markCorrected": "تم تصحيح الحضور",
+      "qrTitle": "تسجيل عبر رمز QR",
+      "qrSessionLabel": "صالح لهذه الحصة فقط",
+      "qrNotAvailable": "غير متاح",
+      "qrNotAvailableHint": "تسجيل QR متاح ما دامت الحصة مجدولة أو بدأت.",
+      "qrIdleHint": "اعرض الرمز على شاشتك؛ يمسح الطلاب الرمز بهواتفهم لتسجيل حضرهم بأنفسهم.",
+      "issueQr": "عرض رمز QR",
+      "qrIssuing": "جارٍ التحضير…",
+      "rotateQr": "تجديد الرمز",
+      "qrPayloadHint": "أحدث رمز يستبدل الرموز السابقة فورًا. لا يعرض الرمز إلا المفتاح دون أي بيانات للطلاب.",
+      "qrPresentOnlyHint": "مسح الرمز يثبت الحضور فقط؛ الغياب والتأخير تسجيل يدوي.",
+      "qrExpiresIn": "تنتهي صلاحية الرمز بعد {time}",
+      "qrRotationHint": "جدّد الرمز عند بدء كل حصة؛ عمليات المسح السابقة لا تتأثر.",
+      "qrExpired": "انتهت صلاحية الرمز — جدّده"
+    }
   },
   "Portal": {
     "pwa": {
@@ -1481,7 +1524,12 @@
         "falseLabel": "خطأ",
         "answerPlaceholder": "اكتب إجابتك…",
         "error": "تعذّر إكمال إجراء الاختبار. تحقّق من نافذة الإتاحة والمحاولات المتبقية."
-      }
+      },
+      "checkinTitle": "تسجيل الحضور للحصة",
+      "checkinSuccess": "سُجل حضرك لهذه الحصة.",
+      "checkinAlready": "سُجل حضورك مسبقًا، أو أصبحت الحصة مقفلة.",
+      "checkinInvalid": "الرمز غير صالح أو منتهي الصلاحية. اطلب من معلمك عرض الرمز الحالي.",
+      "checkinFailed": "فشل تسجيل الحضور. حاول مرة أخرى."
     },
     "staff": {
       "issueTitle": "إصدار رابط دعوة موثّق للبوابة",

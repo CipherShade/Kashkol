@@ -206,6 +206,13 @@ export const ROUTES: RouteEntry[] = [
     description: "Read a report-export job and issue a short-lived download link when ready.",
   },
   {
+    path: "/api/reports/exports/[exportId]/download",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Redirect to the signed download URL for a completed export.",
+  },
+  {
     path: "/api/worker/reports",
     methods: ["POST"],
     access: "public",
@@ -410,6 +417,13 @@ export const ROUTES: RouteEntry[] = [
     description: "Manage authorized guardians for students.",
   },
   {
+    path: "/api/messaging/logs",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Inspect message delivery and audit logs for workspace.",
+  },
+  {
     path: "/api/attendance/notifications/enqueue",
     methods: ["POST"],
     access: "workspace",
@@ -507,6 +521,14 @@ export const ROUTES: RouteEntry[] = [
     tenantScoped: true,
     description:
       "Mark the authenticated student's own active homework assignment as submitted.",
+  },
+  {
+    path: "/api/portal/attendance/checkin",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Self check-in against a short-lived session QR token (`F-P2-05`; OQ-05 default (a)). Authorized by the student-kind portal grant; marks present only and audits rejected scans.",
   },
   {
     path: "/api/portal/notifications",

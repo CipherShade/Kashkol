@@ -18,8 +18,13 @@ const serverEnvSchema = z
      * transport this foundation implements writes verification and reset links
      * to the server console, and it refuses to run outside `local`.
      */
-    EMAIL_TRANSPORT: z.enum(["console", "none"]).default("none"),
+    EMAIL_TRANSPORT: z.enum(["console", "smtp", "none"]).default("none"),
     EMAIL_FROM: z.string().min(3).default("Kashkol <no-reply@kashkol.local>"),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().default(587),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_SECURE: z.enum(["true","false"]).optional().default("false").transform(v => v === "true"),
     AUTH_RATE_LIMIT_ENABLED: z
       .enum(["true", "false"])
       .optional()
@@ -41,7 +46,7 @@ const serverEnvSchema = z
     WEB_PUSH_VAPID_SUBJECT: z.string().min(5).optional(),
     WEB_PUSH_VAPID_PUBLIC_KEY: z.string().min(16).optional(),
     WEB_PUSH_VAPID_PRIVATE_KEY: z.string().min(16).optional(),
-    VIDEO_PROVIDER_DRIVER: z.enum(["none", "cloudflare_stream", "fake"]).default("none"),
+    VIDEO_PROVIDER_DRIVER: z.enum(["none", "cloudflare_stream", "fake"]).default("fake"),
     VIDEO_PROVIDER_ACCOUNT_ID: z.string().min(4).optional(),
     VIDEO_PROVIDER_API_TOKEN: z.string().min(16).optional(),
     VIDEO_PROVIDER_SIGNING_SECRET: z.string().min(16).optional(),
@@ -79,6 +84,11 @@ const serverEnvSchema = z
         path: ["EMAIL_TRANSPORT"],
         message: "production requires a configured email transport",
       });
+    }
+    if (env.EMAIL_TRANSPORT === "smtp" && env.APP_ENV !== "local") {
+      if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
+        ctx.addIssue({ code: "custom", path: ["SMTP_HOST"], message: "SMTP_HOST / SMTP_USER / SMTP_PASS required for SMTP transport" });
+      }
     }
     if (env.APP_ENV === "production" && env.BETTER_AUTH_SECRET.startsWith("dev-only")) {
       ctx.addIssue({
@@ -181,8 +191,13 @@ export type ServerEnv = {
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
   REQUIRE_MIGRATIONS: boolean;
-  EMAIL_TRANSPORT: "console" | "none";
+  EMAIL_TRANSPORT: "console" | "smtp" | "none";
   EMAIL_FROM: string;
+  SMTP_HOST?: string;
+  SMTP_PORT: number;
+  SMTP_USER?: string;
+  SMTP_PASS?: string;
+  SMTP_SECURE: boolean;
   AUTH_RATE_LIMIT_ENABLED?: boolean;
   FILE_STORAGE_DRIVER: "local" | "s3";
   FILE_LOCAL_STORAGE_PATH: string;
@@ -231,6 +246,8 @@ export function getServerEnv(): ServerEnv {
     BETTER_AUTH_SECRET: "dev-only-secret-for-local-environment-at-least-32-chars",
     BETTER_AUTH_URL: "http://localhost:3000",
     EMAIL_TRANSPORT: "console",
+    VIDEO_PROVIDER_DRIVER: "fake",
+    VIDEO_PROVIDER_SIGNING_SECRET: "dev-only-video-secret",
   };
   const merged: Record<string, string | undefined> = { ...localDefaults };
   for (const [key, value] of Object.entries(process.env)) {
@@ -254,7 +271,7 @@ export function isProduction(env: Pick<ServerEnv, "APP_ENV"> = getServerEnv()): 
 export function isEmailConfigured(
   env: Pick<ServerEnv, "EMAIL_TRANSPORT"> = getServerEnv(),
 ): boolean {
-  return env.EMAIL_TRANSPORT === "console";
+  return env.EMAIL_TRANSPORT === "console" || env.EMAIL_TRANSPORT === "smtp";
 }
 
 /** True when VAPID keys and subject are configured for Web Push notifications. */

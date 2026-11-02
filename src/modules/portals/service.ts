@@ -409,10 +409,12 @@ export async function inspectPortalInvitation(
 
   if (
     !invitation ||
-    invitation.workspace.status !== "active" ||
-    invitation.workspace.deletedAt !== null ||
-    invitation.student.archivedAt !== null ||
-    invitation.student.mergedIntoId !== null
+    !invitation.workspace ||
+    invitation.workspace!.status !== "active" ||
+    invitation.workspace!.deletedAt !== null ||
+    !invitation.student ||
+    invitation.student!.archivedAt !== null ||
+    invitation.student!.mergedIntoId !== null
   ) {
     throw new AppError("NOT_FOUND");
   }
@@ -428,10 +430,10 @@ export async function inspectPortalInvitation(
     email: invitation.email,
     status,
     expiresAt: invitation.expiresAt.toISOString(),
-    studentFirstName: invitation.student.firstName,
-    grade: invitation.student.grade,
-    teachingName: invitation.workspace.teachingName,
-    primarySubject: invitation.workspace.primarySubject,
+    studentFirstName: invitation.student!.firstName,
+    grade: invitation.student!.grade,
+    teachingName: invitation.workspace!.teachingName,
+    primarySubject: invitation.workspace!.primarySubject,
     permissions: resolvePortalPermissions(invitation.kind, invitation.permissions),
   };
 }
@@ -468,10 +470,12 @@ export async function acceptPortalInvitation(
 
   if (
     !invitation ||
-    invitation.workspace.status !== "active" ||
-    invitation.workspace.deletedAt !== null ||
-    invitation.student.archivedAt !== null ||
-    invitation.student.mergedIntoId !== null
+    !invitation.workspace ||
+    invitation.workspace!.status !== "active" ||
+    invitation.workspace!.deletedAt !== null ||
+    !invitation.student ||
+    invitation.student!.archivedAt !== null ||
+    invitation.student!.mergedIntoId !== null
   ) {
     throw new AppError("NOT_FOUND");
   }

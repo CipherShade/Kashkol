@@ -250,3 +250,53 @@ export async function upsertNotificationSettingsTx(
     select: NOTIFICATION_SETTINGS_SELECT,
   });
 }
+
+export type NotificationLogItem = {
+  id: string;
+  workspaceId: string;
+  outboxId: string | null;
+  action: string;
+  status: string | null;
+  error: string | null;
+  createdAt: Date;
+  outbox?: {
+    id: string;
+    studentId: string;
+    guardianId: string | null;
+    type: string;
+    status: string;
+    channel: string;
+  } | null;
+};
+
+export async function listNotificationLogs(
+  scope: Scope,
+  limit: number = 100,
+): Promise<NotificationLogItem[]> {
+  return withScope(scope, async (tx) => {
+    return tx.notificationLog.findMany({
+      where: { workspaceId: scope.workspaceId },
+      orderBy: { createdAt: "desc" },
+      take: Math.min(Math.max(1, limit), 500),
+      select: {
+        id: true,
+        workspaceId: true,
+        outboxId: true,
+        action: true,
+        status: true,
+        error: true,
+        createdAt: true,
+        outbox: {
+          select: {
+            id: true,
+            studentId: true,
+            guardianId: true,
+            type: true,
+            status: true,
+            channel: true,
+          },
+        },
+      },
+    });
+  });
+}

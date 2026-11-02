@@ -12,9 +12,23 @@ export const BUILT_APP_PATHS = [
   "/app/account",
   "/app/students",
   "/app/groups",
+  "/app/sessions",
+  "/app/homework",
+  "/app/assessments",
+  "/app/payments",
+  "/app/files",
+  "/app/reports",
+  "/app/follow-ups",
+  "/app/audit",
+  "/app/team",
+  "/app/parent-updates",
 ] as const;
 
-const BUILT_DETAIL_ROOTS = ["/app/students", "/app/groups"] as const;
+const BUILT_DETAIL_ROOTS = [
+  "/app/students",
+  "/app/groups",
+  "/app/sessions",
+] as const;
 
 export function stripLocale(pathname: string): string {
   const stripped = pathname.replace(/^\/(ar|en)(?=\/|$)/, "");

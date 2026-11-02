@@ -38,7 +38,6 @@ describe("security redaction", () => {
   });
 
   it("drops fields not on an allowlist rather than truncating", () => {
-    const allowlist = ["sessionId", "markedCount", "durationMs", "actorId", "workspaceId"];
     const payload = {
       event: "attendance.saved",
       sessionId: "test",

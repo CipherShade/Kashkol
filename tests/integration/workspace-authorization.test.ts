@@ -264,6 +264,7 @@ describe("cross-tenant isolation on the core domain tables", () => {
             assessmentId,
             studentId,
             score: 85,
+            status: "graded",
             updatedBy: NILE_OWNER,
           },
         });
@@ -319,7 +320,7 @@ describe("cross-tenant isolation on the core domain tables", () => {
     } finally {
       await withScope({ workspaceId: NILE }, async (tx) => {
         await tx.file.deleteMany({ where: { workspaceId: NILE, studentId } });
-        await tx.payment.deleteMany({ where: { workspaceId: NILE, studentId } });
+        // Payments are append-only; do not attempt to delete.
         await tx.assessmentScore.deleteMany({ where: { workspaceId: NILE, studentId } });
         await tx.attendanceMark.deleteMany({ where: { workspaceId: NILE, studentId } });
         await tx.assessment.deleteMany({ where: { workspaceId: NILE, id: assessmentId } });

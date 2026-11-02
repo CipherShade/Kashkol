@@ -925,7 +925,7 @@
   },
   "Academics": {
     "homework": {
-      "title": "Homework",
+      "title": "Title",
       "subtitle": "Assign teacher-managed work, track each student's status, and record private feedback.",
       "needStudentPermission": "You need student read access to view homework rosters.",
       "needHomeworkPermission": "You need student and homework read access to view homework.",
@@ -940,7 +940,6 @@
       "students": "Students",
       "selectMultipleHelp": "Select one or more students.",
       "titleLabel": "Title",
-      "title": "Title",
       "dueDate": "Due date",
       "instructions": "Instructions",
       "maxScore": "Optional maximum grade",
@@ -1270,7 +1269,51 @@
     "expectedCount": "Expected",
     "quickActions": "Quick actions",
     "startsAtTime": "Start time",
-    "scope": "Scope"
+    "scope": "Scope",
+    "attendance": {
+      "eyebrow": "Attendance",
+      "pageTitle": "Session attendance",
+      "pageDescription": "Mark each student, review the summary, and close the session. Corrections after closing require a reason.",
+      "rosterTitle": "Attendance roster",
+      "refresh": "Refresh",
+      "marksSaved": "Attendance saved",
+      "allPresent": "All present",
+      "closeSession": "Close session",
+      "sessionClosed": "Session closed",
+      "noStudents": "No enrolled students",
+      "noStudentsHint": "Enroll students in the group to take attendance for this session.",
+      "sourceQr": "QR check-in",
+      "sourceManual": "Marked by you",
+      "unrecorded": "Unrecorded",
+      "mark_present": "Present",
+      "mark_late": "Late",
+      "mark_absent": "Absent",
+      "mark_excused": "Excused",
+      "closeConfirmTitle": "Close this session?",
+      "closeConfirmBody": "Closing records the roster as it stands and prepares a guardian update. Unrecorded students stay unrecorded.",
+      "closeKeepOpen": "Keep open",
+      "closeConfirmSubmit": "Close session",
+      "incompleteWarning": "{count, plural, =1 {1 student has no mark yet.} other {# students have no marks yet.}}",
+      "correctionTitle": "Correct an attendance mark",
+      "correctionHint": "The previous mark is kept in the correction history. The reason is required and audited.",
+      "correctionReasonLabel": "Reason for the correction",
+      "cancelCorrection": "Cancel",
+      "correctionSubmit": "Save correction",
+      "markCorrected": "Attendance corrected",
+      "qrTitle": "QR check-in",
+      "qrSessionLabel": "Valid for this session only",
+      "qrNotAvailable": "Not available",
+      "qrNotAvailableHint": "QR check-in is available while the session is scheduled or started.",
+      "qrIdleHint": "Display this code on your screen; enrolled students scan it with their own phone to mark themselves present.",
+      "issueQr": "Show QR code",
+      "qrIssuing": "Preparing…",
+      "rotateQr": "Rotate code",
+      "qrPayloadHint": "The newest code replaces earlier ones immediately. The payload carries the token only — no student data.",
+      "qrPresentOnlyHint": "A scan can only mark a student present. Absences and excusals stay manual.",
+      "qrExpiresIn": "Expires in {time}",
+      "qrRotationHint": "Rotate the code at each session start; earlier scans are not affected.",
+      "qrExpired": "Expired — rotate the code"
+    }
   },
   "Portal": {
     "pwa": {
@@ -1481,7 +1524,12 @@
         "falseLabel": "False",
         "answerPlaceholder": "Type your answer…",
         "error": "Could not complete exam action. Check the availability window and remaining attempts."
-      }
+      },
+      "checkinTitle": "Session check-in",
+      "checkinSuccess": "You are marked present for this session.",
+      "checkinAlready": "You are already recorded for this session, or the session is no longer open.",
+      "checkinInvalid": "This code is not valid or has expired. Ask your teacher to show the current code.",
+      "checkinFailed": "Check-in failed. Try again."
     },
     "staff": {
       "issueTitle": "Issue Verified Portal Invitation Link",

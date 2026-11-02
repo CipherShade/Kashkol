@@ -83,9 +83,19 @@ export async function getAttendanceMark(
   });
 }
 
+/**
+ * The minimal actor identity the attendance write path needs. Staff scopes
+ * satisfy it structurally; the portal self check-in supplies the verified
+ * portal user, never a fabricated staff scope.
+ */
+export type AttendanceActor = {
+  workspaceId: string;
+  actorUserId: string;
+};
+
 export async function upsertAttendanceMarkTx(
   tx: Prisma.TransactionClient,
-  scope: Scope,
+  scope: AttendanceActor,
   data: {
     sessionId: string;
     studentId: string;
@@ -162,7 +172,7 @@ export async function upsertAttendanceMarkTx(
 
 export async function correctAttendanceMarkTx(
   tx: Prisma.TransactionClient,
-  scope: Scope,
+  scope: AttendanceActor,
   data: {
     sessionId: string;
     studentId: string;
