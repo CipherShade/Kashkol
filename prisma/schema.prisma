@@ -75,6 +75,7 @@ enum PermissionResource {
   settings
   team
   audit
+  forms
 
   @@map("permission_resource")
 }
@@ -361,6 +362,57 @@ enum WorkspacePlanStatus {
   @@map("workspace_plan_status")
 }
 
+enum FormStatus {
+  draft
+  published
+  archived
+
+  @@map("form_status")
+}
+
+enum FormSubmissionMode {
+  identified
+  anonymous
+
+  @@map("form_submission_mode")
+}
+
+enum FormQuestionType {
+  short_answer
+  long_answer
+  multiple_choice
+  checkboxes
+  dropdown
+  number
+  date
+  time
+  file_upload
+  rating
+  linear_scale
+
+  @@map("form_question_type")
+}
+
+enum FormLogicOperator {
+  equals
+  not_equals
+  contains
+  is_answered
+  is_not_answered
+  greater_than
+  less_than
+
+  @@map("form_logic_operator")
+}
+
+enum FormLogicAction {
+  show
+  hide
+  require
+
+  @@map("form_logic_action")
+}
+
 // ---------------------------------------------------------------------------
 // Identity — Better Auth owns `user`, `session`, `account`, `verification`.
 // Kashkol never adds columns to those tables (DATA_MODEL.md §5.1).
@@ -565,6 +617,14 @@ model Workspace {
   onlineExamAttempts  OnlineExamAttempt[]
   onlineExamResponses OnlineExamResponse[]
   breakGlassGrants    BreakGlassGrant[]
+  forms               Form[]
+  formSections        FormSection[]
+  formQuestions       FormQuestion[]
+  formQuestionOptions FormQuestionOption[]
+  formLogicRules      FormQuestionLogic[]
+  formSubmissions     FormSubmission[]
+  formAnswers         FormAnswer[]
+  formAnswerFiles     FormAnswerFile[]
 
   @@map("workspace")
 }
@@ -741,6 +801,7 @@ model Student {
   videoAccesses       VideoStudentAccess[]
   onlineExamAssignments OnlineExamStudentAssignment[]
   onlineExamAttempts  OnlineExamAttempt[]
+  formSubmissions     FormSubmission[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1422,6 +1483,7 @@ model File {
   groupAccesses   FileGroupAccess[]
   studentAccesses FileStudentAccess[]
   homeworkResources HomeworkResource[]
+  formAnswerFiles FormAnswerFile[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1845,5 +1907,202 @@ model BreakGlassGrant {
   @@index([workspaceId, expiresAt, revokedAt])
   @@index([adminUserId, expiresAt])
   @@map("break_glass_grant")
+}
+
+// ---------------------------------------------------------------------------
+// Forms & surveys (`F-P3-09`).
+//
+// A form is a tenant-owned definition. Sections group questions and carry a
+// page-break marker; questions are ordered globally within the form so a
+// renderer can emit a stable sequence. Conditional rules reference questions
+// and sections by id, so they survive reordering. Submissions link to the
+// existing `student`/`user` records where identity is known and leave those
+// columns null for anonymous responses; no parallel student or user model is
+// introduced.
+// ---------------------------------------------------------------------------
+
+model Form {
+  id                  String             @id @default(uuid(7)) @db.Uuid
+  workspaceId         String             @map("workspace_id") @db.Uuid
+  title               String
+  description         String?
+  status              FormStatus         @default(draft)
+  submissionMode      FormSubmissionMode @default(identified) @map("submission_mode")
+  isPublic            Boolean            @default(false) @map("is_public")
+  publicSlug          String?            @unique @map("public_slug")
+  acceptingResponses  Boolean            @default(true) @map("accepting_responses")
+  confirmationMessage String?            @map("confirmation_message")
+  settingsJson        Json               @default("{}") @map("settings_json")
+  createdByUserId     String             @map("created_by_user_id")
+  publishedAt         DateTime?          @map("published_at") @db.Timestamptz(6)
+  archivedAt          DateTime?          @map("archived_at") @db.Timestamptz(6)
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  sections    FormSection[]
+  questions   FormQuestion[]
+  logicRules  FormQuestionLogic[]
+  submissions FormSubmission[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@map("form")
+}
+
+model FormSection {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  workspaceId     String  @map("workspace_id") @db.Uuid
+  formId          String  @map("form_id") @db.Uuid
+  title           String
+  description     String?
+  orderIndex      Int     @map("order_index")
+  pageBreakBefore Boolean @default(false) @map("page_break_before")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  form            Form                 @relation(fields: [workspaceId, formId], references: [workspaceId, id], onDelete: Restrict)
+  questions       FormQuestion[]
+  targetLogicRules FormQuestionLogic[] @relation("FormLogicTargetSection")
+
+  @@unique([workspaceId, id])
+  @@unique([formId, orderIndex])
+  @@index([workspaceId])
+  @@map("form_section")
+}
+
+model FormQuestion {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  workspaceId   String           @map("workspace_id") @db.Uuid
+  formId        String           @map("form_id") @db.Uuid
+  sectionId     String?          @map("section_id") @db.Uuid
+  orderIndex    Int              @map("order_index")
+  questionType  FormQuestionType @map("question_type")
+  prompt        String
+  description   String?
+  isRequired    Boolean          @default(false) @map("is_required")
+  configJson    Json             @default("{}") @map("config_json")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace         Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  form              Form                 @relation(fields: [workspaceId, formId], references: [workspaceId, id], onDelete: Restrict)
+  section           FormSection?         @relation(fields: [workspaceId, sectionId], references: [workspaceId, id], onDelete: Restrict)
+  options           FormQuestionOption[]
+  sourceLogicRules  FormQuestionLogic[]  @relation("FormLogicSource")
+  targetLogicRules  FormQuestionLogic[]  @relation("FormLogicTarget")
+  answers           FormAnswer[]
+
+  @@unique([workspaceId, id])
+  @@unique([formId, orderIndex])
+  @@index([workspaceId])
+  @@index([formId])
+  @@index([workspaceId, sectionId])
+  @@map("form_question")
+}
+
+model FormQuestionOption {
+  id          String @id @default(uuid(7)) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  questionId  String @map("question_id") @db.Uuid
+  label       String
+  orderIndex  Int    @map("order_index")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  question  FormQuestion @relation(fields: [workspaceId, questionId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([questionId, orderIndex])
+  @@index([workspaceId])
+  @@map("form_question_option")
+}
+
+model FormQuestionLogic {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  workspaceId       String             @map("workspace_id") @db.Uuid
+  formId            String             @map("form_id") @db.Uuid
+  sourceQuestionId  String             @map("source_question_id") @db.Uuid
+  operator          FormLogicOperator
+  comparisonJson    Json?              @map("comparison_json")
+  action            FormLogicAction
+  targetQuestionId  String?            @map("target_question_id") @db.Uuid
+  targetSectionId   String?            @map("target_section_id") @db.Uuid
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  form          Form           @relation(fields: [workspaceId, formId], references: [workspaceId, id], onDelete: Restrict)
+  sourceQuestion FormQuestion  @relation("FormLogicSource", fields: [workspaceId, sourceQuestionId], references: [workspaceId, id], onDelete: Restrict)
+  targetQuestion FormQuestion? @relation("FormLogicTarget", fields: [workspaceId, targetQuestionId], references: [workspaceId, id], onDelete: Restrict)
+  targetSection  FormSection?  @relation("FormLogicTargetSection", fields: [workspaceId, targetSectionId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([formId])
+  @@index([workspaceId, sourceQuestionId])
+  @@map("form_question_logic")
+}
+
+model FormSubmission {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  workspaceId       String             @map("workspace_id") @db.Uuid
+  formId            String             @map("form_id") @db.Uuid
+  submissionMode    FormSubmissionMode @map("submission_mode")
+  studentId         String?            @map("student_id") @db.Uuid
+  submittedByUserId String?            @map("submitted_by_user_id")
+  submittedAt       DateTime           @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  archivedAt        DateTime?          @map("archived_at") @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  form      Form        @relation(fields: [workspaceId, formId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student?    @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  answers   FormAnswer[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([workspaceId, formId, submittedAt])
+  @@index([workspaceId, studentId])
+  @@map("form_submission")
+}
+
+model FormAnswer {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  submissionId String   @map("submission_id") @db.Uuid
+  questionId   String   @map("question_id") @db.Uuid
+  valueJson    Json     @map("value_json")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  submission FormSubmission @relation(fields: [workspaceId, submissionId], references: [workspaceId, id], onDelete: Restrict)
+  question   FormQuestion   @relation(fields: [workspaceId, questionId], references: [workspaceId, id], onDelete: Restrict)
+  files      FormAnswerFile[]
+
+  @@unique([workspaceId, id])
+  @@unique([submissionId, questionId])
+  @@index([workspaceId])
+  @@index([submissionId])
+  @@map("form_answer")
+}
+
+model FormAnswerFile {
+  workspaceId String @map("workspace_id") @db.Uuid
+  answerId    String @map("answer_id") @db.Uuid
+  fileId      String @map("file_id") @db.Uuid
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  answer    FormAnswer @relation(fields: [workspaceId, answerId], references: [workspaceId, id], onDelete: Restrict)
+  file      File       @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@id([workspaceId, answerId, fileId])
+  @@index([workspaceId, fileId])
+  @@map("form_answer_file")
 }
 

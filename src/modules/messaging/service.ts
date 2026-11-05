@@ -5,6 +5,7 @@ import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import {
+  createGuardian as createGuardianRecord,
   enqueueMessageTx,
   findNotificationSettings,
   findNotificationSettingsTx,
@@ -12,7 +13,9 @@ import {
   getGuardianForStudent,
   getNotificationLocale,
   getNotificationTimezone,
+  listGuardiansForStudent,
   listNotificationLogs,
+  studentExistsInScope,
   upsertNotificationSettingsTx,
 } from "./repository";
 import { renderTemplate, type TemplateKey } from "./templates";
@@ -25,6 +28,7 @@ import {
   type NotificationPreferences,
 } from "./settings";
 import type {
+  CreateGuardianInput,
   EnqueueAttendanceNotificationInput,
   NotificationSettingsInput,
 } from "./schemas";
@@ -279,6 +283,54 @@ async function enqueueAttendanceNotificationInternal(
 }
 
 /**
+ * Guardian records are student data: reading them requires `students:read` and
+ * writing them requires `students:write`. The `/api/messaging/guardians` route
+ * used to call the repository directly, which let any workspace member bypass
+ * both checks.
+ */
+export async function listGuardians(scope: Scope, studentId: string) {
+  authorize(scope, "students", "read");
+  return listGuardiansForStudent(scope, studentId);
+}
+
+export async function addGuardian(
+  scope: Scope,
+  input: CreateGuardianInput,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "students", "write");
+  const ctx = context(reqCtx);
+
+  if (!(await studentExistsInScope(scope, input.studentId))) {
+    throw new AppError("NOT_FOUND");
+  }
+
+  return withScope(scope, async (tx) => {
+    const guardian = await createGuardianRecord(tx, scope.workspaceId, input);
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "guardian",
+      entityId: guardian.id,
+      action: messagingAuditActions.guardianCreated,
+      diff: {
+        studentId: guardian.studentId,
+        relation: guardian.relation,
+        isPrimary: guardian.isPrimary,
+        isAuthorized: guardian.isAuthorized,
+      },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return guardian;
+  });
+}
+
+/**
  * Process one workspace's due outbox messages.
  *
  * The scope is required: a global query cannot run under forced RLS, and a
@@ -375,7 +427,6 @@ export async function processOutboxBatch(scope: Scope, limit: number = 10) {
   });
 
   const results: Array<Record<string, unknown>> = [];
-  const adapter = getMessageAdapter();
 
   for (const entry of claimed) {
     const { message } = entry;
@@ -393,6 +444,7 @@ export async function processOutboxBatch(scope: Scope, limit: number = 10) {
       continue;
     }
 
+    const adapter = getMessageAdapter(message.channel);
     const sendResult = await adapter.send({
       to: message.to,
       body: message.body,

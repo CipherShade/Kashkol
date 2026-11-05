@@ -221,7 +221,7 @@ export function HomeworkClient({
                 </label>
               )}
               <label className="grid gap-1 text-sm">
-                <span>{t("title")}</span>
+                <span>{t("titleLabel")}</span>
                 <Input name="title" required maxLength={160} />
               </label>
               <label className="grid gap-1 text-sm">
@@ -357,7 +357,7 @@ export function HomeworkClient({
                     defaultValue={assignment.title}
                     required
                     maxLength={160}
-                    aria-label={t("title")}
+                    aria-label={t("titleLabel")}
                   />
                   <Input
                     name="dueAt"

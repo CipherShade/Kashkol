@@ -55,6 +55,14 @@ export const TENANT_TABLES = [
   "online_exam_attempt",
   "online_exam_response",
   "break_glass_grant",
+  "form",
+  "form_section",
+  "form_question",
+  "form_question_option",
+  "form_question_logic",
+  "form_submission",
+  "form_answer",
+  "form_answer_file",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

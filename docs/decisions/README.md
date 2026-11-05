@@ -42,6 +42,8 @@ Every ADR uses the same sections:
 | [0017](0017-clamav-and-learning-materials.md) | ClamAV scanning and the learning-materials library | Accepted | M1 |
 | [0018](0018-monthly-fees-and-cancelled-sessions.md) | Period-based fees and session cancellation | Accepted | M2 |
 | [0020](0020-qr-rendering-library.md) | QR rendering uses `qrcode-generator`, pinned | Accepted | M2 |
+| [0021](0021-forms-foundation.md) | Relational forms foundation with server-side conditional logic | Accepted (partially superseded by ADR-0022) | M3a |
+| [0022](0022-forms-visual-builder.md) | Forms visual builder supersedes revision deferral | Accepted (approved 2026-11-04) | M4 / extension |
 
 ## Conventions
 
@@ -83,3 +85,4 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0017 | `F-P1-11`, `F-P0-01`, `A-09` |
 | 0018 | `F-P2-04`, `R-02`, `NF-1` |
 | 0020 | `F-P2-05`, `OQ-05` |
+| 0021 | `F-P3-09`, `R-01`, `R-02`, `R-15`, `NF-1`, `NF-8`, `NF-9`, `NF-13` |

@@ -293,35 +293,3 @@ export async function getAttendanceMarkCount(
   return count;
 }
 
-export async function enqueueNotificationOutbox(
-  tx: Prisma.TransactionClient,
-  workspaceId: string,
-  payload: Record<string, unknown>,
-) {
-  // Try to use outbox_event if it exists in schema - following pattern of other codebase
-  // The table may not exist in schema yet, but we follow the pattern
-  try {
-    const outbox = (
-      tx as unknown as {
-        outboxEvent?: {
-          create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
-        };
-      }
-    ).outboxEvent;
-    if (outbox) {
-      await outbox.create({
-        data: {
-          id: crypto.randomUUID(),
-          workspaceId,
-          kind: "attendance.notification",
-          payload,
-          state: "pending",
-          attempts: 0,
-          runAt: new Date(),
-        },
-      });
-    }
-  } catch {
-    // If outbox doesn't exist, ignore - notifications must not break attendance
-  }
-}

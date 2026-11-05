@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { permissionKey, type Scope } from "@/modules/tenancy/types";
 import type { PortalContext } from "@/modules/identity/session";
@@ -1075,11 +1076,16 @@ describe("P3 Recorded Videos via External Provider Adapter (F-P3-02)", () => {
     expect(published.publicationStatus).toBe("published");
   });
 
-  it("verifies CloudflareStreamAdapter HMAC-SHA256 signed token & webhook signature verification", async () => {
+  it("signs Cloudflare Stream playback tokens with RS256 and the signing key id", async () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    });
+    const privatePem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     const adapter = new CloudflareStreamAdapter({
       accountId: "cf-account-99",
       apiToken: "cf-secret-api-token-value-123456",
-      signingSecret: "cf-signing-secret-key-value-1234567890",
+      signingKeyId: "cf-signing-key-id-1",
+      signingPrivateKey: privatePem,
       webhookSecret: "cf-webhook-secret-key-12345",
     });
 
@@ -1097,14 +1103,66 @@ describe("P3 Recorded Videos via External Provider Adapter (F-P3-02)", () => {
     expect(descriptor.provider).toBe("cloudflare_stream");
     expect(descriptor.embedUrl).toContain("iframe.videodelivery.net/");
     expect(descriptor.embedUrl).not.toContain("cf-secret-api-token-value-123456");
-    expect(descriptor.embedUrl).not.toContain("cf-signing-secret-key-value-1234567890");
+    expect(descriptor.embedUrl).not.toContain("BEGIN PRIVATE KEY");
     expect(descriptor.expiresAt).toBe("2026-10-31T12:10:00.000Z");
 
-    // Reject forged webhook signature
+    const [encodedHeader, encodedBody, encodedSignature] = descriptor.signedToken.split(".");
+    const header = JSON.parse(Buffer.from(encodedHeader, "base64url").toString()) as {
+      alg: string;
+      kid: string;
+    };
+    const body = JSON.parse(Buffer.from(encodedBody, "base64url").toString()) as {
+      sub: string;
+      kid: string;
+    };
+    expect(header.alg).toBe("RS256");
+    expect(header.kid).toBe("cf-signing-key-id-1");
+    expect(body.sub).toBe("stream-asset-abc");
+    expect(body.kid).toBe("cf-signing-key-id-1");
+    expect(
+      crypto.verify(
+        "RSA-SHA256",
+        Buffer.from(`${encodedHeader}.${encodedBody}`),
+        publicKey,
+        Buffer.from(encodedSignature, "base64url"),
+      ),
+    ).toBe(true);
+
+    // A forged webhook signature is rejected.
     expect(
       adapter.verifyWebhook({
         rawBody: JSON.stringify({ uid: "stream-asset-abc", status: { state: "ready" } }),
         signatureHeader: "time=1730000000,sig1=deadbeef",
+        now,
+      }),
+    ).toBeNull();
+
+    // A correctly signed webhook is accepted.
+    const rawBody = JSON.stringify({ uid: "stream-asset-abc", status: { state: "ready" } });
+    const time = Math.floor(now.getTime() / 1000);
+    const sig1 = crypto
+      .createHmac("sha256", "cf-webhook-secret-key-12345")
+      .update(`${time}.${rawBody}`)
+      .digest("hex");
+    expect(
+      adapter.verifyWebhook({
+        rawBody,
+        signatureHeader: `time=${time},sig1=${sig1}`,
+        now,
+      }),
+    ).toEqual({ providerAssetId: "stream-asset-abc", state: "ready" });
+
+    // Without a configured webhook secret, no webhook is trusted.
+    const noSecret = new CloudflareStreamAdapter({
+      accountId: "cf-account-99",
+      apiToken: "cf-secret-api-token-value-123456",
+      signingKeyId: "cf-signing-key-id-1",
+      signingPrivateKey: privatePem,
+    });
+    expect(
+      noSecret.verifyWebhook({
+        rawBody,
+        signatureHeader: `time=${time},sig1=${sig1}`,
         now,
       }),
     ).toBeNull();

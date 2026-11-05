@@ -50,12 +50,14 @@ export function getVideoProviderAdapter(): VideoProviderAdapter {
     env.VIDEO_PROVIDER_DRIVER === "cloudflare_stream" &&
     env.VIDEO_PROVIDER_ACCOUNT_ID &&
     env.VIDEO_PROVIDER_API_TOKEN &&
-    env.VIDEO_PROVIDER_SIGNING_SECRET
+    env.VIDEO_PROVIDER_SIGNING_KEY_ID &&
+    env.VIDEO_PROVIDER_SIGNING_PRIVATE_KEY
   ) {
     return new CloudflareStreamAdapter({
       accountId: env.VIDEO_PROVIDER_ACCOUNT_ID,
       apiToken: env.VIDEO_PROVIDER_API_TOKEN,
-      signingSecret: env.VIDEO_PROVIDER_SIGNING_SECRET,
+      signingKeyId: env.VIDEO_PROVIDER_SIGNING_KEY_ID,
+      signingPrivateKey: env.VIDEO_PROVIDER_SIGNING_PRIVATE_KEY,
       webhookSecret: env.VIDEO_PROVIDER_WEBHOOK_SECRET,
     });
   }

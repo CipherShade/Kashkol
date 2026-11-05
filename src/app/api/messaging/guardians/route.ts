@@ -1,61 +1,114 @@
-import { NextRequest } from "next/server";
-import { requireSession } from "@/lib/auth/session";
-import { getWorkspaceIdForUser } from "@/lib/auth/workspace";
-import { resolveScope } from "@/modules/tenancy/service";
-import { newRequestId } from "@/lib/http/request-id";
+import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { assertTrustedOrigin } from "@/lib/http/csrf";
 import { errorResponse } from "@/lib/http/errors";
-import { withScope } from "@/lib/db/scope";
-import { createGuardian } from "@/modules/messaging/repository";
-import { z } from "zod";
+import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
+import { getServerEnv } from "@/lib/config/env";
+import { requireStaffSession } from "@/modules/identity/session";
+import {
+  createGuardianSchema,
+  fieldErrorsFrom,
+  guardianQuerySchema,
+  addGuardian,
+  listGuardians,
+} from "@/modules/messaging";
 
-const CreateGuardianSchema = z.object({
-  studentId: z.string().uuid(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  relation: z.enum(["mother", "father", "other", "legal_guardian"]).optional(),
-  phoneE164: z.string().regex(/^\+[1-9][0-9]{6,14}$/),
-  email: z.string().email().optional(),
-  isPrimary: z.boolean().optional(),
-  isAuthorized: z.boolean().optional(),
-  consentGiven: z.boolean().optional(),
-});
+export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const requestId = newRequestId();
+function requestIdFrom(request: Request): string {
+  return request.headers.get(REQUEST_ID_HEADER) ?? newRequestId();
+}
+
+/**
+ * GET /api/messaging/guardians?studentId=<uuid>
+ *
+ * Requires `students:read`: a guardian record is student data, not message
+ * data. The lookup is scoped by the session workspace and returns 404 when the
+ * student does not exist in that workspace.
+ */
+export async function GET(request: Request) {
+  const requestId = requestIdFrom(request);
   try {
-    const session = await requireSession(req);
-    const workspaceId = await getWorkspaceIdForUser(session.user.id);
-    if (!workspaceId) throw new Error("NO_WORKSPACE");
-    const scope = await resolveScope(session.user.id, workspaceId);
-    const search = new URL(req.url).searchParams;
-    const studentId = search.get("studentId");
-    if (!studentId) throw new Error("MISSING_STUDENT");
-    const guardians = await withScope(scope, async (tx) => {
-      return tx.guardian.findMany({
-        where: { workspaceId: scope.workspaceId, studentId },
-        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      });
+    const { scope } = await requireStaffSession();
+    const url = new URL(request.url);
+    const parsed = guardianQuerySchema.safeParse({
+      studentId: url.searchParams.get("studentId") ?? undefined,
     });
-    return Response.json({ data: guardians }, { headers: { "x-request-id": requestId } });
-  } catch (err) {
-    return errorResponse(err, requestId);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "VALIDATION_FAILED",
+            messageKey: "errors.validationFailed",
+            fields: fieldErrorsFrom(parsed.error),
+            requestId,
+          },
+        },
+        { status: 422, headers: { "x-request-id": requestId } },
+      );
+    }
+
+    const data = await listGuardians(scope, parsed.data.studentId);
+    return NextResponse.json(
+      { data },
+      { headers: { "x-request-id": requestId, "cache-control": "no-store" } },
+    );
+  } catch (error) {
+    return errorResponse(error, requestId);
   }
 }
 
-export async function POST(req: NextRequest) {
-  const requestId = newRequestId();
+/**
+ * POST /api/messaging/guardians
+ *
+ * Requires `students:write`, a trusted origin, and writes the audit event in
+ * the same transaction as the guardian row.
+ */
+export async function POST(request: Request) {
+  const requestId = requestIdFrom(request);
   try {
-    const session = await requireSession(req);
-    const workspaceId = await getWorkspaceIdForUser(session.user.id);
-    if (!workspaceId) throw new Error("NO_WORKSPACE");
-    const scope = await resolveScope(session.user.id, workspaceId);
-    const body = await req.json();
-    const input = CreateGuardianSchema.parse(body);
-    const guardian = await withScope(scope, async (tx) => {
-      return createGuardian(tx, scope.workspaceId, input);
-    });
-    return Response.json({ data: guardian }, { status: 201, headers: { "x-request-id": requestId } });
-  } catch (err) {
-    return errorResponse(err, requestId);
+    const env = getServerEnv();
+    assertTrustedOrigin(await headers(), env.BETTER_AUTH_URL);
+
+    const { scope } = await requireStaffSession();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "VALIDATION_FAILED",
+            messageKey: "errors.validationFailed",
+            requestId,
+          },
+        },
+        { status: 422, headers: { "x-request-id": requestId } },
+      );
+    }
+
+    const parsed = createGuardianSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "VALIDATION_FAILED",
+            messageKey: "errors.validationFailed",
+            fields: fieldErrorsFrom(parsed.error),
+            requestId,
+          },
+        },
+        { status: 422, headers: { "x-request-id": requestId } },
+      );
+    }
+
+    const guardian = await addGuardian(scope, parsed.data, { requestId });
+    return NextResponse.json(
+      { data: guardian },
+      { status: 201, headers: { "x-request-id": requestId, "cache-control": "no-store" } },
+    );
+  } catch (error) {
+    return errorResponse(error, requestId);
   }
 }

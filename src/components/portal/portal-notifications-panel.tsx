@@ -74,6 +74,30 @@ export function PortalNotificationsPanel({
       : item,
   );
 
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const handleMarkAllRead = useCallback(async () => {
+    const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    try {
+      await Promise.all(
+        unreadIds.map((id) =>
+          fetch(`/api/portal/notifications/${encodeURIComponent(id)}/read`, {
+            method: "POST",
+          }),
+        ),
+      );
+      const nowIso = new Date().toISOString();
+      setReadIds((prev) => {
+        const next = { ...prev };
+        for (const id of unreadIds) next[id] = nowIso;
+        return next;
+      });
+    } catch {
+      // Best-effort; do not block UI
+    }
+  }, [notifications]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (
@@ -343,11 +367,28 @@ export function PortalNotificationsPanel({
               {t("inAppCenterTitle")}
             </h3>
           </div>
-          <span className="text-xs text-[var(--text-secondary)]">
-            {t("unreadCount", {
-              count: notifications.filter((n) => !n.isRead).length,
-            })}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {unreadCount > 0 && (
+              <span className="rounded-full bg-[var(--brand-fg)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--surface-elevated)]">
+                {unreadCount}
+              </span>
+            )}
+            <span className="text-xs text-[var(--text-secondary)]">
+              {t("unreadCount", { count: unreadCount })}
+            </span>
+          </div>
+          {unreadCount > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={false}
+              onClick={() => void handleMarkAllRead()}
+              className="gap-1.5 text-xs"
+            >
+              {t("markAllReadAction")}
+            </Button>
+          )}
         </div>
 
         {notifications.length === 0 ? (

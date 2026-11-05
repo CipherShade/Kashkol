@@ -17,19 +17,62 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
 
   private readonly accountId: string;
   private readonly apiToken: string;
-  private readonly signingSecret: string;
-  private readonly webhookSecret: string;
+  private readonly signingKeyId: string;
+  private readonly signingPrivateKey: string;
+  private readonly webhookSecret?: string;
 
   constructor(config: {
     accountId: string;
     apiToken: string;
-    signingSecret: string;
+    signingKeyId: string;
+    signingPrivateKey: string;
     webhookSecret?: string;
   }) {
     this.accountId = config.accountId;
     this.apiToken = config.apiToken;
-    this.signingSecret = config.signingSecret;
-    this.webhookSecret = config.webhookSecret ?? config.signingSecret;
+    this.signingKeyId = config.signingKeyId;
+    this.signingPrivateKey = config.signingPrivateKey;
+    this.webhookSecret = config.webhookSecret;
+  }
+
+  /**
+   * Cloudflare Stream signs playback tokens with the private half of an RSA
+   * signing key (`RS256`), not a shared HMAC secret. The key may be a PEM
+   * string or a JWK object, as returned by the Cloudflare dashboard.
+   */
+  private privateKey(): crypto.KeyObject {
+    const raw = this.signingPrivateKey.replace(/\\n/g, "\n").trim();
+    if (raw.startsWith("{")) {
+      return crypto.createPrivateKey({
+        key: JSON.parse(raw) as crypto.JsonWebKey,
+        format: "jwk",
+      });
+    }
+    return crypto.createPrivateKey(raw);
+  }
+
+  private async ensureSignedUrls(cleanId: string): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const url = `${CLOUDFLARE_API_BASE}/accounts/${encodeURIComponent(this.accountId)}/stream/${encodeURIComponent(cleanId)}`;
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${this.apiToken}`,
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify({ requireSignedURLs: true }),
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async inspectAsset(providerAssetId: string): Promise<VideoAssetMetadata> {
@@ -63,7 +106,7 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
           durationSeconds: 0,
           sizeBytes: 0,
           thumbnailPath: null,
-          requireSignedPlayback: true,
+          requireSignedPlayback: false,
         };
       }
 
@@ -75,7 +118,7 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
           durationSeconds: 0,
           sizeBytes: 0,
           thumbnailPath: null,
-          requireSignedPlayback: true,
+          requireSignedPlayback: false,
         };
       }
 
@@ -99,7 +142,7 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
           durationSeconds: 0,
           sizeBytes: 0,
           thumbnailPath: null,
-          requireSignedPlayback: true,
+          requireSignedPlayback: false,
         };
       }
 
@@ -112,6 +155,22 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
             : rawState === "error"
               ? "failed"
               : "pending";
+
+      // A signed token is only meaningful when the asset itself requires signed
+      // URLs. Enforce it at the provider; if that fails, the asset is unusable.
+      const signed =
+        result.requireSignedURLs === true || (await this.ensureSignedUrls(result.uid));
+      if (!signed) {
+        return {
+          provider: "cloudflare_stream",
+          providerAssetId: result.uid,
+          assetStatus: "unavailable",
+          durationSeconds: 0,
+          sizeBytes: 0,
+          thumbnailPath: null,
+          requireSignedPlayback: false,
+        };
+      }
 
       return {
         provider: "cloudflare_stream",
@@ -135,7 +194,7 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
         durationSeconds: 0,
         sizeBytes: 0,
         thumbnailPath: null,
-        requireSignedPlayback: true,
+        requireSignedPlayback: false,
       };
     } finally {
       clearTimeout(timer);
@@ -155,20 +214,24 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
     const nbf = Math.floor(now.getTime() / 1000) - 10;
     const exp = Math.floor(now.getTime() / 1000) + input.ttlSeconds;
 
-    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    // Cloudflare Stream verifies the token with the public half of the signing
+    // key selected by `kid`. The algorithm is RS256; an HMAC token (or a `kid`
+    // derived from the account id) is rejected by the provider.
+    const header = Buffer.from(
+      JSON.stringify({ alg: "RS256", typ: "JWT", kid: this.signingKeyId }),
+    ).toString("base64url");
     const body = Buffer.from(
       JSON.stringify({
         sub: input.providerAssetId,
-        kid: this.accountId.slice(0, 12),
+        kid: this.signingKeyId,
         nbf,
         exp,
         accessRules: [{ type: "any", action: "allow" }],
       }),
     ).toString("base64url");
     const signature = crypto
-      .createHmac("sha256", this.signingSecret)
-      .update(`${header}.${body}`)
-      .digest("base64url");
+      .sign("RSA-SHA256", Buffer.from(`${header}.${body}`), this.privateKey())
+      .toString("base64url");
     const signedToken = `${header}.${body}.${signature}`;
 
     return {
@@ -188,6 +251,7 @@ export class CloudflareStreamAdapter implements VideoProviderAdapter {
     signatureHeader: string | null;
     now?: Date;
   }): VideoWebhookPayload | null {
+    if (!this.webhookSecret) return null;
     if (!input.signatureHeader) return null;
     const parts = Object.fromEntries(
       input.signatureHeader.split(",").map((segment) => {

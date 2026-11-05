@@ -1,7 +1,8 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { AppError, errorResponse } from "@/lib/http/errors";
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
+import { hasValidWorkerBearerToken } from "@/lib/http/worker-auth";
 import { getServerEnv } from "@/lib/config/env";
 import { requireStaffSession } from "@/modules/identity/session";
 import { processOutboxBatch } from "@/modules/messaging";
@@ -9,13 +10,7 @@ import type { Scope } from "@/modules/tenancy/types";
 
 export const dynamic = "force-dynamic";
 
-function hasValidWorkerToken(request: Request, token: string | undefined) {
-  const authorization = request.headers.get("authorization");
-  if (!token || !authorization?.startsWith("Bearer ")) return false;
-  const supplied = Buffer.from(authorization.slice("Bearer ".length));
-  const expected = Buffer.from(token);
-  return supplied.byteLength === expected.byteLength && timingSafeEqual(supplied, expected);
-}
+const workspaceIdSchema = z.string().uuid();
 
 export async function POST(req: NextRequest) {
   const requestId = req.headers.get(REQUEST_ID_HEADER) ?? newRequestId();
@@ -23,7 +18,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const limit = typeof body.limit === "number" ? Math.min(Math.max(1, body.limit), 50) : 10;
 
-    // Staff session takes precedence
+    // Staff session takes precedence.
     const staff = await requireStaffSession().catch(() => null);
     if (staff) {
       const results = await processOutboxBatch(staff.scope, limit);
@@ -33,13 +28,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Shared worker token authentication
-    const token = getServerEnv().REPORT_EXPORT_WORKER_TOKEN;
-    if (token && hasValidWorkerToken(req, token) && typeof body.workspaceId === "string") {
+    // Background worker: a dedicated token, never the report-export credential.
+    const token = getServerEnv().MESSAGING_WORKER_TOKEN;
+    const workspaceId =
+      typeof body.workspaceId === "string" ? body.workspaceId : undefined;
+    const parsedWorkspaceId = workspaceIdSchema.safeParse(workspaceId);
+
+    if (hasValidWorkerBearerToken(req.headers.get("authorization"), token) && parsedWorkspaceId.success) {
       const workerScope: Scope = {
-        workspaceId: body.workspaceId,
-        actorUserId: "system:worker",
-        actorDisplayName: "Worker",
+        workspaceId: parsedWorkspaceId.data,
+        actorUserId: "system:messaging-worker",
+        actorDisplayName: "Messaging worker",
         role: "owner",
         permissions: new Set(),
       };

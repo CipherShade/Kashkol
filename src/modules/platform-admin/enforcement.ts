@@ -22,7 +22,8 @@ export type EnforcedWorkspaceResource =
       additionalSizeBytes: number;
     }
   | { kind: "online_exams" }
-  | { kind: "report_exports" };
+  | { kind: "report_exports" }
+  | { kind: "forms" };
 
 /**
  * Enforce workspace account status, subscription/pilot plan status, feature gates,
@@ -118,6 +119,9 @@ export async function assertWorkspaceWriteAllowedTx(
       if (!effective.features.reportExportsEnabled) {
         throw new AppError("FORBIDDEN", { messageKey: "errors.planFeatureDisabled" });
       }
+      break;
+    }
+    case "forms": {
       break;
     }
   }

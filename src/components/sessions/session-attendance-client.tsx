@@ -8,6 +8,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
+import { formatReport } from "@/modules/attendance/report";
 import { useToast } from "@/components/ui/toast";
 
 export type AttendanceSession = {
@@ -91,6 +92,8 @@ export function SessionAttendanceClient({
     mark: AttendanceMarkValue;
     reason: string;
   } | null>(null);
+  const [showReport, setShowReport] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const isOpen = session.status === "scheduled" || session.status === "started";
 
@@ -209,6 +212,35 @@ export function SessionAttendanceClient({
     [post, push, t, refresh, isOpen],
   );
 
+  const reportText = useMemo(() => {
+    const lang = (locale === "ar" ? "ar" : "en") as "ar" | "en";
+    return formatReport({
+      locale: lang,
+      workspaceName: session.groupName || "Kashkol",
+      groupName: session.groupName || "",
+      sessionDate: new Date(session.startsAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US"),
+      sessionTime: session.endsAt ? new Date(session.endsAt).toLocaleTimeString(lang === "ar" ? "ar-EG" : "en-US") : null,
+      roster: roster.map((r) => ({
+        studentId: r.studentId,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        mark: r.mark,
+      })),
+    });
+  }, [roster, session, locale]);
+
+  const handleCopyReport = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setCopied(true);
+      setShowReport(false);
+      push({ title: locale === "ar" ? "تم نسخ التقرير" : "Report copied", tone: "success" });
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      push({ title: locale === "ar" ? "فشل النسخ" : "Copy failed", tone: "danger" });
+    }
+  }, [reportText, locale, push]);
+
   const submitCorrection = useCallback(async () => {
     if (!correction || correction.reason.trim().length === 0) return;
     setBusy(true);
@@ -260,6 +292,10 @@ export function SessionAttendanceClient({
                 )}
                 <Button size="sm" variant="outline" onClick={() => void refresh()} disabled={busy}>
                   {t("refresh")}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setShowReport(true)} disabled={busy || roster.length === 0}>
+                  <Icon name="clipboard" size={16} />
+                  {locale === "ar" ? "نسخ التقرير" : "Copy report"}
                 </Button>
               </div>
 
@@ -395,6 +431,26 @@ export function SessionAttendanceClient({
               </div>
             </>
           ) : null}
+        </div>
+      </Dialog>
+
+      <Dialog open={showReport} onOpenChange={setShowReport} title={locale === "ar" ? "تقرير الحضور" : "Attendance Report"}>
+        <div className="space-y-3">
+          <div className="max-h-[22rem] overflow-y-auto rounded-md border bg-muted p-3 whitespace-pre-wrap text-sm font-sans leading-relaxed">
+            {reportText}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              onClick={() => void handleCopyReport()}
+              disabled={busy || copied}
+            >
+              <Icon name="clipboard" size={16} />
+              {copied
+                ? (locale === "ar" ? "تم النسخ!" : "Copied!")
+                : (locale === "ar" ? "نسخ التقرير" : "Copy to clipboard")}
+            </Button>
+          </div>
         </div>
       </Dialog>
     </div>

@@ -1,13 +1,13 @@
 # Kashkol — Status
 
-**Date:** 2026-11-01 · **Status:** P3 platform administration (`F-P3-03`) and centralized workspace plans/limits (`F-P3-04`), recorded video (`F-P3-02`), online exams (`F-P3-01`), M2 parent/student portals, PWA/Web Push, and teacher workspace administration implemented · **Phase:** M1/M2 core + P3 learning media, online assessments & platform operations
+**Date:** 2026-11-04 · **Status:** P3 forms and surveys foundation (`F-P3-09`), platform administration (`F-P3-03`) and centralized workspace plans/limits (`F-P3-04`), recorded video (`F-P3-02`), online exams (`F-P3-01`), M2 parent/student portals, PWA/Web Push, teacher workspace administration, sessions/calendar, and asynchronous report exports implemented · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & platform operations
 
 ---
 
 ## 1. Where the project stands
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
-now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and thirteen
+now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and eighteen
 migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
@@ -25,21 +25,21 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (18 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (20 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
 | Authorization foundation | **Implemented** — owner/assistant roles, grants, owner-only operations, portal-link checks, generated-access tests |
 | Core domain schema | **Implemented** — subjects, groups, enrollments, sessions, attendance, homework, assessments, follow-up, payments, files, Arabic search |
 | Business screens | **Implemented** — students, groups, homework, assessments, follow-up, files, account, settings, scoped search, manual payments, and report/export flows are implemented; remaining in-progress work is outside the manual ledger/reporting scope |
-| Outbound email provider | **Not implemented** — local console transport only; production refuses to start without a transport |
-| Git history | No commits yet; the foundation files are untracked |
+| Outbound email provider | **Implemented, not live-verified** — console transport locally; SMTP transport implemented and unit-tested, but no live provider or deliverability setup has been verified. Production refuses to start without a configured transport |
+| Git history | Six commits on `master` |
 
 **Implemented in this foundation**
 
 - Next.js 16.4.2 App Router, React 19.2, TypeScript 5.9, Tailwind v4, next-intl 4.14.9, Vitest 5.
 - Prisma 7.10.1 with the PostgreSQL driver adapter and an explicit generated-client output.
-- Thirteen tracked migrations are applied to the local development database, including academic
+- Seventeen tracked migrations are applied to the local development database, including academic
   records and the manual payment/report migrations:
   homework, assessment result details, follow-up records, transactional audit, and forced RLS.
 - `withScope()`/`withUserScope()` transaction helpers and a tenant-table registry checked against the
@@ -81,7 +81,7 @@ health/readiness probes, the route registry, and the project-rule checks.
   and S3-compatible storage, ClamAV fail-closed scanning, authorized short-lived downloads,
   archive/restore/delete, bilingual upload and retry states, and storage usage.
 - Recorded Video Lessons (`F-P3-02`) via external provider adapter (`src/modules/videos/`):
-  - `CloudflareStreamAdapter` using Cloudflare Stream's official v4 REST API, HMAC-SHA256 short-lived signed playback tokens, and `Webhook-Signature` verification (`POST /api/videos/webhook`), plus deterministic `FakeVideoProviderAdapter` for tests and `UnconfiguredVideoProviderAdapter` when `VIDEO_PROVIDER_DRIVER=none`.
+  - `CloudflareStreamAdapter` using Cloudflare Stream's official v4 REST API, RS256 short-lived signed playback tokens with a signing key ID, provider-enforced `requireSignedURLs`, and `Webhook-Signature` verification (`POST /api/videos/webhook`), plus deterministic `FakeVideoProviderAdapter` for tests and `UnconfiguredVideoProviderAdapter` when `VIDEO_PROVIDER_DRIVER=none`.
   - Truthful setup state when no provider is configured (`VIDEO_PROVIDER_DRIVER=none`) — never showing simulated or fake hosted videos (`NF-1`–`NF-13`).
   - Workspace limits and cost-driver tracking (`videoCount`, `totalStorageBytes`, `totalDurationSeconds`, `totalPlaybacks`, `estimatedBandwidthBytes` bounded by `VIDEO_MAX_COUNT_PER_WORKSPACE`, `VIDEO_MAX_STORAGE_BYTES_PER_WORKSPACE`, `VIDEO_MAX_BANDWIDTH_BYTES_PER_MONTH`) without claiming unlimited storage.
   - Authorized short-lived signed playback for staff (`POST /api/videos/[videoId]/playback`) and entitled parent/student portal viewers (`POST /api/portal/videos/[videoId]/playback`).
@@ -101,18 +101,21 @@ health/readiness probes, the route registry, and the project-rule checks.
 
 **Not claimed by this foundation**
 
-- A production email provider. Only the local console transport is implemented. Production refuses
-  `EMAIL_TRANSPORT=none`, so a real deployment is blocked until a provider is selected by ADR and
-  implemented. Verification and recovery work locally.
-- Live Cloudflare Stream credentials in this local checkout (`VIDEO_PROVIDER_DRIVER` defaults to `none`; live Cloudflare API calls require `VIDEO_PROVIDER_ACCOUNT_ID`, `VIDEO_PROVIDER_API_TOKEN`, and `VIDEO_PROVIDER_SIGNING_SECRET` as documented in `docs/VIDEO_PROVIDER.md`).
+- A production email provider has **not been verified live**. The console transport works locally and
+  the SMTP transport is implemented and unit-tested, but no live mailbox, bounce handling, or
+  deliverability setup (SPF/DKIM/DMARC) has been exercised. Production refuses
+  `EMAIL_TRANSPORT=none`, so a real deployment must configure SMTP. Verification and recovery work
+  locally.
+- Live Cloudflare Stream credentials in this local checkout (`VIDEO_PROVIDER_DRIVER` defaults to `none`; live Cloudflare API calls require `VIDEO_PROVIDER_ACCOUNT_ID`, `VIDEO_PROVIDER_API_TOKEN`, `VIDEO_PROVIDER_SIGNING_KEY_ID`, and `VIDEO_PROVIDER_SIGNING_PRIVATE_KEY` as documented in `docs/VIDEO_PROVIDER.md`).
 - The generated isolation/permission matrices. The registry, the missing-route gate, hand-written
   authorization tests, and permission-filtered navigation exist; matrix generators remain
   unimplemented. Workspace switching is also not implemented, so invitation acceptance rejects an
   account that already has an active membership in another workspace.
 - Online homework file uploads remain unimplemented; students can mark assigned homework as submitted and take assigned online exams from the student portal, and teachers can record/grade submissions.
-- CI, staging deployment, worker process, provisioned production object storage, and observability
-  integrations. The S3 adapter is implemented but needs configured private storage to serve durable
-  production files.
+- CI, staging deployment, a scheduler/worker process, provisioned production object storage, and
+  observability integrations. Authenticated worker endpoints exist for the outbox and report exports,
+  but no process invokes them on a schedule. The S3 adapter is implemented but needs configured
+  private storage to serve durable production files.
 - A public breached-password list integration. A local denylist and identity checks are implemented
   and documented as such; there is no live breach check.
 
@@ -217,6 +220,22 @@ hardcoded student in both portals, and the hardcoded English placeholder.
 statistics, simulated delivery, mocked portals, mocked QR, mocked payments, mock video, fake audit
 trails, UI-only authorisation, fake tenant isolation, fake theme/locale/direction, placeholder
 buttons, seeded demo content in production, and silent data loss.
+
+---
+
+## 6. Phase status — P0 (Truth & security) completed on 2026-11-03
+
+| Item | Status |
+|---|---|
+| Webhook signature verification (`X-Hub-Signature-256`) | Verified: real HMAC, constant-time comparison; 503 unconfigured, 401 invalid, 400 malformed, 200 `processed:false`. Inbound event handling deferred. |
+| Webhook challenge verification | Real `hub.verify_token` handshake; returns challenge only when token matches in constant time. |
+| Web Push dispatch (`web-push` with injectable transport) | Real `sendWithWebPush` against VAPID config; no in-memory history, no simulated delivery; `unconfigured` / `send_failed` reasons only. |
+| Worker authentication | Dedicated `MESSAGING_WORKER_TOKEN`; report-export token never reused; UUID workspace id validation; system actor `system:messaging-worker`. |
+| Guardians authorization/CSRF/audit | Routes use `requireStaffSession`, `students:read`/`students:write`, `assertTrustedOrigin`, and an audit event written in the same transaction. |
+| Dead attendance notification outbox writer | Removed `enqueueNotificationOutbox` from `attendance/repository.ts`; its calls at close and QR check-in removed; bulk marking enqueues real guardian notifications through the messaging service. |
+| Route registry updated | Descriptions updated for webhook (verification-only), worker (dedicated token), and guardians (students:read/write). |
+| Docs updated | `.env.example`, `docs/NOTIFICATIONS_PROVIDER.md`, `docs/ENVIRONMENT.md`, `docs/STATUS.md`. |
+| Tests added | `tests/unit/messaging-webhook-signature.test.ts`, `tests/unit/worker-auth.test.ts`, `tests/unit/push-dispatch.test.ts`, guardian authorization tests in `tests/integration/administration-routes.test.ts`, env validation tests. |
 
 ---
 
@@ -355,7 +374,10 @@ task.
 | 3.6 | Rich notification channels | `F-P3-06` passes; every channel states only what it can observe | ☐ |
 | 3.7 | Advanced reporting and academic-year handling | `F-P3-07` passes | ☐ |
 | 3.8 | Duplicate-student detection and roster hygiene | `F-P3-08` passes; a merge is irreversible only by re-creating the record | ☐ |
-| 3.9 | Run the M3 release gate | Every gate item is checked with evidence | ☐ |
+| 3.9 | Forms and surveys foundation | `F-P3-09` passes; server-side complete; no visual builder; public response route deferred (08C) | ☑ |
+| 3.10 | Forms HTTP API (`F-P3-09`) | 10 service routes exposed; registry updated; integration verified | ☑ |
+| 3.11 | Forms visual builder (`F-P3-09` extension / M4) | Dashboard, `/forms/new`, and editor (all 11 types, sections/page breaks, conditional logic, preview); explicit save with `updatedAt` concurrency guard; Arabic/English and light/dark; no autosave and no public submission | ☑ |
+| 3.12 | Run the M3 release gate | Every gate item is checked with evidence | ☐ |
 
 ---
 

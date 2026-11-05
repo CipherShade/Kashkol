@@ -70,6 +70,26 @@ export async function createGuardian(
   });
 }
 
+/** A student lookup that never crosses the workspace boundary. */
+export async function studentExistsInScope(scope: Scope, studentId: string) {
+  const student = await withScope(scope, (tx) =>
+    tx.student.findFirst({
+      where: { id: studentId, workspaceId: scope.workspaceId },
+      select: { id: true },
+    }),
+  );
+  return Boolean(student);
+}
+
+export async function listGuardiansForStudent(scope: Scope, studentId: string) {
+  return withScope(scope, (tx) =>
+    tx.guardian.findMany({
+      where: { workspaceId: scope.workspaceId, studentId },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    }),
+  );
+}
+
 export async function enqueueMessageTx(
   tx: Prisma.TransactionClient,
   data: {

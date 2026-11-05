@@ -32,6 +32,9 @@ const serverEnvSchema = z
     FILE_STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
     FILE_LOCAL_STORAGE_PATH: z.string().min(1).default(".data/files"),
     REPORT_EXPORT_WORKER_TOKEN: z.string().min(32).optional(),
+    MESSAGING_WORKER_TOKEN: z.string().min(32).optional(),
+    WHATSAPP_APP_SECRET: z.string().min(16).optional(),
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().min(8).optional(),
     S3_BUCKET: z.string().min(1).optional(),
     S3_REGION: z.string().min(1).optional(),
     S3_ENDPOINT: z.url().optional(),
@@ -46,9 +49,11 @@ const serverEnvSchema = z
     WEB_PUSH_VAPID_SUBJECT: z.string().min(5).optional(),
     WEB_PUSH_VAPID_PUBLIC_KEY: z.string().min(16).optional(),
     WEB_PUSH_VAPID_PRIVATE_KEY: z.string().min(16).optional(),
-    VIDEO_PROVIDER_DRIVER: z.enum(["none", "cloudflare_stream", "fake"]).default("fake"),
+    VIDEO_PROVIDER_DRIVER: z.enum(["none", "cloudflare_stream", "fake"]).default("none"),
     VIDEO_PROVIDER_ACCOUNT_ID: z.string().min(4).optional(),
     VIDEO_PROVIDER_API_TOKEN: z.string().min(16).optional(),
+    VIDEO_PROVIDER_SIGNING_KEY_ID: z.string().min(4).optional(),
+    VIDEO_PROVIDER_SIGNING_PRIVATE_KEY: z.string().min(32).optional(),
     VIDEO_PROVIDER_SIGNING_SECRET: z.string().min(16).optional(),
     VIDEO_PROVIDER_WEBHOOK_SECRET: z.string().min(16).optional(),
     VIDEO_MAX_COUNT_PER_WORKSPACE: z.coerce.number().int().min(1).max(10_000).default(50),
@@ -132,6 +137,13 @@ const serverEnvSchema = z
         message: "non-local environments require an authenticated report export worker",
       });
     }
+    if (env.APP_ENV !== "local" && !env.MESSAGING_WORKER_TOKEN) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MESSAGING_WORKER_TOKEN"],
+        message: "non-local environments require a dedicated messaging outbox worker token",
+      });
+    }
     const hasPublicVapid = Boolean(env.WEB_PUSH_VAPID_PUBLIC_KEY);
     const hasPrivateVapid = Boolean(env.WEB_PUSH_VAPID_PRIVATE_KEY);
     if (hasPublicVapid !== hasPrivateVapid) {
@@ -173,12 +185,20 @@ const serverEnvSchema = z
             "VIDEO_PROVIDER_API_TOKEN is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
         });
       }
-      if (!env.VIDEO_PROVIDER_SIGNING_SECRET) {
+      if (!env.VIDEO_PROVIDER_SIGNING_KEY_ID) {
         ctx.addIssue({
           code: "custom",
-          path: ["VIDEO_PROVIDER_SIGNING_SECRET"],
+          path: ["VIDEO_PROVIDER_SIGNING_KEY_ID"],
           message:
-            "VIDEO_PROVIDER_SIGNING_SECRET is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
+            "VIDEO_PROVIDER_SIGNING_KEY_ID is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
+        });
+      }
+      if (!env.VIDEO_PROVIDER_SIGNING_PRIVATE_KEY) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["VIDEO_PROVIDER_SIGNING_PRIVATE_KEY"],
+          message:
+            "VIDEO_PROVIDER_SIGNING_PRIVATE_KEY is required when VIDEO_PROVIDER_DRIVER=cloudflare_stream",
         });
       }
     }
@@ -202,6 +222,9 @@ export type ServerEnv = {
   FILE_STORAGE_DRIVER: "local" | "s3";
   FILE_LOCAL_STORAGE_PATH: string;
   REPORT_EXPORT_WORKER_TOKEN?: string;
+  MESSAGING_WORKER_TOKEN?: string;
+  WHATSAPP_APP_SECRET?: string;
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
   S3_BUCKET?: string;
   S3_REGION?: string;
   S3_ENDPOINT?: string;
@@ -216,6 +239,8 @@ export type ServerEnv = {
   VIDEO_PROVIDER_DRIVER: "none" | "cloudflare_stream" | "fake";
   VIDEO_PROVIDER_ACCOUNT_ID?: string;
   VIDEO_PROVIDER_API_TOKEN?: string;
+  VIDEO_PROVIDER_SIGNING_KEY_ID?: string;
+  VIDEO_PROVIDER_SIGNING_PRIVATE_KEY?: string;
   VIDEO_PROVIDER_SIGNING_SECRET?: string;
   VIDEO_PROVIDER_WEBHOOK_SECRET?: string;
   VIDEO_MAX_COUNT_PER_WORKSPACE: number;
@@ -246,8 +271,7 @@ export function getServerEnv(): ServerEnv {
     BETTER_AUTH_SECRET: "dev-only-secret-for-local-environment-at-least-32-chars",
     BETTER_AUTH_URL: "http://localhost:3000",
     EMAIL_TRANSPORT: "console",
-    VIDEO_PROVIDER_DRIVER: "fake",
-    VIDEO_PROVIDER_SIGNING_SECRET: "dev-only-video-secret",
+    VIDEO_PROVIDER_DRIVER: "none",
   };
   const merged: Record<string, string | undefined> = { ...localDefaults };
   for (const [key, value] of Object.entries(process.env)) {
@@ -295,7 +319,8 @@ export function isVideoProviderConfigured(
     | "VIDEO_PROVIDER_DRIVER"
     | "VIDEO_PROVIDER_ACCOUNT_ID"
     | "VIDEO_PROVIDER_API_TOKEN"
-    | "VIDEO_PROVIDER_SIGNING_SECRET"
+    | "VIDEO_PROVIDER_SIGNING_KEY_ID"
+    | "VIDEO_PROVIDER_SIGNING_PRIVATE_KEY"
   > = getServerEnv(),
 ): boolean {
   if (env.VIDEO_PROVIDER_DRIVER === "fake") {
@@ -305,7 +330,8 @@ export function isVideoProviderConfigured(
     return Boolean(
       env.VIDEO_PROVIDER_ACCOUNT_ID &&
         env.VIDEO_PROVIDER_API_TOKEN &&
-        env.VIDEO_PROVIDER_SIGNING_SECRET,
+        env.VIDEO_PROVIDER_SIGNING_KEY_ID &&
+        env.VIDEO_PROVIDER_SIGNING_PRIVATE_KEY,
     );
   }
   return false;

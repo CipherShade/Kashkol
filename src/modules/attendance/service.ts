@@ -8,7 +8,6 @@ import { authorize, type Scope } from "@/modules/tenancy/types";
 import {
   correctAttendanceMarkTx,
   createQrTokenTx,
-  enqueueNotificationOutbox,
   findActiveQrTokenByHash,
   getEnrollmentForStudent,
   getRosterForSession,
@@ -16,7 +15,8 @@ import {
   upsertAttendanceMarkTx,
 } from "./repository";
 import { attendanceAuditActions } from "./audit";
-import { enqueueAttendanceNotification } from "@/modules/messaging";
+
+import { createAttendanceNotification } from "@/modules/notifications";
 import type {
   BulkCorrectAttendanceSchemaInput,
   BulkMarkAttendanceInput,
@@ -97,6 +97,21 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
     return m;
   });
 
+  // Notification is created AFTER the attendance transaction succeeds (never before or during)
+  try {
+    await createAttendanceNotification(scope, {
+      sessionId: input.sessionId,
+      studentId: input.studentId,
+      groupName: session.group.name,
+      sessionDate: session.startsAt.toISOString(),
+      sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
+      mark: input.mark,
+      locale: (scope as unknown as { locale?: "ar" | "en" }).locale,
+    });
+  } catch {
+    // Best-effort notification; never fail attendance
+  }
+
   return mark;
 }
 
@@ -135,30 +150,26 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
       ipHash: ctx.ipHash,
     });
 
+    return results;
+  });
+
+  // Best-effort persistent notifications for each saved attendance mark
+  // Created ONLY after the attendance transaction commits successfully.
+  for (const m of marks) {
     try {
-      await enqueueNotificationOutbox(tx, scope.workspaceId, {
-        type: "attendance.saved",
+      await createAttendanceNotification(scope, {
         sessionId: input.sessionId,
-        count: results.length,
+        studentId: m.studentId,
+        groupName: session.group.name,
+        sessionDate: session.startsAt.toISOString(),
+        sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
+        mark: m.mark as "present" | "absent" | "late" | "excused",
+        locale: (scope as unknown as { locale?: "ar" | "en" }).locale,
       });
-      // Enqueue guardian notifications for each marked student
-      for (const m of results) {
-        try {
-          await enqueueAttendanceNotification(scope, {
-            studentId: m.studentId,
-            sessionId: input.sessionId,
-            mark: m.mark as "present" | "absent" | "late" | "excused",
-          }, reqCtx);
-        } catch {
-          // Never fail attendance due to notification issues
-        }
-      }
     } catch {
       // Never fail attendance due to notification issues
     }
-
-    return results;
-  });
+  }
 
   return marks;
 }
@@ -333,15 +344,6 @@ export async function closeSessionAttendance(scope: Scope, input: CloseSessionIn
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
     });
-
-    try {
-      await enqueueNotificationOutbox(tx, scope.workspaceId, {
-        type: "attendance.closed",
-        sessionId: input.sessionId,
-      });
-    } catch {
-      // Ignore
-    }
 
     return s;
   });
@@ -584,17 +586,6 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
     });
-
-    try {
-      await enqueueNotificationOutbox(tx, scope.workspaceId, {
-        type: "attendance.marked",
-        sessionId: token.sessionId,
-        studentId,
-        source: "qr",
-      });
-    } catch {
-      // Must not fail attendance
-    }
 
     return { success: true, mark };
   });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -16,6 +17,7 @@ import { GET as getAttendance } from "@/app/api/sessions/[sessionId]/attendance/
 import { GET as getGroups } from "@/app/api/groups/route";
 import { GET as getHomework } from "@/app/api/homework/route";
 import { GET as getOutbox } from "@/app/api/messaging/outbox/route";
+import { GET as getGuardians, POST as postGuardian } from "@/app/api/messaging/guardians/route";
 import { GET as getPayments } from "@/app/api/payments/route";
 import { GET as getReports } from "@/app/api/reports/route";
 import { GET as getReportExport } from "@/app/api/reports/exports/[exportId]/route";
@@ -25,8 +27,9 @@ import { GET as getNotificationSettings } from "@/app/api/messaging/settings/rou
 import { GET as getTeam } from "@/app/api/team/route";
 import { GET as getWorkspace } from "@/app/api/workspace/route";
 import { disconnectDb } from "@/lib/db/client";
+import { withScope } from "@/lib/db/scope";
 import { AppError } from "@/lib/http/errors";
-import { assistantScope, ownerScope } from "./helpers";
+import { assistantScope, createStudent, deleteStudent, NILE, ownerScope } from "./helpers";
 
 afterAll(async () => {
   await disconnectDb();
@@ -89,6 +92,9 @@ describe("workspace administration direct requests", () => {
       getHomework(request("/api/homework")),
       getAssessments(request("/api/assessments")),
       getFiles(request("/api/files")),
+      getGuardians(
+        request("/api/messaging/guardians?studentId=30000000-0000-4000-8000-000000000003"),
+      ),
       getOutbox(request("/api/messaging/outbox")),
       getPayments(request("/api/payments")),
       getReports(request("/api/reports?type=payments")),
@@ -103,7 +109,7 @@ describe("workspace administration direct requests", () => {
     ]);
 
     expect(responses.map((response) => response.status)).toEqual([
-      403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403,
+      403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403, 403,
     ]);
 
     sessionMock.requireStaffSession.mockResolvedValue({
@@ -111,6 +117,88 @@ describe("workspace administration direct requests", () => {
     });
     const permittedOutbox = await getOutbox(request("/api/messaging/outbox"));
     expect(permittedOutbox.status).toBe(200);
+  });
+
+  it("requires students permissions for guardians and audits guardian creation", async () => {
+    const assistant = await assistantScope();
+    const studentId = await createStudent(NILE, `Guardian-${randomUUID()}`);
+    const body = {
+      studentId,
+      firstName: "Mona",
+      lastName: "Hassan",
+      relation: "mother",
+      phoneE164: "+201012345678",
+      isPrimary: true,
+      isAuthorized: true,
+    };
+
+    sessionMock.requireStaffSession.mockResolvedValue({
+      scope: { ...assistant, permissions: new Set(["messages:read", "messages:write"]) },
+    });
+
+    const deniedGet = await getGuardians(
+      request(`/api/messaging/guardians?studentId=${studentId}`),
+    );
+    expect(deniedGet.status).toBe(403);
+
+    const deniedPost = await postGuardian(
+      new NextRequest("http://localhost:3000/api/messaging/guardians", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+    expect(deniedPost.status).toBe(403);
+
+    sessionMock.requireStaffSession.mockResolvedValue({ scope: ownerScope() });
+
+    let guardianId: string | undefined;
+    try {
+      const created = await postGuardian(
+        new NextRequest("http://localhost:3000/api/messaging/guardians", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(created.status).toBe(201);
+      const createdBody = await created.json();
+      guardianId = createdBody.data.id;
+      expect(createdBody.data).toMatchObject({
+        workspaceId: NILE,
+        studentId,
+        firstName: "Mona",
+        isPrimary: true,
+      });
+
+      const listed = await getGuardians(
+        request(`/api/messaging/guardians?studentId=${studentId}`),
+      );
+      expect(listed.status).toBe(200);
+      const listedBody = await listed.json();
+      expect(listedBody.data.map((guardian: { id: string }) => guardian.id)).toContain(
+        guardianId,
+      );
+
+      const audit = await withScope({ workspaceId: NILE }, (tx) =>
+        tx.auditEvent.findFirst({
+          where: {
+            workspaceId: NILE,
+            entityType: "guardian",
+            entityId: guardianId,
+            action: "messaging.guardian.created",
+          },
+        }),
+      );
+      expect(audit).not.toBeNull();
+    } finally {
+      if (guardianId) {
+        await withScope({ workspaceId: NILE }, (tx) =>
+          tx.guardian.deleteMany({ where: { workspaceId: NILE, id: guardianId } }),
+        );
+      }
+      await deleteStudent(NILE, studentId);
+    }
   });
 
   it("returns an unauthenticated response rather than leaking team data", async () => {

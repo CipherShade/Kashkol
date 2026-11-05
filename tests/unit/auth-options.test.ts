@@ -25,6 +25,7 @@ const stagingEnv = parseServerEnv({
   S3_REGION: "us-east-1",
   CLAMAV_HOST: "clamav.internal",
   REPORT_EXPORT_WORKER_TOKEN: "w".repeat(32),
+  MESSAGING_WORKER_TOKEN: "m".repeat(32),
 });
 
 describe("Better Auth configuration", () => {

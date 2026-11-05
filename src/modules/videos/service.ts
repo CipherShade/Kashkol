@@ -49,7 +49,8 @@ export function getVideoProviderStatus(): VideoProviderStatus {
       "VIDEO_PROVIDER_DRIVER",
       "VIDEO_PROVIDER_ACCOUNT_ID",
       "VIDEO_PROVIDER_API_TOKEN",
-      "VIDEO_PROVIDER_SIGNING_SECRET",
+      "VIDEO_PROVIDER_SIGNING_KEY_ID",
+      "VIDEO_PROVIDER_SIGNING_PRIVATE_KEY",
       "VIDEO_PROVIDER_WEBHOOK_SECRET",
     ],
     limits: {
@@ -132,6 +133,13 @@ export async function createVideoLesson(
   }
 
   const inspected = await adapter.inspectAsset(input.providerAssetId);
+  if (
+    inspected.assetStatus !== "unavailable" &&
+    inspected.assetStatus !== "failed" &&
+    !inspected.requireSignedPlayback
+  ) {
+    throw new AppError("CONFLICT", { messageKey: "errors.videoNotSecured" });
+  }
   if (
     currentUsage.storageBytes + inspected.sizeBytes >
     env.VIDEO_MAX_STORAGE_BYTES_PER_WORKSPACE
@@ -288,6 +296,13 @@ export async function refreshVideoAssetMetadata(
   if (!existing) throw new AppError("NOT_FOUND");
 
   const inspected = await adapter.inspectAsset(existing.providerAssetId);
+  if (
+    inspected.assetStatus !== "unavailable" &&
+    inspected.assetStatus !== "failed" &&
+    !inspected.requireSignedPlayback
+  ) {
+    throw new AppError("CONFLICT", { messageKey: "errors.videoNotSecured" });
+  }
   return withScope(scope, async (tx) => {
     const updated = await tx.videoLesson.update({
       where: { id: existing.id },

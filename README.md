@@ -4,7 +4,8 @@ Kashkol is a multi-tenant SaaS for Egyptian private teachers: students, groups, 
 attendance, homework, assessments, files, parent communication, and a manual payments ledger.
 Arabic-first and RTL-correct, with English as a required second language.
 
-This repository currently contains the **application foundation (M0 substrate)**. The full product,
+This repository contains the **Kashkol application**: the M0 foundation plus the M1/M2 business
+screens and the P3 learning-media, online-exam, and platform-operations slices. The full product,
 flow, release, and architecture specifications live in [`docs/`](docs/). Read
 [`AGENTS.md`](AGENTS.md) before changing code.
 
@@ -13,23 +14,24 @@ flow, release, and architecture specifications live in [`docs/`](docs/). Read
 | Surface                                                       | State                                                              |
 | ------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Next.js 16 App Router, TypeScript, Tailwind v4                | Working                                                            |
-| Arabic/English locale routing, RTL, theme tokens              | Working at the shell, auth, and workspace levels                   |
-| Prisma 7 schema, migrations, PostgreSQL RLS                   | Working; five committed migrations                                  |
+| Arabic/English locale routing, RTL, theme tokens              | Working across the shell, auth, workspace, and business screens    |
+| Prisma 7 schema, migrations, PostgreSQL RLS                   | Working; seventeen committed migrations                            |
 | Scoped tenancy helper and tenant isolation tests              | Working against a real database                                    |
-| Better Auth sign-up/sign-in/sign-out, verification, recovery  | Working locally; email delivery is console-only                    |
+| Better Auth sign-up/sign-in/sign-out, verification, recovery  | Working locally; console email, or SMTP when configured            |
 | Workspace creation, ownership, profile, settings              | Working                                                            |
-| Assistant permission model (server-enforced)                  | Foundation and tests; team-editing UI is deferred to P2            |
-| Parent/student portal-link authorization                      | Foundation and tests; portal UI is deferred to P2                  |
-| Core domain schema (subjects, groups, sessions, attendance, …) | Schema and migration; no CRUD screens yet                          |
+| Assistant permission model (server-enforced)                  | Implemented, including invitation and team-editing UI              |
+| Parent/student portal-link authorization and portal UI        | Implemented and tested                                             |
+| Core domain schema and business screens                       | Implemented — students, groups, sessions, attendance, homework, assessments, follow-up, files, payments, reports/exports |
+| Weekly calendar and session attendance                        | Implemented; reads real sessions from `/api/sessions`              |
+| Asynchronous report export                                    | Implemented — queue, worker endpoint, storage, signed download     |
+| Recorded video (Cloudflare Stream adapter)                    | Implemented; unconfigured by default (`VIDEO_PROVIDER_DRIVER=none`) |
 | Arabic search (`normalize_arabic`, `pg_trgm` GIN indexes)     | Working at the database layer                                      |
 | Health and readiness probes                                   | `/healthz` and `/readyz`                                           |
 | Local embedded PostgreSQL and deterministic seed              | Working; local-only by construction                                |
-| Business screens (students, groups, attendance, …)            | **Not implemented** — the schema exists, the CRUD UI does not      |
 
 Nothing is simulated. The status page reports only the configuration, database, and migration state
-the server can observe. There are no placeholder buttons and no seeded business data. The dashboard
-shows only the workspace profile, the onboarding checklist, and the member list; it computes no
-statistics because there are no student records yet.
+the server can observe. There are no placeholder buttons. The local seed creates synthetic demo
+workspaces; it refuses to run outside a loopback `APP_ENV=local` database.
 
 ## Requirements
 
@@ -70,18 +72,22 @@ Open:
 The development database credentials are in `.env.example` and are documented as local-only. They
 grant access only to the embedded cluster on `localhost:5433`.
 
-### Email in local development
+### Email in local development and production
 
-No email provider is selected yet (`INTEGRATIONS.md` §1.1), so the only implemented transport is a
-**local console transport**. With `EMAIL_TRANSPORT=console` (the `.env.example` default for local
-development), verification and password-reset links are printed to the **server console**. They are
-never returned in an HTTP response and the configuration parser rejects this transport outside
-`APP_ENV=local`.
+`EMAIL_TRANSPORT` selects the transport:
 
-Password recovery in a real deployment therefore requires a provider to be selected by ADR and the
-transport to be implemented. Until then, `APP_ENV=production` refuses to start without a configured
-transport rather than pretending recovery works. The UI states this limitation when the transport is
-disabled.
+- `console` (the `.env.example` default for local development) prints verification and
+  password-reset links to the **server console**. The configuration parser rejects it outside
+  `APP_ENV=local`.
+- `smtp` sends through the configured `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and
+  `SMTP_SECURE`. Non-local environments fail configuration validation when the host or credentials
+  are missing. Delivery failures are reduced to a generic error; credentials and recipient addresses
+  are never logged.
+- `none` disables email. Verification and recovery are disabled rather than pretending to send.
+
+Production refuses `EMAIL_TRANSPORT=none`, so a real deployment must configure SMTP. The SMTP
+transport is implemented and unit-tested with a mocked provider; it has not been verified against a
+live mailbox in this checkout. See [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
 
 ### Authentication policy in this foundation
 
@@ -237,20 +243,23 @@ migration, start, and readiness commands. Configure these service variables:
 | `BETTER_AUTH_SECRET`     | A random secret of at least 32 characters from the secret manager |
 | `BETTER_AUTH_URL`        | The public HTTPS origin                                           |
 | `REQUIRE_MIGRATIONS`     | `true`                                                            |
-| `EMAIL_TRANSPORT`        | `console` is local-only; a production provider is not implemented yet |
-| `EMAIL_FROM`             | The sender address the selected provider will use                 |
+| `EMAIL_TRANSPORT`        | `smtp` in staging/production; `console` is local-only             |
+| `EMAIL_FROM`             | The sender address the SMTP provider will use                     |
+| `SMTP_HOST` / `SMTP_PORT`| SMTP server and port                                              |
+| `SMTP_USER` / `SMTP_PASS`| SMTP credentials from the secret manager                          |
+| `SMTP_SECURE`            | `true` for implicit TLS (usually port 465), otherwise `false`     |
 | `AUTH_RATE_LIMIT_ENABLED`| Defaults to `true` outside local development                      |
 
 The pre-deploy command runs `npm run db:deploy` before the new image serves traffic. The readiness
 probe is `/readyz`; liveness is `/healthz`. Never run `npm run db:seed` outside a loopback
 development database — the guard refuses, but the rule is not to try.
 
-The worker process, object storage, email provider, and observability SDKs are later milestones and
-are not configured here. The foundation does not claim they exist. In particular, **no production
-email transport is implemented**: `EMAIL_TRANSPORT` accepts only `console` (local only) and `none`
-(disabled), and production refuses `none`. A provider must be chosen by ADR and implemented before a
-production deployment can complete verification or recovery. Until then, production is intentionally
-not deployable rather than falsely appearing to send mail.
+The worker process, object storage, and observability SDKs are later milestones. The application
+exposes authenticated worker endpoints (`/api/worker/outbox` and `/api/worker/reports`) but does not
+ship a scheduler that calls them; a deployment must trigger them. The SMTP transport is implemented;
+a live provider and its deliverability setup (SPF, DKIM, DMARC) still need to be configured and
+verified. The foundation does not claim they exist. Until SMTP is configured, production refuses to
+start rather than falsely appearing to send mail.
 
 The proxy must set `X-Real-IP` for Better Auth's IP-based rate limiting and session metadata; the
 leftmost `X-Forwarded-For` value is not trusted.

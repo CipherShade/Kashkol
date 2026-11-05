@@ -1,28 +1,68 @@
 import { NextRequest } from "next/server";
+import { getServerEnv } from "@/lib/config/env";
 import { newRequestId } from "@/lib/http/request-id";
+import {
+  verifyMetaWebhookChallenge,
+  verifyMetaWebhookSignature,
+} from "@/modules/messaging/webhook-signature";
 
+export const dynamic = "force-dynamic";
+
+/**
+ * Meta webhook receiver.
+ *
+ * This endpoint verifies the request signature. It deliberately does **not**
+ * claim to process delivery statuses: inbound event handling is not
+ * implemented yet, so a verified event is acknowledged without mutating the
+ * outbox. The registry description must match this behaviour.
+ */
 export async function POST(req: NextRequest) {
   const requestId = newRequestId();
-  try {
-    // Webhook signature verification placeholder - only verify if configured
-    // Make idempotent by processing based on message id
-    const _body = await req.json().catch(() => ({}));
-    // Do not log full bodies or tokens
-    return Response.json({ status: "ok" }, { headers: { "x-request-id": requestId } });
-  } catch {
-    return Response.json({ error: "webhook_error" }, { status: 400, headers: { "x-request-id": requestId } });
+  const env = getServerEnv();
+
+  if (!env.WHATSAPP_APP_SECRET) {
+    return Response.json(
+      { status: "disabled", reason: "webhook_not_configured" },
+      { status: 503, headers: { "x-request-id": requestId, "cache-control": "no-store" } },
+    );
   }
+
+  const rawBody = await req.text();
+  const signature = req.headers.get("x-hub-signature-256");
+
+  if (!verifyMetaWebhookSignature(rawBody, signature, env.WHATSAPP_APP_SECRET)) {
+    return Response.json(
+      { status: "unauthorized" },
+      { status: 401, headers: { "x-request-id": requestId, "cache-control": "no-store" } },
+    );
+  }
+
+  try {
+    JSON.parse(rawBody);
+  } catch {
+    return Response.json(
+      { status: "invalid_payload" },
+      { status: 400, headers: { "x-request-id": requestId, "cache-control": "no-store" } },
+    );
+  }
+
+  return Response.json(
+    { status: "ok", processed: false },
+    { headers: { "x-request-id": requestId, "cache-control": "no-store" } },
+  );
 }
 
 export async function GET(req: NextRequest) {
-  // For webhook verification (e.g., Meta webhook verification)
-  const search = new URL(req.url).searchParams;
-  const mode = search.get("hub.mode");
-  const token = search.get("hub.verify_token");
-  const challenge = search.get("hub.challenge");
-  const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-  if (mode === "subscribe" && token === verifyToken && challenge) {
-    return new Response(challenge, { status: 200 });
-  }
-  return new Response("Forbidden", { status: 403 });
+  const env = getServerEnv();
+  const challenge = verifyMetaWebhookChallenge(
+    new URL(req.url).searchParams,
+    env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+  );
+
+  if (!challenge) return new Response("Forbidden", { status: 403 });
+
+  return new Response(challenge, {
+    status: 200,
+    headers: { "cache-control": "no-store" },
+  });
 }

@@ -1,4 +1,5 @@
 import { getServerEnv, isWebPushConfigured } from "@/lib/config/env";
+import webpush from "web-push";
 
 export type PushPayloadInput = {
   kind: "parent" | "student";
@@ -101,20 +102,30 @@ export function isLockScreenSafePayload(payload: PushNotificationPayload): boole
   });
 }
 
-export type SentPushRecord = {
+export type WebPushSubscription = {
   endpoint: string;
-  payload: PushNotificationPayload;
-  sentAt: Date;
+  p256dhKey: string;
+  authKey: string;
 };
 
-const sentPushHistory: SentPushRecord[] = [];
+export type WebPushDelivery = (subscription: WebPushSubscription, payload: string) => Promise<void>;
 
-export function getSentPushHistoryForTests(): SentPushRecord[] {
-  return [...sentPushHistory];
-}
+async function sendWithWebPush(subscription: WebPushSubscription, payload: string): Promise<void> {
+  const env = getServerEnv();
+  webpush.setVapidDetails(
+    env.WEB_PUSH_VAPID_SUBJECT ?? "",
+    env.WEB_PUSH_VAPID_PUBLIC_KEY ?? "",
+    env.WEB_PUSH_VAPID_PRIVATE_KEY ?? "",
+  );
 
-export function clearSentPushHistoryForTests(): void {
-  sentPushHistory.length = 0;
+  await webpush.sendNotification(
+    {
+      endpoint: subscription.endpoint,
+      keys: { p256dh: subscription.p256dhKey, auth: subscription.authKey },
+    },
+    payload,
+    { TTL: 60 * 60 },
+  );
 }
 
 export function getWebPushPublicConfig() {
@@ -128,19 +139,21 @@ export function getWebPushPublicConfig() {
 }
 
 /**
- * Dispatch a Web Push notification when VAPID keys are configured.
- * If Web Push is not configured, returns `{ delivered: false, reason: "unconfigured" }`
- * without throwing, so the in-app notification center remains the reliable fallback.
+ * Dispatch a Web Push notification through the configured push service.
+ *
+ * `delivered: true` is returned only after the push service accepted the
+ * message. An unconfigured deployment reports `unconfigured`; a transport
+ * failure reports `send_failed`. Nothing is written to an in-memory history
+ * and no success is simulated.
+ *
+ * The transport is injectable so tests can prove the call without network
+ * access.
  */
 export async function dispatchWebPushNotification(
-  subscription: {
-    endpoint: string;
-    p256dhKey: string;
-    authKey: string;
-    includeSensitiveDetails: boolean;
-  },
+  subscription: WebPushSubscription & { includeSensitiveDetails: boolean },
   input: Omit<PushPayloadInput, "includeSensitiveDetails">,
-): Promise<{ delivered: boolean; reason?: string; payload: PushNotificationPayload }> {
+  send: WebPushDelivery = sendWithWebPush,
+): Promise<{ delivered: boolean; reason?: "unconfigured" | "send_failed"; payload: PushNotificationPayload }> {
   const payload = buildPushNotificationPayload({
     ...input,
     includeSensitiveDetails: subscription.includeSensitiveDetails,
@@ -150,11 +163,10 @@ export async function dispatchWebPushNotification(
     return { delivered: false, reason: "unconfigured", payload };
   }
 
-  sentPushHistory.push({
-    endpoint: subscription.endpoint,
-    payload,
-    sentAt: new Date(),
-  });
-
-  return { delivered: true, payload };
+  try {
+    await send(subscription, JSON.stringify(payload));
+    return { delivered: true, payload };
+  } catch {
+    return { delivered: false, reason: "send_failed", payload };
+  }
 }

@@ -1,8 +1,12 @@
+import crypto from "node:crypto";
 import { describe, it, expect, beforeEach } from "vitest";
 import { getVideoProviderAdapter, setVideoProviderAdapterForTests } from "@/modules/videos/adapters";
 import { FakeVideoProviderAdapter, resetFakeVideoProviderStore } from "@/modules/videos/adapters/fake";
 import type { VideoProviderAdapter } from "@/modules/videos/adapters";
 import { resetServerEnvForTests } from "@/lib/config/env";
+
+const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+const signingPrivateKey = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
 describe("video adapter audit", () => {
   beforeEach(() => {
@@ -61,7 +65,8 @@ describe("video adapter audit", () => {
     process.env.VIDEO_PROVIDER_DRIVER = "cloudflare_stream";
     process.env.VIDEO_PROVIDER_ACCOUNT_ID = "acc-123";
     process.env.VIDEO_PROVIDER_API_TOKEN = "tok-secret-long-enough";
-    process.env.VIDEO_PROVIDER_SIGNING_SECRET = "sec-secret-long-enough";
+    process.env.VIDEO_PROVIDER_SIGNING_KEY_ID = "cf-key-id-1";
+    process.env.VIDEO_PROVIDER_SIGNING_PRIVATE_KEY = signingPrivateKey;
     process.env.VIDEO_PROVIDER_WEBHOOK_SECRET = "sec-secret-long-enough";
     const adapter: VideoProviderAdapter = getVideoProviderAdapter();
     expect(adapter.providerName).toBe("cloudflare_stream");
@@ -74,7 +79,8 @@ describe("video adapter audit", () => {
     process.env.VIDEO_PROVIDER_DRIVER = "cloudflare_stream";
     process.env.VIDEO_PROVIDER_ACCOUNT_ID = "acc-secret";
     process.env.VIDEO_PROVIDER_API_TOKEN = "tok-secret-long-enough";
-    process.env.VIDEO_PROVIDER_SIGNING_SECRET = "secret-key-long-enough";
+    process.env.VIDEO_PROVIDER_SIGNING_KEY_ID = "cf-key-id-1";
+    process.env.VIDEO_PROVIDER_SIGNING_PRIVATE_KEY = signingPrivateKey;
     process.env.VIDEO_PROVIDER_WEBHOOK_SECRET = "sec-secret-long-enough";
     const adapter = getVideoProviderAdapter();
     expect(adapter.providerName).toBe("cloudflare_stream");

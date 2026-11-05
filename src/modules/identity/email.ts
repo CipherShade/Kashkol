@@ -1,3 +1,4 @@
+import nodemailer from "nodemailer";
 import type { ServerEnv } from "@/lib/config/env";
 
 export type EmailMessage = {
@@ -49,9 +50,48 @@ export function createDisabledEmailTransport(): EmailTransport {
   };
 }
 
+/**
+ * The SMTP transport. It is selected only when `EMAIL_TRANSPORT=smtp` and the
+ * host and credentials are present. Failures are reduced to a generic message:
+ * the provider's response can echo an address or a credential and must never
+ * reach a log or a client.
+ */
+export function createSmtpEmailTransport(env: ServerEnv): EmailTransport {
+  const configured = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+  return {
+    configured,
+    async send(message) {
+      if (!configured) return;
+      const transporter = nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_SECURE,
+        auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+        tls: { rejectUnauthorized: env.APP_ENV === "production" },
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 20_000,
+      });
+      try {
+        await transporter.sendMail({
+          from: env.EMAIL_FROM,
+          to: message.to,
+          subject: message.subject,
+          text: message.text,
+        });
+      } catch {
+        throw new Error("Email delivery failed");
+      }
+    },
+  };
+}
+
 export function createEmailTransport(env: ServerEnv): EmailTransport {
   if (env.EMAIL_TRANSPORT === "console") {
     return createConsoleEmailTransport(env.EMAIL_FROM);
+  }
+  if (env.EMAIL_TRANSPORT === "smtp") {
+    return createSmtpEmailTransport(env);
   }
   return createDisabledEmailTransport();
 }

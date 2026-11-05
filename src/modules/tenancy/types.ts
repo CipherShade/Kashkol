@@ -15,6 +15,7 @@ export const PERMISSION_RESOURCES = [
   "settings",
   "team",
   "audit",
+  "forms",
 ] as const;
 
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];
@@ -37,6 +38,7 @@ export const GRANTABLE_ACTIONS: Record<PermissionResource, readonly PermissionAc
   settings: ["read", "write"],
   team: ["read"],
   audit: ["read"],
+  forms: ["read", "write"],
 };
 
 /**
@@ -65,6 +67,8 @@ export const SENSITIVE_PERMISSIONS: ReadonlySet<Permission> = new Set([
   "integrations:write",
   "settings:write",
   "audit:read",
+  "forms:read",
+  "forms:write",
 ]);
 
 /** The safe default for a newly invited assistant: no grants at all. */

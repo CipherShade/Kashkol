@@ -4,7 +4,6 @@ import { newRequestId } from "@/lib/http/request-id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import {
-  enqueueNotificationOutbox,
   findActiveQrTokenByHash,
   getEnrollmentForStudent,
   upsertAttendanceMarkTx,
@@ -146,17 +145,6 @@ export async function checkInWithQrToken(
       diff: { sessionId: session.id, studentId: actor.studentId, mark: "present", source: "qr" },
       requestId: reqId,
     });
-
-    try {
-      await enqueueNotificationOutbox(tx, actor.workspaceId, {
-        type: "attendance.marked",
-        sessionId: session.id,
-        studentId: actor.studentId,
-        source: "qr",
-      });
-    } catch {
-      // The attendance record must never depend on the notification path.
-    }
 
     return { sessionId: session.id, sessionStatus: session.status };
   });

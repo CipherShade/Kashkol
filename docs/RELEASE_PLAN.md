@@ -229,6 +229,7 @@ SaaS needs.
 | F-P3-06 | Rich notification channels | Push provider |
 | F-P3-07 | Advanced reporting and academic-year handling | None |
 | F-P3-08 | Duplicate-student detection and roster hygiene | None |
+| F-P3-09 | Forms and surveys foundation (no visual builder) | None |
 
 ### 5.2 Sequenced inside M3
 
@@ -236,7 +237,7 @@ Because P3 contains a genuinely independent item (online exams) and two items th
 without a third party, M3 is split:
 
 - **M3a — Internal only:** F-P3-01 (online exams), F-P3-03 (admin console), F-P3-05 (scale),
-  F-P3-07 (academic year), F-P3-08 (duplicates).
+  F-P3-07 (academic year), F-P3-08 (duplicates), F-P3-09 (forms foundation).
 - **M3b — Gated on contracts:** F-P3-02 (video), F-P3-04 (billing), F-P3-06 (push). Each starts only
   when its provider contract and sandbox access exist. **If a contract does not land, that feature does
   not ship in that release** — it is deferred, and no placeholder is released in its place.
@@ -253,8 +254,10 @@ without a third party, M3 is split:
    hit; downgrades restrict writes without deleting data.
 5. Scale: budgets hold at 10× the seed dataset; the load test report is attached to the release.
 6. Restore drill and backup verification passed for the release cycle.
-7. Arabic QA, accessibility scan, security review, and the full cross-tenant suite re-run.
-8. A published, Arabic and English, privacy notice and terms are live.
+7. Forms: create → edit draft → publish → submit → read responses verified by an integration test;
+   required and conditional visibility enforced server-side; public response route still disabled.
+8. Arabic QA, accessibility scan, security review, and the full cross-tenant suite re-run.
+9. A published, Arabic and English, privacy notice and terms are live.
 
 ---
 
@@ -481,3 +484,4 @@ A requirement is "done" only when **all** of the following hold:
 | F-P3-06 | — | M3b | M3 |
 | F-P3-07 | — | M3a | M3 |
 | F-P3-08 | F6 | M3a | M3 |
+| F-P3-09 | — | M3a | M3 |

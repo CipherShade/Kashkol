@@ -9,11 +9,16 @@ import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import type { SessionListItem } from "@/modules/sessions/repository";
 
-const DAYS_LABEL_ARB = ["سبت", "أحد", "اثن", "ثلاث", "أربع", "خميس", "جمعة"];
-const DAYS_LABEL_ENG = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
+function formatTime(d: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
 
-function formatTime(d: Date) {
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+/** Local calendar day, so a session after local midnight stays on its own day. */
+function localDayKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 function startOfWeekSaturday(date: Date) {
@@ -26,7 +31,7 @@ function startOfWeekSaturday(date: Date) {
 
 export function CalendarView() {
   const locale = useLocale();
-  const t = useTranslations("sessions");
+  const t = useTranslations("Sessions");
   const [offset, setOffset] = useState(0);
   const [items, setItems] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,12 +69,15 @@ export function CalendarView() {
     const days: Array<{ date: Date; label: string; items: SessionListItem[] }> = [];
     const cursor = new Date(from); cursor.setHours(0, 0, 0, 0);
     const end = new Date(to); end.setHours(0, 0, 0, 0);
+    const weekday = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-US", {
+      weekday: "short",
+    });
     while (cursor <= end) {
-      const isoDay = cursor.toISOString().slice(0, 10);
+      const dayKey = localDayKey(cursor);
       days.push({
         date: new Date(cursor),
-        label: (locale === "ar" ? DAYS_LABEL_ARB : DAYS_LABEL_ENG)[cursor.getDay()],
-        items: items.filter((s) => new Date(s.startsAt).toISOString().slice(0, 10) === isoDay),
+        label: weekday.format(cursor),
+        items: items.filter((s) => localDayKey(new Date(s.startsAt)) === dayKey),
       });
       cursor.setDate(cursor.getDate() + 1);
     }
@@ -80,14 +88,14 @@ export function CalendarView() {
     <div className="w-full" dir={locale === "ar" ? "rtl" : "ltr"}>
       <div className="flex items-center justify-between mb-4 gap-3">
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setOffset((o) => o - 1)} aria-label="Previous week">
+          <Button type="button" variant="outline" size="sm" onClick={() => setOffset((o) => o - 1)} aria-label={t("previousWeek")}>
             <Icon name="chevron-right" size={16} className={locale === "ar" ? "rotate-180" : ""} />
           </Button>
           <span className="text-sm font-medium whitespace-nowrap">
             {from.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", { month: "short", day: "numeric" })} —{" "}
             {to.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", { month: "short", day: "numeric", year: "numeric" })}
           </span>
-          <Button type="button" variant="outline" size="sm" onClick={() => setOffset((o) => o + 1)} aria-label="Next week">
+          <Button type="button" variant="outline" size="sm" onClick={() => setOffset((o) => o + 1)} aria-label={t("nextWeek")}>
             <Icon name="chevron-left" size={16} className={locale === "ar" ? "rotate-180" : ""} />
           </Button>
         </div>
@@ -108,7 +116,7 @@ export function CalendarView() {
                 </div>
                 <div className="flex flex-col gap-1.5 mt-1">
                   {day.items.length === 0 && (
-                    <span className="text-[11px] text-muted-foreground italic">{t("noSessions") || "No sessions"}</span>
+                    <span className="text-[11px] text-muted-foreground italic">{t("noSessions")}</span>
                   )}
                   {day.items.map((s) => (
                     <Link
@@ -118,9 +126,9 @@ export function CalendarView() {
                       style={{ borderInlineStartColor: s.groupColor || "#6366f1", borderInlineStartWidth: "3px" }}
                     >
                       <div className="font-semibold truncate">{s.groupName}</div>
-                      <div className="opacity-80 text-[11px]">{formatTime(new Date(s.startsAt))} — {s.endsAt ? formatTime(new Date(s.endsAt)) : ""}</div>
+                      <div className="opacity-80 text-[11px]">{formatTime(new Date(s.startsAt), locale)} — {s.endsAt ? formatTime(new Date(s.endsAt), locale) : ""}</div>
                       {s.status !== "scheduled" && (
-                        <div className="text-[10px] font-medium opacity-70">{s.status}</div>
+                        <div className="text-[10px] font-medium opacity-70">{t(s.status)}</div>
                       )}
                     </Link>
                   ))}

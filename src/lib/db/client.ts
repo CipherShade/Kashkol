@@ -1,3 +1,4 @@
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { getServerEnv } from "@/lib/config/env";
@@ -26,8 +27,12 @@ export function getDb(): PrismaClient {
 
   try {
     const env = getServerEnv();
-    const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+    const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 20 });
+    const adapter = new PrismaPg(pool);
     client = new PrismaClient({ adapter });
+    if (process.env.NODE_ENV !== "production") {
+      globalForPrisma.__kashkolPrisma = client;
+    }
   } catch {
     console.warn("[AI Studio] Database not connected — using mock");
     const noOp = {

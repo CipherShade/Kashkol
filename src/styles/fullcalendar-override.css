@@ -1,0 +1,70 @@
+/* FullCalendar premium override — resolves from src/styles/tokens.css */
+.fc {
+  font-family: var(--font-ui), system-ui, sans-serif;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .fc,
+[data-theme="dark"] .fc {
+  --fc-page-bg-color: var(--surface);
+  --fc-neutral-bg-color: var(--surface-2);
+  --fc-border-color: var(--border);
+  --fc-event-bg-color: var(--primary-tint);
+  --fc-event-border-color: var(--primary);
+  --fc-today-bg-color: rgba(28,82,35,0.08);
+  --fc-button-active-bg-color: var(--primary);
+  --fc-button-hover-bg-color: var(--primary-tint);
+  --fc-button-active-border-color: var(--primary);
+  --fc-button-hover-border-color: var(--primary-strong);
+  --fc-list-event-text-color: var(--ink);
+  --fc-list-event-bg-color: transparent;
+}
+
+.fc-theme-standard td,
+.fc-theme-standard th {
+  border-color: var(--border);
+}
+
+.fc-theme-standard .fc-today {
+  background: rgba(28,82,35,0.06);
+}
+
+.fc-event {
+  border-radius: 10px !important;
+  border: 1px solid transparent !important;
+  box-shadow: var(--shadow-sm) !important;
+  font-size: 0.82rem !important;
+  transition: background-color 150ms ease;
+}
+
+.fc-event:hover {
+  filter: brightness(1.08);
+}
+
+.fc-timegrid-slot-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.fc-col-header-cell-cushion {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.fc-button-primary {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+}
+
+.fc-button-primary:hover {
+  background: var(--primary-strong) !important;
+}
+
+.fc-button .fc-icon {
+  color: inherit;
+}

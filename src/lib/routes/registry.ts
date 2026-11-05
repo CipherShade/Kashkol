@@ -414,7 +414,8 @@ export const ROUTES: RouteEntry[] = [
     methods: ["GET", "POST"],
     access: "workspace",
     tenantScoped: true,
-    description: "Manage authorized guardians for students.",
+    description:
+      "List a student's guardians (students:read) or add one (students:write) with an audit event in the same transaction.",
   },
   {
     path: "/api/messaging/logs",
@@ -435,7 +436,8 @@ export const ROUTES: RouteEntry[] = [
     methods: ["POST"],
     access: "session",
     tenantScoped: false,
-    description: "Process message outbox batch (worker).",
+    description:
+      "Process a workspace message outbox batch, authenticated by a staff session or the dedicated messaging worker token.",
   },
   {
     path: "/api/messaging/settings",
@@ -449,7 +451,8 @@ export const ROUTES: RouteEntry[] = [
     methods: ["GET", "POST"],
     access: "public",
     tenantScoped: false,
-    description: "Provider webhook with signature verification.",
+    description:
+      "Verify Meta webhook signatures and challenges. Verified events are acknowledged but not processed yet.",
   },
   {
     path: "/api/students/[studentId]/portal-access",
@@ -592,6 +595,63 @@ export const ROUTES: RouteEntry[] = [
     tenantScoped: true,
     description:
       "Verify portal grant entitlement and publication status before issuing a short-lived signed video playback token.",
+  },
+  {
+    path: "/api/forms",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "List workspace forms, or create a new draft form with sections, questions, and conditional logic.",
+  },
+  {
+    path: "/api/forms/[formId]",
+    methods: ["GET", "PATCH"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Read a form definition, or update a draft form's sections, questions, and logic.",
+  },
+  {
+    path: "/api/forms/[formId]/settings",
+    methods: ["PATCH"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Update form settings such as public flag, slug, submission mode, and acceptance window.",
+  },
+  {
+    path: "/api/forms/[formId]/publish",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Publish a draft form so it can receive responses.",
+  },
+  {
+    path: "/api/forms/[formId]/archive",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Archive a form so it no longer accepts responses.",
+  },
+  {
+    path: "/api/forms/[formId]/duplicate",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Duplicate a form as a new draft, copying its definition without submissions.",
+  },
+  {
+    path: "/api/forms/[formId]/submissions",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "List response submissions for a form.",
+  },
+  {
+    path: "/api/forms/[formId]/submissions/[submissionId]",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Read one form submission and its answers.",
   },
   {
     path: "/api/exams",

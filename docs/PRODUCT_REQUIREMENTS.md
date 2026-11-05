@@ -1303,6 +1303,46 @@ students, so that my roster is not wrong.
 
 ---
 
+### F-P3-09 — Forms and surveys foundation
+
+**User story:** As a teacher, I want to collect structured answers from students or parents with a
+form, so that I do not have to reconcile free-text replies by hand.
+
+This flow covers the **server-side foundation only**. A visual form builder is deliberately out of
+scope; a later flow adds it on top of these endpoints and data.
+
+**Acceptance criteria**
+1. A member with `forms:write` can create a draft form with a title, description, submission mode,
+   public-form settings, sections, and ordered questions.
+2. A form supports the question types `short_answer`, `long_answer`, `multiple_choice`,
+   `checkboxes`, `dropdown`, `number`, `date`, `time`, `file_upload`, `rating`, and `linear_scale`,
+   each with type-specific configuration validated on the server.
+3. A draft may be edited, duplicated into a new draft, published once it has at least one question,
+   and archived. Published and archived forms reject definition edits; archived forms reject
+   responses.
+4. A published form may be marked public and receives a globally unique slug. The public response
+   route is **not part of this flow** and stays disabled until a later flow adds it.
+5. Conditional logic is stored relationally and supports `show`, `hide`, and `require` actions
+   against a question or a whole section, with `equals`, `not_equals`, `contains`, `is_answered`,
+   `is_not_answered`, `greater_than`, and `less_than` operators.
+6. Submission adds a response only when the form is published and accepting responses. Required
+   questions are enforced only while they are visible; answers to hidden questions are not stored.
+7. Identified submissions link to an existing `student` and/or submitting user. Anonymous
+   submissions leave both identity columns null. A submission whose identity does not match the
+   form's mode is rejected.
+8. A file-upload answer references existing `file` rows in the same workspace that are neither
+   archived nor deleted and have a `clean` scan status. No separate file store or upload bypass is
+   introduced.
+9. Every answer value is validated against its question type and configuration before it is stored.
+10. All form and submission reads require `forms:read`; all definition and lifecycle writes require
+    `forms:write`. Both permissions are sensitive and grantable to assistants by the owner.
+11. Every form mutation and every received submission writes an audit event in the same transaction.
+12. No response, statistic, public link, or delivery state is fabricated. There is no seeded demo
+    form and no claim that a form was shared or delivered.
+
+---
+
+
 ## 9. Privacy-sensitive data register
 
 | Data | Class | Why sensitive | Controls |

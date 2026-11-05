@@ -644,6 +644,25 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | `academic_term` | Reserved — Start/end dates per workspace and grade |
 | `student_merge` | Reserved — Merge record with both original ids (the tombstone on `student.merged_into_id` is the row) |
 
+### 5.11 Forms tables (`20261104120000_forms_foundation`, `F-P3-09`)
+
+| Table | Purpose |
+|---|---|
+| `form` | Tenant-owned form definition: `title`, `description`, `status` (`draft` / `published` / `archived`), `submission_mode` (`identified` / `anonymous`), `is_public`, unique nullable `public_slug`, `accepting_responses`, `confirmation_message`, `settings_json`, `created_by_user_id`, and `published_at` / `archived_at` timestamps |
+| `form_section` | Ordered section/page of a form: `title`, `description`, `order_index`, and `page_break_before`. Unique `(form_id, order_index)` |
+| `form_question` | Ordered question in a form or section: `question_type` (11 supported types), `prompt`, `description`, `is_required`, and type-specific `config_json`. Unique `(form_id, order_index)`; a null `section_id` places the question before any section |
+| `form_question_option` | Ordered choice label for `multiple_choice`, `checkboxes`, and `dropdown`. Unique `(question_id, order_index)` |
+| `form_question_logic` | Conditional rule: source question, `operator`, nullable `comparison_json`, `action` (`show` / `hide` / `require`), and exactly one target (`target_question_id` or `target_section_id`) enforced by a check constraint |
+| `form_submission` | One response: `submission_mode`, optional `student_id` and `submitted_by_user_id` (both null for anonymous), `submitted_at`, and `archived_at`. No stored aggregate |
+| `form_answer` | One stored answer per `(submission_id, question_id)`, with a validated `value_json`. File ids are not duplicated here |
+| `form_answer_file` | Join between a file-upload answer and an existing `file` row in the same workspace. Composite primary key `(workspace_id, answer_id, file_id)`; no separate file store |
+
+Every table has a non-null `workspace_id`, a composite tenant foreign key, an index on `workspace_id`,
+and forced row-level security. A submission with an identity mismatch against its form's mode is
+rejected, and an answer to a hidden conditional question is discarded rather than stored. The data
+model deliberately adds **no** parallel student or user table.
+
+
 ---
 
 ## 6. Tenancy enforcement in the schema
