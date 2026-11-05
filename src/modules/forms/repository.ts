@@ -1,5 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
-import { withScope } from "@/lib/db/scope";
+import { withScope, withPublicScope } from "@/lib/db/scope";
 import type { Scope } from "@/modules/tenancy/types";
 import type { FormListQuery, FormSubmissionQuery } from "./schemas";
 
@@ -106,15 +106,35 @@ export async function findFormDetail(scope: Pick<Scope, "workspaceId">, formId: 
   return withScope(scope, (tx) => findFormDetailTx(tx, scope.workspaceId, formId));
 }
 
-export function findFormDetailTx(
-  tx: Prisma.TransactionClient,
-  workspaceId: string,
+export async function findFormDetailByPublicId(
   formId: string,
 ): Promise<FormDetailRow | null> {
-  return tx.form.findFirst({
-    where: { id: formId, workspaceId },
-    select: formDetailSelect,
+  return withPublicScope(async (tx) => {
+    return tx.form.findFirst({
+      where: { id: formId, archivedAt: null },
+      select: formDetailSelect,
+    });
   });
+}
+
+export function findFormDetailTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string | null,
+  formId: string,
+): Promise<FormDetailRow | null> {
+  if (workspaceId === null) {
+    // Public form lookup - find by ID without workspace constraint
+    return tx.form.findFirst({
+      where: { id: formId, archivedAt: null },
+      select: formDetailSelect,
+    });
+  } else {
+    // Regular form lookup with workspace constraint
+    return tx.form.findFirst({
+      where: { id: formId, workspaceId },
+      select: formDetailSelect,
+    });
+  }
 }
 
 export function findFormByPublicSlugTx(

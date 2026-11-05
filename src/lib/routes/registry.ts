@@ -654,6 +654,13 @@ export const ROUTES: RouteEntry[] = [
     description: "Read one form submission and its answers.",
   },
   {
+    path: "/api/forms/public/[formId]/submit",
+    methods: ["GET", "POST"],
+    access: "public",
+    tenantScoped: false,
+    description: "Public form viewing and submission endpoint.",
+  },
+  {
     path: "/api/exams",
     methods: ["GET", "POST"],
     access: "workspace",

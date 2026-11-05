@@ -94,4 +94,21 @@ export async function withPlatformAdminScope<T>(
   });
 }
 
+/**
+ * Run a transaction WITHOUT setting any tenant GUCs.
+ *
+ * This is used for public form lookups where the form ID is known and
+ * the form must be published and accepting responses. No workspace
+ * context is available or required for the initial lookup.
+ */
+export async function withPublicScope<T>(
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return getDb().$transaction(async (tx) => {
+    // No GUC set - RLS will be active but will match zero rows for tenant tables
+    // We only query the form table directly by ID
+    return fn(tx);
+  });
+}
+
 

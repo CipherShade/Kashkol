@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/http/errors";
 import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
-import { withScope } from "@/lib/db/scope";
+import { withScope, withPublicScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { authorize, type Scope } from "@/modules/tenancy/types";
@@ -805,220 +805,261 @@ export async function submitFormResponse(
   request?: RequestContext,
   now: Date = new Date(),
 ) {
-  // Member-facing submission path. A future public form route will call the
-  // same validation from a public scope; it must not bypass it.
+  // Member-facing submission path. Requires staff session and workspace scope.
   authorize(scope, "forms", "read");
 
   return withScope(scope, async (tx) => {
     await assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, { kind: "forms" });
     const form = await findFormDetailTx(tx, scope.workspaceId, formId);
     if (!form) throw new AppError("NOT_FOUND");
-    if (form.status !== "published" || !form.acceptingResponses || form.archivedAt) {
-      throw new AppError("CONFLICT", { messageKey: "errors.formNotAcceptingResponses" });
-    }
+    return processFormSubmission(tx, form, input, scope.workspaceId, request, now);
+  });
+}
 
-    const studentId = input.studentId ?? null;
-    const submittedByUserId = input.submittedByUserId ?? null;
-    if (form.submissionMode === "anonymous" && (studentId || submittedByUserId)) {
-      throw new AppError("CONFLICT", {
-        messageKey: "errors.formSubmissionIdentityMismatch",
+/**
+ * Public form submission path. No authentication or workspace scope required.
+ *
+ * The form is looked up by ID without a workspace constraint, then the
+ * submission runs within the form's own workspace scope. This ensures:
+ * - No workspace ID is trusted from the client (derived from the form itself)
+ * - Cross-tenant access is impossible (form lookup is by ID only, then scoped)
+ * - All validation, conditional logic, and security checks are shared
+ *   with the member-facing path via `processFormSubmission`.
+ */
+export async function submitFormResponsePublic(
+  formId: string,
+  input: SubmitFormResponseInput,
+  request?: RequestContext,
+  now: Date = new Date(),
+) {
+  return withPublicScope(async (tx) => {
+    const form = await findFormDetailTx(tx, null, formId);
+    if (!form) throw new AppError("NOT_FOUND");
+    return processFormSubmission(tx, form, input, form.workspaceId, request, now);
+  });
+}
+
+/**
+ * Shared form submission validation and creation logic.
+ *
+ * Runs within an active workspace transaction. Called by both the member-facing
+ * `submitFormResponse` and the public `submitFormResponsePublic`.
+ */
+async function processFormSubmission(
+  tx: Parameters<Parameters<typeof withScope>[1]>[0],
+  form: NonNullable<Awaited<ReturnType<typeof findFormDetailTx>>>,
+  input: SubmitFormResponseInput,
+  workspaceId: string,
+  request?: RequestContext,
+  now: Date = new Date(),
+) {
+  const formId = form.id;
+
+  if (form.status !== "published" || !form.acceptingResponses || form.archivedAt) {
+    throw new AppError("CONFLICT", { messageKey: "errors.formNotAcceptingResponses" });
+  }
+
+  const studentId = input.studentId ?? null;
+  const submittedByUserId = input.submittedByUserId ?? null;
+  if (form.submissionMode === "anonymous" && (studentId || submittedByUserId)) {
+    throw new AppError("CONFLICT", {
+      messageKey: "errors.formSubmissionIdentityMismatch",
+    });
+  }
+  if (form.submissionMode === "identified" && !studentId && !submittedByUserId) {
+    throw new AppError("CONFLICT", {
+      messageKey: "errors.formSubmissionIdentityMismatch",
+    });
+  }
+
+  if (studentId) {
+    const student = await tx.student.findFirst({
+      where: { id: studentId, workspaceId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!student) throw new AppError("NOT_FOUND");
+  }
+
+  const questionById = new Map(form.questions.map((question) => [question.id, question]));
+  const seen = new Set<string>();
+  for (const answer of input.answers) {
+    if (seen.has(answer.questionId)) {
+      throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formDuplicateAnswer" });
+    }
+    seen.add(answer.questionId);
+    if (!questionById.has(answer.questionId)) {
+      throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formUnknownQuestion" });
+    }
+  }
+
+  const answers = toAnswerMap(input);
+  const visibility = computeFormVisibility(
+    form.sections,
+    form.questions.map((question) => ({
+      id: question.id,
+      sectionId: question.sectionId,
+      isRequired: question.isRequired,
+      questionType: question.questionType,
+    })),
+    toLogicRules(form),
+    answers,
+  );
+
+  for (const question of form.questions) {
+    if (!visibility.requiredQuestionIds.has(question.id)) continue;
+    if (answerIsEmpty(answers.get(question.id))) {
+      throw new AppError("VALIDATION_FAILED", {
+        messageKey: "errors.formAnswerRequired",
+        fields: { [question.id]: ["required"] },
       });
     }
-    if (form.submissionMode === "identified" && !studentId && !submittedByUserId) {
-      throw new AppError("CONFLICT", {
-        messageKey: "errors.formSubmissionIdentityMismatch",
-      });
+  }
+
+  const fileIds = new Set<string>();
+  const validAnswers: Array<{
+    questionId: string;
+    value: LogicAnswer;
+    fileIds: string[];
+  }> = [];
+  let ignoredHiddenAnswerCount = 0;
+
+  for (const answer of input.answers) {
+    const question = questionById.get(answer.questionId);
+    if (!question) continue;
+    if (!visibility.visibleQuestionIds.has(question.id)) {
+      ignoredHiddenAnswerCount += 1;
+      continue;
     }
 
-    if (studentId) {
-      const student = await tx.student.findFirst({
-        where: { id: studentId, workspaceId: scope.workspaceId, archivedAt: null },
-        select: { id: true },
-      });
-      if (!student) throw new AppError("NOT_FOUND");
-    }
-
-    const questionById = new Map(form.questions.map((question) => [question.id, question]));
-    const seen = new Set<string>();
-    for (const answer of input.answers) {
-      if (seen.has(answer.questionId)) {
-        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formDuplicateAnswer" });
-      }
-      seen.add(answer.questionId);
-      if (!questionById.has(answer.questionId)) {
-        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formUnknownQuestion" });
-      }
-    }
-
-    const answers = toAnswerMap(input);
-    const visibility = computeFormVisibility(
-      form.sections,
-      form.questions.map((question) => ({
+    const value = answer.value as LogicAnswer;
+    const validation = validateAnswerValue(
+      {
         id: question.id,
-        sectionId: question.sectionId,
-        isRequired: question.isRequired,
         questionType: question.questionType,
-      })),
-      toLogicRules(form),
-      answers,
+        config: question.configJson,
+        optionIds: new Set(question.options.map((option) => option.id)),
+      },
+      value,
     );
-
-    for (const question of form.questions) {
-      if (!visibility.requiredQuestionIds.has(question.id)) continue;
-      if (answerIsEmpty(answers.get(question.id))) {
-        throw new AppError("VALIDATION_FAILED", {
-          messageKey: "errors.formAnswerRequired",
-          fields: { [question.id]: ["required"] },
-        });
-      }
-    }
-
-    const fileIds = new Set<string>();
-    const validAnswers: Array<{
-      questionId: string;
-      value: LogicAnswer;
-      fileIds: string[];
-    }> = [];
-    let ignoredHiddenAnswerCount = 0;
-
-    for (const answer of input.answers) {
-      const question = questionById.get(answer.questionId);
-      if (!question) continue;
-      if (!visibility.visibleQuestionIds.has(question.id)) {
-        ignoredHiddenAnswerCount += 1;
-        continue;
-      }
-
-      const value = answer.value as LogicAnswer;
-      const validation = validateAnswerValue(
-        {
-          id: question.id,
-          questionType: question.questionType,
-          config: question.configJson,
-          optionIds: new Set(question.options.map((option) => option.id)),
-        },
-        value,
-      );
-      if (!validation.ok) {
-        throw new AppError("VALIDATION_FAILED", {
-          messageKey: validation.messageKey,
-          fields: { [question.id]: [validation.messageKey.replace("errors.", "")] },
-        });
-      }
-
-      const answerFileIds = question.questionType === "file_upload" ? (value.fileIds ?? []) : [];
-      for (const fileId of answerFileIds) fileIds.add(fileId);
-      validAnswers.push({
-        questionId: question.id,
-        value,
-        fileIds: answerFileIds,
+    if (!validation.ok) {
+      throw new AppError("VALIDATION_FAILED", {
+        messageKey: validation.messageKey,
+        fields: { [question.id]: [validation.messageKey.replace("errors.", "")] },
       });
     }
 
-    const fileRows =
-      fileIds.size > 0
-        ? await tx.file.findMany({
-            where: {
-              workspaceId: scope.workspaceId,
-              id: { in: [...fileIds] },
-              archivedAt: null,
-              deletedAt: null,
-              scanStatus: "clean",
-            },
-            select: { id: true, mime: true, sizeBytes: true },
-          })
-        : [];
-    if (fileRows.length !== fileIds.size) {
-      throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-    }
-    const fileById = new Map(fileRows.map((file) => [file.id, file]));
+    const answerFileIds = question.questionType === "file_upload" ? (value.fileIds ?? []) : [];
+    for (const fileId of answerFileIds) fileIds.add(fileId);
+    validAnswers.push({
+      questionId: question.id,
+      value,
+      fileIds: answerFileIds,
+    });
+  }
 
-    for (const answer of validAnswers) {
-      if (answer.fileIds.length === 0) continue;
-      const question = questionById.get(answer.questionId);
-      const config = asRecord(question?.configJson);
-      const maxSizeBytes =
-        typeof config.maxSizeBytes === "number" ? config.maxSizeBytes : 10 * 1024 * 1024;
-      const allowedMimeTypes = Array.isArray(config.allowedMimeTypes)
-        ? config.allowedMimeTypes.filter((mime): mime is string => typeof mime === "string")
-        : [];
-      for (const fileId of answer.fileIds) {
-        const file = fileById.get(fileId);
-        if (!file)
-          throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-        if (file.sizeBytes > maxSizeBytes) {
-          throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-        }
-        if (allowedMimeTypes.length > 0 && !allowedMimeTypes.includes(file.mime)) {
-          throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-        }
+  const fileRows =
+    fileIds.size > 0
+      ? await tx.file.findMany({
+          where: {
+            workspaceId,
+            id: { in: [...fileIds] },
+            archivedAt: null,
+            deletedAt: null,
+            scanStatus: "clean",
+          },
+          select: { id: true, mime: true, sizeBytes: true },
+        })
+      : [];
+  if (fileRows.length !== fileIds.size) {
+    throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
+  }
+  const fileById = new Map(fileRows.map((file) => [file.id, file]));
+
+  for (const answer of validAnswers) {
+    if (answer.fileIds.length === 0) continue;
+    const question = questionById.get(answer.questionId);
+    const config = asRecord(question?.configJson);
+    const maxSizeBytes =
+      typeof config.maxSizeBytes === "number" ? config.maxSizeBytes : 10 * 1024 * 1024;
+    const allowedMimeTypes = Array.isArray(config.allowedMimeTypes)
+      ? config.allowedMimeTypes.filter((mime): mime is string => typeof mime === "string")
+      : [];
+    for (const fileId of answer.fileIds) {
+      const file = fileById.get(fileId);
+      if (!file)
+        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
+      if (file.sizeBytes > maxSizeBytes) {
+        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
+      }
+      if (allowedMimeTypes.length > 0 && !allowedMimeTypes.includes(file.mime)) {
+        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
       }
     }
+  }
 
-    const submission = await tx.formSubmission.create({
-      data: {
-        id: newUuidV7(),
-        workspaceId: scope.workspaceId,
-        formId,
-        submissionMode: form.submissionMode,
-        studentId,
-        submittedByUserId,
-        submittedAt: now,
-      },
-      select: { id: true, submittedAt: true },
-    });
+  const submission = await tx.formSubmission.create({
+    data: {
+      id: newUuidV7(),
+      workspaceId,
+      formId,
+      submissionMode: form.submissionMode,
+      studentId,
+      submittedByUserId,
+      submittedAt: now,
+    },
+    select: { id: true, submittedAt: true },
+  });
 
-    const answerRows = validAnswers.map((answer) => {
-      const value = { ...answer.value };
-      if (answer.fileIds.length > 0) delete value.fileIds;
-      return {
-        id: newUuidV7(),
-        workspaceId: scope.workspaceId,
-        submissionId: submission.id,
-        questionId: answer.questionId,
-        valueJson: jsonObject(value),
-      };
-    });
-
-    if (answerRows.length > 0) {
-      await tx.formAnswer.createMany({ data: answerRows });
-    }
-
-    const answerFileRows = validAnswers.flatMap((answer, index) =>
-      answer.fileIds.map((fileId) => ({
-        workspaceId: scope.workspaceId,
-        answerId: answerRows[index].id,
-        fileId,
-      })),
-    );
-    if (answerFileRows.length > 0) {
-      await tx.formAnswerFile.createMany({ data: answerFileRows });
-    }
-
-    await writeAuditEvent(tx, {
-      workspaceId: scope.workspaceId,
-      actorUserId: scope.actorUserId,
-      actorDisplayName: scope.actorDisplayName,
-      actorType: "user",
-      entityType: "form_submission",
-      entityId: submission.id,
-      action: formAuditActions.submissionReceived,
-      diff: {
-        formId,
-        submissionMode: form.submissionMode,
-        answerCount: answerRows.length,
-        ignoredHiddenAnswerCount,
-      },
-      ...auditContext(request),
-    });
-
+  const answerRows = validAnswers.map((answer) => {
+    const value = { ...answer.value };
+    if (answer.fileIds.length > 0) delete value.fileIds;
     return {
-      id: submission.id,
-      submittedAt: submission.submittedAt,
-      answerCount: answerRows.length,
-      ignoredHiddenAnswerCount,
+      id: newUuidV7(),
+      workspaceId,
+      submissionId: submission.id,
+      questionId: answer.questionId,
+      valueJson: jsonObject(value),
     };
   });
+
+  if (answerRows.length > 0) {
+    await tx.formAnswer.createMany({ data: answerRows });
+  }
+
+  const answerFileRows = validAnswers.flatMap((answer, index) =>
+    answer.fileIds.map((fileId) => ({
+      workspaceId,
+      answerId: answerRows[index].id,
+      fileId,
+    })),
+  );
+  if (answerFileRows.length > 0) {
+    await tx.formAnswerFile.createMany({ data: answerFileRows });
+  }
+
+  await writeAuditEvent(tx, {
+    workspaceId,
+    actorUserId: submittedByUserId ?? null,
+    actorDisplayName: submittedByUserId ?? "",
+    actorType: "user",
+    entityType: "form_submission",
+    entityId: submission.id,
+    action: formAuditActions.submissionReceived,
+    diff: {
+      formId,
+      submissionMode: form.submissionMode,
+      answerCount: answerRows.length,
+      ignoredHiddenAnswerCount,
+    },
+    ...auditContext(request),
+  });
+
+  return {
+    id: submission.id,
+    submittedAt: submission.submittedAt,
+    answerCount: answerRows.length,
+    ignoredHiddenAnswerCount,
+  };
 }
 
 export async function listFormSubmissions(scope: Scope, query: FormSubmissionQuery) {
