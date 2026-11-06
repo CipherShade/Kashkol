@@ -661,6 +661,13 @@ export const ROUTES: RouteEntry[] = [
     description: "Public form viewing and submission endpoint.",
   },
   {
+    path: "/api/forms/public/[formId]/upload",
+    methods: ["POST"],
+    access: "public",
+    tenantScoped: false,
+    description: "Public form file upload endpoint.",
+  },
+  {
     path: "/api/exams",
     methods: ["GET", "POST"],
     access: "workspace",

@@ -95,18 +95,23 @@ export async function withPlatformAdminScope<T>(
 }
 
 /**
- * Run a transaction WITHOUT setting any tenant GUCs.
+ * Run a transaction scoped to one public form by ID.
  *
- * This is used for public form lookups where the form ID is known and
- * the form must be published and accepting responses. No workspace
- * context is available or required for the initial lookup.
+ * The GUC `app.public_form_id` is set transaction-local so a pooled connection
+ * cannot carry one public form's scope into the next request. Outside this
+ * helper the public SELECT policies match zero rows: the failure mode is
+ * closed, not open (ADR-0006, ADR-0023).
+ *
+ * The form ID is the only input: the workspace is derived from the form row
+ * itself, never from a URL parameter, a body field, or a client-controlled
+ * header.
  */
-export async function withPublicScope<T>(
+export async function withPublicFormScope<T>(
+  formId: string,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
   return getDb().$transaction(async (tx) => {
-    // No GUC set - RLS will be active but will match zero rows for tenant tables
-    // We only query the form table directly by ID
+    await tx.$executeRaw`SELECT set_config('app.public_form_id', ${formId}, true)`;
     return fn(tx);
   });
 }

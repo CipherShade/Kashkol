@@ -435,6 +435,8 @@ export const formAnswerInputSchema = z.object({
 
 export const submitFormResponseSchema = z
   .object({
+    submissionToken: z.string().uuid().nullable().optional(),
+    dedupeKey: z.string().nullable().optional(),
     studentId: z.string().uuid().nullable().optional(),
     submittedByUserId: z.string().trim().min(1).max(200).nullable().optional(),
     answers: z.array(formAnswerInputSchema).max(500).default([]),
@@ -452,6 +454,26 @@ export const submitFormResponseSchema = z
       seen.add(answer.questionId);
     });
   });
+
+export const formPublicSubmissionSchema = z
+  .object({
+    submissionToken: z.string().min(1).max(64).nullable().optional(),
+    dedupeKey: z.string().min(8).max(128).nullable().optional(),
+    studentId: z.string().uuid().nullable().optional(),
+    submittedByUserId: z.string().trim().min(1).max(200).nullable().optional(),
+    answers: z.array(formAnswerInputSchema).max(500).default([]),
+  })
+  .strict();
+
+export const formPublicUploadSchema = z.object({
+  questionId: z.string().uuid(),
+  fileIds: z.array(z.string().uuid()).max(5),
+  uploadSessionHash: z.string().min(1).max(128).nullable().optional(),
+  dedupeKey: z.string().min(8).max(128).nullable().optional(),
+});
+
+export type FormPublicSubmission = z.infer<typeof formPublicSubmissionSchema>;
+export type FormPublicUpload = z.infer<typeof formPublicUploadSchema>;
 
 export const formSubmissionQuerySchema = z.object({
   formId: z.string().uuid().optional(),

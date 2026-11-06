@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/http/errors";
 import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
-import { withScope, withPublicScope } from "@/lib/db/scope";
+import { withScope, withPublicFormScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { authorize, type Scope } from "@/modules/tenancy/types";
@@ -832,10 +832,12 @@ export async function submitFormResponsePublic(
   request?: RequestContext,
   now: Date = new Date(),
 ) {
-  return withPublicScope(async (tx) => {
-    const form = await findFormDetailTx(tx, null, formId);
+  return withPublicFormScope(formId, async (outerTx) => {
+    const form = await findFormDetailTx(outerTx, null, formId);
     if (!form) throw new AppError("NOT_FOUND");
-    return processFormSubmission(tx, form, input, form.workspaceId, request, now);
+    return withScope({ workspaceId: form.workspaceId }, async (innerTx) => {
+      return processFormSubmission(innerTx, form, input, form.workspaceId, request, now);
+    });
   });
 }
 
@@ -859,8 +861,50 @@ async function processFormSubmission(
     throw new AppError("CONFLICT", { messageKey: "errors.formNotAcceptingResponses" });
   }
 
+  // Idempotency: check for existing submission by token
+  if (input.submissionToken) {
+    const existing = await tx.formSubmission.findFirst({
+      where: { formId, submissionToken: input.submissionToken },
+      select: { id: true, submittedAt: true, _count: { select: { answers: true } } },
+    });
+    if (existing) {
+      return {
+        id: existing.id,
+        submittedAt: existing.submittedAt,
+        answerCount: existing._count.answers,
+        ignoredHiddenAnswerCount: 0, // Cannot reconstruct accurately for idempotent return
+      };
+    }
+  }
+
   const studentId = input.studentId ?? null;
   const submittedByUserId = input.submittedByUserId ?? null;
+
+  // Identified submission deduplication
+  if (form.submissionMode === "identified" && studentId && !input.dedupeKey) {
+    const existing = await tx.formSubmission.findFirst({
+      where: { formId, studentId, dedupeKey: null },
+      select: { id: true },
+    });
+    if (existing && !asRecord(form.settingsJson).allowMultipleSubmissions) {
+      throw new AppError("CONFLICT", { messageKey: "errors.formAlreadySubmitted" });
+    }
+  }
+
+  if (input.dedupeKey) {
+    const existing = await tx.formSubmission.findFirst({
+      where: { formId, dedupeKey: input.dedupeKey },
+      select: { id: true, submittedAt: true, _count: { select: { answers: true } } },
+    });
+    if (existing) {
+      return {
+        id: existing.id,
+        submittedAt: existing.submittedAt,
+        answerCount: existing._count.answers,
+        ignoredHiddenAnswerCount: 0,
+      };
+    }
+  }
   if (form.submissionMode === "anonymous" && (studentId || submittedByUserId)) {
     throw new AppError("CONFLICT", {
       messageKey: "errors.formSubmissionIdentityMismatch",
@@ -966,6 +1010,14 @@ async function processFormSubmission(
             archivedAt: null,
             deletedAt: null,
             scanStatus: "clean",
+            // Public submissions must use files recorded via FormUpload provenance
+            ...(submittedByUserId === null
+              ? {
+                  formUploads: {
+                    some: { formId, workspaceId },
+                  },
+                }
+              : {}),
           },
           select: { id: true, mime: true, sizeBytes: true },
         })
@@ -1005,6 +1057,8 @@ async function processFormSubmission(
       submissionMode: form.submissionMode,
       studentId,
       submittedByUserId,
+      submissionToken: input.submissionToken,
+      dedupeKey: input.dedupeKey,
       submittedAt: now,
     },
     select: { id: true, submittedAt: true },

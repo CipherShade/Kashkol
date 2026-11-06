@@ -216,6 +216,7 @@ enum FileScope {
   teacher_only
   groups
   students
+  form_upload
 
   @@map("file_scope")
 }
@@ -625,6 +626,7 @@ model Workspace {
   formSubmissions     FormSubmission[]
   formAnswers         FormAnswer[]
   formAnswerFiles     FormAnswerFile[]
+  formUploads         FormUpload[]
 
   @@map("workspace")
 }
@@ -1484,6 +1486,7 @@ model File {
   studentAccesses FileStudentAccess[]
   homeworkResources HomeworkResource[]
   formAnswerFiles FormAnswerFile[]
+  formUploads    FormUpload[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1944,6 +1947,7 @@ model Form {
   questions   FormQuestion[]
   logicRules  FormQuestionLogic[]
   submissions FormSubmission[]
+  uploads     FormUpload[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1994,6 +1998,7 @@ model FormQuestion {
   sourceLogicRules  FormQuestionLogic[]  @relation("FormLogicSource")
   targetLogicRules  FormQuestionLogic[]  @relation("FormLogicTarget")
   answers           FormAnswer[]
+  uploads           FormUpload[]
 
   @@unique([workspaceId, id])
   @@unique([formId, orderIndex])
@@ -2054,6 +2059,8 @@ model FormSubmission {
   submissionMode    FormSubmissionMode @map("submission_mode")
   studentId         String?            @map("student_id") @db.Uuid
   submittedByUserId String?            @map("submitted_by_user_id")
+  submissionToken   String?            @map("submission_token")
+  dedupeKey         String?            @map("dedupe_key")
   submittedAt       DateTime           @default(now()) @map("submitted_at") @db.Timestamptz(6)
   archivedAt        DateTime?          @map("archived_at") @db.Timestamptz(6)
   createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -2065,6 +2072,8 @@ model FormSubmission {
   answers   FormAnswer[]
 
   @@unique([workspaceId, id])
+  @@unique([formId, submissionToken])
+  @@unique([formId, dedupeKey])
   @@index([workspaceId])
   @@index([workspaceId, formId, submittedAt])
   @@index([workspaceId, studentId])
@@ -2102,7 +2111,30 @@ model FormAnswerFile {
   file      File       @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
 
   @@id([workspaceId, answerId, fileId])
+  @@unique([workspaceId, fileId])
   @@index([workspaceId, fileId])
   @@map("form_answer_file")
+}
+
+model FormUpload {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  workspaceId       String       @map("workspace_id") @db.Uuid
+  formId            String       @map("form_id") @db.Uuid
+  questionId        String       @map("question_id") @db.Uuid
+  fileId            String       @map("file_id") @db.Uuid
+  uploadSessionHash String       @map("upload_session_hash")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace  Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  form       Form         @relation(fields: [workspaceId, formId], references: [workspaceId, id], onDelete: Restrict)
+  question   FormQuestion @relation(fields: [workspaceId, questionId], references: [workspaceId, id], onDelete: Restrict)
+  file       File         @relation(fields: [workspaceId, fileId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, fileId])
+  @@index([workspaceId])
+  @@index([workspaceId, formId])
+  @@index([workspaceId, questionId])
+  @@index([formId, uploadSessionHash])
+  @@map("form_upload")
 }
 

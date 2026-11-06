@@ -1,5 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
-import { withScope, withPublicScope } from "@/lib/db/scope";
+import { withScope, withPublicFormScope } from "@/lib/db/scope";
 import type { Scope } from "@/modules/tenancy/types";
 import type { FormListQuery, FormSubmissionQuery } from "./schemas";
 
@@ -109,7 +109,7 @@ export async function findFormDetail(scope: Pick<Scope, "workspaceId">, formId: 
 export async function findFormDetailByPublicId(
   formId: string,
 ): Promise<FormDetailRow | null> {
-  return withPublicScope(async (tx) => {
+  return withPublicFormScope(formId, async (tx) => {
     return tx.form.findFirst({
       where: { id: formId, archivedAt: null },
       select: formDetailSelect,
