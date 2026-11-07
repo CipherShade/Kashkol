@@ -2059,7 +2059,9 @@ model FormSubmission {
   submissionMode    FormSubmissionMode @map("submission_mode")
   studentId         String?            @map("student_id") @db.Uuid
   submittedByUserId String?            @map("submitted_by_user_id")
-  submissionToken   String?            @map("submission_token")
+  // Idempotency tokens are UUIDs (validated by `submissionTokenSchema`); the
+  // dedupe key is an opaque client string and stays TEXT.
+  submissionToken   String?            @map("submission_token") @db.Uuid
   dedupeKey         String?            @map("dedupe_key")
   submittedAt       DateTime           @default(now()) @map("submitted_at") @db.Timestamptz(6)
   archivedAt        DateTime?          @map("archived_at") @db.Timestamptz(6)

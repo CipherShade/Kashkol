@@ -43,8 +43,14 @@ const videoSelection = {
   },
 } satisfies Prisma.VideoLessonSelect;
 
+type VideoScope = "teacher_only" | "groups" | "students";
+
+function isVideoScope(scope: string): scope is VideoScope {
+  return scope === "teacher_only" || scope === "groups" || scope === "students";
+}
+
 export async function listVideoLessonRows(scope: Scope, query: VideosQuery) {
-  return withScope(scope, (tx) =>
+  const rows = await withScope(scope, (tx) =>
     tx.videoLesson.findMany({
       where: {
         workspaceId: scope.workspaceId,
@@ -52,6 +58,8 @@ export async function listVideoLessonRows(scope: Scope, query: VideosQuery) {
         archivedAt: query.includeArchived ? undefined : null,
         publicationStatus: query.publicationStatus,
         subjectId: query.subjectId,
+        // A video lesson can never use the public-form upload scope.
+        scope: { not: "form_upload" },
         ...(query.groupId
           ? {
               OR: [
@@ -65,6 +73,9 @@ export async function listVideoLessonRows(scope: Scope, query: VideosQuery) {
       select: videoSelection,
     }),
   );
+  return rows.filter(
+    (row): row is (typeof rows)[number] & { scope: VideoScope } => isVideoScope(row.scope),
+  );
 }
 
 export async function findVideoLesson(scope: Pick<Scope, "workspaceId">, videoId: string) {
@@ -74,6 +85,7 @@ export async function findVideoLesson(scope: Pick<Scope, "workspaceId">, videoId
         id: videoId,
         workspaceId: scope.workspaceId,
         deletedAt: null,
+        scope: { not: "form_upload" },
       },
       select: videoSelection,
     }),

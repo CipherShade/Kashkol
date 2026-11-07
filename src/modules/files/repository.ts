@@ -14,13 +14,22 @@ const materialInclude = {
   },
 } as const;
 
+type MaterialScope = "teacher_only" | "groups" | "students";
+
+function isMaterialScope(scope: string): scope is MaterialScope {
+  return scope === "teacher_only" || scope === "groups" || scope === "students";
+}
+
 export async function listMaterialRows(scope: Scope, query: FilesQuery) {
-  return withScope(scope, (tx) =>
+  const rows = await withScope(scope, (tx) =>
     tx.file.findMany({
       where: {
         workspaceId: scope.workspaceId,
         deletedAt: null,
         archivedAt: query.archived ? { not: null } : null,
+        // Public form uploads are respondent files; they belong to the forms
+        // surface and must never appear in the learning-materials library.
+        scope: { not: "form_upload" },
         ...(query.search
           ? {
               OR: [
@@ -35,12 +44,20 @@ export async function listMaterialRows(scope: Scope, query: FilesQuery) {
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     }),
   );
+  return rows.filter(
+    (row): row is (typeof rows)[number] & { scope: MaterialScope } => isMaterialScope(row.scope),
+  );
 }
 
 export async function findMaterial(scope: Scope, fileId: string) {
   return withScope(scope, (tx) =>
     tx.file.findFirst({
-      where: { id: fileId, workspaceId: scope.workspaceId, deletedAt: null },
+      where: {
+        id: fileId,
+        workspaceId: scope.workspaceId,
+        deletedAt: null,
+        scope: { not: "form_upload" },
+      },
       include: materialInclude,
     }),
   );

@@ -31,6 +31,13 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PUBLIC_SLUG = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 
+/**
+ * A 32-byte base64url capability token. The server stores only its SHA-256
+ * hash (`form_upload.upload_session_hash`) and the client returns it at submit
+ * time to prove the uploaded files belong to the same form session.
+ */
+export const UPLOAD_SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
 export const formOptionInputSchema = z.object({
   label: z.string().trim().min(1).max(200),
 });
@@ -436,9 +443,10 @@ export const formAnswerInputSchema = z.object({
 export const submitFormResponseSchema = z
   .object({
     submissionToken: z.string().uuid().nullable().optional(),
-    dedupeKey: z.string().nullable().optional(),
+    dedupeKey: z.string().min(8).max(128).nullable().optional(),
     studentId: z.string().uuid().nullable().optional(),
     submittedByUserId: z.string().trim().min(1).max(200).nullable().optional(),
+    uploadSessionToken: z.string().regex(UPLOAD_SESSION_TOKEN_PATTERN).nullable().optional(),
     answers: z.array(formAnswerInputSchema).max(500).default([]),
   })
   .superRefine((submission, ctx) => {
@@ -457,20 +465,33 @@ export const submitFormResponseSchema = z
 
 export const formPublicSubmissionSchema = z
   .object({
-    submissionToken: z.string().min(1).max(64).nullable().optional(),
+    submissionToken: z.string().uuid().nullable().optional(),
     dedupeKey: z.string().min(8).max(128).nullable().optional(),
     studentId: z.string().uuid().nullable().optional(),
-    submittedByUserId: z.string().trim().min(1).max(200).nullable().optional(),
+    uploadSessionToken: z.string().regex(UPLOAD_SESSION_TOKEN_PATTERN).nullable().optional(),
     answers: z.array(formAnswerInputSchema).max(500).default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((submission, ctx) => {
+    const seen = new Set<string>();
+    submission.answers.forEach((answer, index) => {
+      if (seen.has(answer.questionId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["answers", index, "questionId"],
+          message: "duplicateQuestionAnswer",
+        });
+      }
+      seen.add(answer.questionId);
+    });
+  });
 
-export const formPublicUploadSchema = z.object({
-  questionId: z.string().uuid(),
-  fileIds: z.array(z.string().uuid()).max(5),
-  uploadSessionHash: z.string().min(1).max(128).nullable().optional(),
-  dedupeKey: z.string().min(8).max(128).nullable().optional(),
-});
+export const formPublicUploadSchema = z
+  .object({
+    questionId: z.string().uuid(),
+    uploadSessionToken: z.string().regex(UPLOAD_SESSION_TOKEN_PATTERN).nullable().optional(),
+  })
+  .strict();
 
 export type FormPublicSubmission = z.infer<typeof formPublicSubmissionSchema>;
 export type FormPublicUpload = z.infer<typeof formPublicUploadSchema>;

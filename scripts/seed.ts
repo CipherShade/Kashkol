@@ -132,23 +132,23 @@ async function seedNileWorkspace(): Promise<void> {
       update: {},
     });
 
-    await tx.onboardingTask.createMany({
-      data: [
-        {
-          workspaceId: NILE_WORKSPACE_ID,
-          key: "teaching_name",
-          completedAt: FIXED_DATE,
+    for (const task of [
+      { workspaceId: NILE_WORKSPACE_ID, key: "teaching_name", completedAt: FIXED_DATE },
+      { workspaceId: NILE_WORKSPACE_ID, key: "grades", completedAt: FIXED_DATE },
+      { workspaceId: NILE_WORKSPACE_ID, key: "first_group" },
+      { workspaceId: NILE_WORKSPACE_ID, key: "first_students" },
+    ]) {
+      await tx.onboardingTask.upsert({
+        where: {
+          workspaceId_key: {
+            workspaceId: task.workspaceId,
+            key: task.key,
+          },
         },
-        {
-          workspaceId: NILE_WORKSPACE_ID,
-          key: "grades",
-          completedAt: FIXED_DATE,
-        },
-        { workspaceId: NILE_WORKSPACE_ID, key: "first_group" },
-        { workspaceId: NILE_WORKSPACE_ID, key: "first_students" },
-      ],
-      skipDuplicates: true,
-    });
+        create: task,
+        update: { completedAt: task.completedAt ?? null },
+      });
+    }
 
     await tx.workspaceMember.upsert({
       where: {
@@ -300,15 +300,23 @@ async function seedDeltaWorkspace(): Promise<void> {
       update: {},
     });
 
-    await tx.onboardingTask.createMany({
-      data: [
-        { workspaceId: DELTA_WORKSPACE_ID, key: "teaching_name", completedAt: FIXED_DATE },
-        { workspaceId: DELTA_WORKSPACE_ID, key: "grades", completedAt: FIXED_DATE },
-        { workspaceId: DELTA_WORKSPACE_ID, key: "first_group" },
-        { workspaceId: DELTA_WORKSPACE_ID, key: "first_students" },
-      ],
-      skipDuplicates: true,
-    });
+    for (const task of [
+      { workspaceId: DELTA_WORKSPACE_ID, key: "teaching_name", completedAt: FIXED_DATE },
+      { workspaceId: DELTA_WORKSPACE_ID, key: "grades", completedAt: FIXED_DATE },
+      { workspaceId: DELTA_WORKSPACE_ID, key: "first_group" },
+      { workspaceId: DELTA_WORKSPACE_ID, key: "first_students" },
+    ]) {
+      await tx.onboardingTask.upsert({
+        where: {
+          workspaceId_key: {
+            workspaceId: task.workspaceId,
+            key: task.key,
+          },
+        },
+        create: task,
+        update: { completedAt: task.completedAt ?? null },
+      });
+    }
 
     await tx.workspaceMember.upsert({
       where: {

@@ -15,7 +15,7 @@ flow, release, and architecture specifications live in [`docs/`](docs/). Read
 | ------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Next.js 16 App Router, TypeScript, Tailwind v4                | Working                                                            |
 | Arabic/English locale routing, RTL, theme tokens              | Working across the shell, auth, workspace, and business screens    |
-| Prisma 7 schema, migrations, PostgreSQL RLS                   | Working; seventeen committed migrations                            |
+| Prisma 7 schema, migrations, PostgreSQL RLS                   | Working; twenty-four committed migrations                          |
 | Scoped tenancy helper and tenant isolation tests              | Working against a real database                                    |
 | Better Auth sign-up/sign-in/sign-out, verification, recovery  | Working locally; console email, or SMTP when configured            |
 | Workspace creation, ownership, profile, settings              | Working                                                            |

@@ -155,7 +155,7 @@ ALTER TABLE "file" ADD COLUMN "form_uploads" UUID[];  -- not used in RLS, just s
 -- ---------------------------------------------------------------------------
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_index WHERE indexname = 'form_answer_file_workspace_id_file_id_key') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'form_answer_file_workspace_id_file_id_key' AND n.nspname = 'public') THEN
     CREATE UNIQUE INDEX "form_answer_file_workspace_id_file_id_key" ON "form_answer_file"("workspace_id", "file_id");
   END IF;
 END

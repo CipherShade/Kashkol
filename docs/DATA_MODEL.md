@@ -644,7 +644,7 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | `academic_term` | Reserved — Start/end dates per workspace and grade |
 | `student_merge` | Reserved — Merge record with both original ids (the tombstone on `student.merged_into_id` is the row) |
 
-### 5.11 Forms tables (`20261104120000_forms_foundation`, `F-P3-09`)
+### 5.11 Forms tables (`20261104120000_forms_foundation`, `20261106120000_forms_public_lifecycle`, `F-P3-09`, `F-P3-12`)
 
 | Table | Purpose |
 |---|---|
@@ -653,9 +653,14 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | `form_question` | Ordered question in a form or section: `question_type` (11 supported types), `prompt`, `description`, `is_required`, and type-specific `config_json`. Unique `(form_id, order_index)`; a null `section_id` places the question before any section |
 | `form_question_option` | Ordered choice label for `multiple_choice`, `checkboxes`, and `dropdown`. Unique `(question_id, order_index)` |
 | `form_question_logic` | Conditional rule: source question, `operator`, nullable `comparison_json`, `action` (`show` / `hide` / `require`), and exactly one target (`target_question_id` or `target_section_id`) enforced by a check constraint |
-| `form_submission` | One response: `submission_mode`, optional `student_id` and `submitted_by_user_id` (both null for anonymous), `submitted_at`, and `archived_at`. No stored aggregate |
+| `form_submission` | One response: `submission_mode`, optional `student_id` and `submitted_by_user_id` (both null for anonymous), optional `submission_token` (UUID) and `dedupe_key` (opaque 8–128 character client string) for idempotent retries, `submitted_at`, and `archived_at`. No stored aggregate. Unique `(form_id, submission_token)` and `(form_id, dedupe_key)` |
 | `form_answer` | One stored answer per `(submission_id, question_id)`, with a validated `value_json`. File ids are not duplicated here |
 | `form_answer_file` | Join between a file-upload answer and an existing `file` row in the same workspace. Composite primary key `(workspace_id, answer_id, file_id)`; no separate file store |
+| `form_upload` | Provenance for a respondent file uploaded through the public route: `workspace_id`, `form_id`, `question_id`, `file_id`, and `upload_session_hash` (SHA-256 of the server-issued capability token, never the token itself). Unique `(workspace_id, file_id)`; the submission path accepts a claimed file only when its form, question, and upload-session hash all match |
+
+Public respondent files are `file` rows with `scope = 'form_upload'` and no group or student target;
+the `file_scope_check` constraint allows exactly that combination. `form_upload` carries forced row-level
+security and four tenant foreign keys to `workspace`, `form`, `form_question`, and `file`.
 
 Every table has a non-null `workspace_id`, a composite tenant foreign key, an index on `workspace_id`,
 and forced row-level security. A submission with an identity mismatch against its form's mode is
@@ -899,8 +904,15 @@ consolidated form rather than one directory per row above:
 | `20261031120000_parent_student_portals_pwa` | Parent and student portal grants (`guardian_id`, `permissions`), verified `portal_invitation` tokens, `portal_push_subscription` Web Push records, and forced RLS |
 | `20261101100000_p3_learning_media_and_online_exams` | Recorded video lessons (`video_lesson`, `video_lesson_group`, `video_lesson_student`, `video_playback_grant`), online exams (`online_exam`, `online_exam_student`, `online_exam_question`, `online_exam_attempt`, `online_exam_response`), and forced RLS |
 | `20261101140000_p3_platform_admin_and_plans` | Centralized workspace plan/status columns (`plan_tier`, `plan_status`, `plan_limit_overrides`, `status_reason`), global `platform_admin` and append-only `platform_audit_event` tables, tenant-scoped `break_glass_grant` with forced RLS, and platform-admin workspace read policy |
+| `20261104120000_forms_foundation` | Form definitions, sections, questions, options, conditional logic, submissions, answers, and answer-file joins, with forced RLS (`F-P3-09`) |
+| `20261106120000_forms_public_lifecycle` | Public form read policy keyed by `app.public_form_id`, `form_upload` provenance, and submission idempotency columns (`F-P3-12`) |
+| `20261107120000_forms_public_rls_and_schema_reconcile` | Forces RLS on `form_upload`, adds its four tenant foreign keys and lookup indexes, changes `dedupe_key` to TEXT, replaces the global submission indexes with form-scoped ones, drops the unused `file.form_uploads` column, and grants the application role write access to `form_upload` |
+| `20261107121000_forms_file_scope_enum` | Adds `form_upload` to the `file_scope` enum |
+| `20261107122000_forms_file_scope_check` | Extends `file_scope_check` so a `form_upload` file must have null group and student targets |
+| `20261107130000_session_status_started` | Adds `started` to the `session_status` enum |
+| `20261107131000_teaching_session_schedule_fields` | Adds `room`, `location`, `notes`, `teacher_id`, `assistant_id`, `series_id`, `occurrence_no`, `started_at`, and `completed_at` to `teaching_session`, plus its `series_id` index |
 
-The current local development database tracks all seventeen migrations above. `student` and
+The current local development database tracks all twenty-four migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

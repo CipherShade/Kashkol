@@ -36,6 +36,11 @@ import type {
   FormSubmissionQuery,
   SubmitFormResponseInput,
 } from "./schemas";
+import {
+  assertPublicUploadMatchesQuestionConfig,
+  hashUploadSessionToken,
+  publicUploadQuestionConfig,
+} from "./public-upload";
 import { validateAnswerValue } from "./validation";
 
 type RequestContext = { requestId?: string; ipHash?: string | null };
@@ -836,7 +841,7 @@ export async function submitFormResponsePublic(
     const form = await findFormDetailTx(outerTx, null, formId);
     if (!form) throw new AppError("NOT_FOUND");
     return withScope({ workspaceId: form.workspaceId }, async (innerTx) => {
-      return processFormSubmission(innerTx, form, input, form.workspaceId, request, now);
+      return processFormSubmission(innerTx, form, input, form.workspaceId, request, now, true);
     });
   });
 }
@@ -854,11 +859,28 @@ async function processFormSubmission(
   workspaceId: string,
   request?: RequestContext,
   now: Date = new Date(),
+  publicSubmission = false,
 ) {
   const formId = form.id;
 
   if (form.status !== "published" || !form.acceptingResponses || form.archivedAt) {
     throw new AppError("CONFLICT", { messageKey: "errors.formNotAcceptingResponses" });
+  }
+
+  // The public path has no authenticated actor. A client-supplied actor id
+  // must never be trusted, because it would also bypass the upload provenance
+  // check below.
+  if (publicSubmission && input.submittedByUserId) {
+    throw new AppError("VALIDATION_FAILED", { messageKey: "errors.validationFailed" });
+  }
+
+  // An identified form's public submission carries no verified identity. Reject
+  // any client-supplied studentId, since the public route cannot bind the
+  // submission to the real student. Anonymous public submissions remain the only
+  // supported public mode; authenticated identified submissions go through the
+  // regular workspace API.
+  if (publicSubmission && form.submissionMode === "identified" && input.studentId) {
+    throw new AppError("CONFLICT", { messageKey: "errors.formSubmissionIdentityMismatch" });
   }
 
   // Idempotency: check for existing submission by token
@@ -1001,6 +1023,29 @@ async function processFormSubmission(
     });
   }
 
+  // Public uploads are claimed with a server-issued capability token. The
+  // stored SHA-256 hash binds the file to the form session, and the provenance
+  // row binds it to the exact question it was uploaded for.
+  let provenanceByFileId: Map<string, string> | null = null;
+  if (publicSubmission && fileIds.size > 0) {
+    if (!input.uploadSessionToken) {
+      throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
+    }
+    const uploadSessionHash = hashUploadSessionToken(input.uploadSessionToken);
+    const provenanceRows = await tx.formUpload.findMany({
+      where: {
+        workspaceId,
+        formId,
+        uploadSessionHash,
+        fileId: { in: [...fileIds] },
+      },
+      select: { fileId: true, questionId: true },
+    });
+    provenanceByFileId = new Map(
+      provenanceRows.map((row) => [row.fileId, row.questionId]),
+    );
+  }
+
   const fileRows =
     fileIds.size > 0
       ? await tx.file.findMany({
@@ -1011,7 +1056,7 @@ async function processFormSubmission(
             deletedAt: null,
             scanStatus: "clean",
             // Public submissions must use files recorded via FormUpload provenance
-            ...(submittedByUserId === null
+            ...(publicSubmission
               ? {
                   formUploads: {
                     some: { formId, workspaceId },
@@ -1027,25 +1072,26 @@ async function processFormSubmission(
   }
   const fileById = new Map(fileRows.map((file) => [file.id, file]));
 
+  const claimedFileIds = new Set<string>();
   for (const answer of validAnswers) {
     if (answer.fileIds.length === 0) continue;
     const question = questionById.get(answer.questionId);
-    const config = asRecord(question?.configJson);
-    const maxSizeBytes =
-      typeof config.maxSizeBytes === "number" ? config.maxSizeBytes : 10 * 1024 * 1024;
-    const allowedMimeTypes = Array.isArray(config.allowedMimeTypes)
-      ? config.allowedMimeTypes.filter((mime): mime is string => typeof mime === "string")
-      : [];
+    const config = publicUploadQuestionConfig(question?.configJson);
     for (const fileId of answer.fileIds) {
+      if (claimedFileIds.has(fileId)) {
+        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
+      }
+      claimedFileIds.add(fileId);
+      if (provenanceByFileId && provenanceByFileId.get(fileId) !== answer.questionId) {
+        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
+      }
       const file = fileById.get(fileId);
       if (!file)
         throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-      if (file.sizeBytes > maxSizeBytes) {
-        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-      }
-      if (allowedMimeTypes.length > 0 && !allowedMimeTypes.includes(file.mime)) {
-        throw new AppError("VALIDATION_FAILED", { messageKey: "errors.formFileInvalid" });
-      }
+      assertPublicUploadMatchesQuestionConfig(config, {
+        sizeBytes: file.sizeBytes,
+        mime: file.mime,
+      });
     }
   }
 
@@ -1093,9 +1139,9 @@ async function processFormSubmission(
 
   await writeAuditEvent(tx, {
     workspaceId,
-    actorUserId: submittedByUserId ?? null,
-    actorDisplayName: submittedByUserId ?? "",
-    actorType: "user",
+    actorUserId: publicSubmission ? null : (submittedByUserId ?? null),
+    actorDisplayName: publicSubmission ? "public-form" : (submittedByUserId ?? ""),
+    actorType: publicSubmission ? "system" : "user",
     entityType: "form_submission",
     entityId: submission.id,
     action: formAuditActions.submissionReceived,

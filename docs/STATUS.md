@@ -7,7 +7,7 @@
 ## 1. Where the project stands
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
-now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and eighteen
+now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and twenty-four
 migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
@@ -39,7 +39,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 
 - Next.js 16.4.2 App Router, React 19.2, TypeScript 5.9, Tailwind v4, next-intl 4.14.9, Vitest 5.
 - Prisma 7.10.1 with the PostgreSQL driver adapter and an explicit generated-client output.
-- Seventeen tracked migrations are applied to the local development database, including academic
+- Twenty-four tracked migrations are applied to the local development database, including academic
   records and the manual payment/report migrations:
   homework, assessment result details, follow-up records, transactional audit, and forced RLS.
 - `withScope()`/`withUserScope()` transaction helpers and a tenant-table registry checked against the
@@ -248,7 +248,7 @@ buttons, seeded demo content in production, and silent data loss.
 | Typecheck | **Passed** — `npm run typecheck` |
 | Unit and UI tests | **Passed** — 32 unit files / 176 tests and 1 UI file / 19 tests |
 | Payment integration tests | **Passed** — 2 PostgreSQL tests cover payment-ledger tenant isolation, duplicate retries, refund limits, and separate corrections |
-| Full integration suite | **Blocked by existing database/schema drift** — 12 failures across unrelated auth/workspace/search/group tests; the applied core migration is missing `teaching_session.room` although `migrate status` reports all tracked migrations applied |
+| Full integration suite | **Resolved on 2026-11-07** — the pre-existing database/schema drift (missing `teaching_session.room` and eight related scheduling columns, plus the `started` session status) is reconciled; the suite now passes 15 files / 89 tests. See §5.1. |
 | Prisma schema and tracked migration state | **Passed with caveat** — schema validates and `db:status` is current; `db:migrate` applies the two feature migrations but then prompts for another migration due existing local database/schema drift |
 | Production build | **Passed** — `npm run build` |
 | Production start | **Not re-verified** — build completes; deployment/runtime verification remains outside this feature validation |
@@ -267,6 +267,64 @@ buttons, seeded demo content in production, and silent data loss.
 | Document set complete | Confirmed — all specification and architecture documents exist under `docs/` |
 | Stack versions | Pinned to `ARCHITECTURE.md` §3: Next.js 16.4.2, React 19.2.9, TypeScript 5.9.3, Node 24.x, Prisma 7.10.1, Better Auth 1.7.12, Tailwind 4.3.3, next-intl 4.14.9, Zod 4.6.7, Vitest 5.0.5 |
 | Academic route, tenant-table, and catalogue rules | **Passed** — `npm run lint:rules` passes with full English/Arabic catalogue parity, tenant-table registry parity, and route-registry consistency |
+
+### 5.1 Stabilisation on 2026-11-07 — public forms security and migration reconciliation
+
+Four focused phases were completed against the existing implementation. No architecture was
+replaced, no feature was removed, and no production database was touched.
+
+**Phase 1 — public form and upload security (`F-P3-12`).** The public submit path now validates with
+`safeParse` and returns `no-store`; a client-supplied `submittedByUserId` is rejected; uploads are
+bound to a server-issued capability token that is hashed at rest and checked against the form,
+question, and upload session before a claimed file is accepted; `form_upload` files are excluded from
+materials and videos. Added `tests/unit/forms-public-upload.test.ts` (8 tests).
+
+**Phase 2 — migration, RLS, and schema reconciliation.** The applied
+`20261106120000_forms_public_lifecycle` migration had drifted from `prisma/schema.prisma`. Three
+additive migrations reconcile the database without rewriting the applied migration:
+
+| Migration | Change |
+|---|---|
+| `20261107120000_forms_public_rls_and_schema_reconcile` | Forces RLS on `form_upload`; changes `dedupe_key` UUID → TEXT; replaces the global submission indexes with `(form_id, submission_token)` and `(form_id, dedupe_key)`; adds the four `form_upload` tenant foreign keys, `UNIQUE (workspace_id, file_id)`, and four indexes; drops the unused `file.form_uploads` column; grants the application role SELECT/INSERT/UPDATE/DELETE on `form_upload` |
+| `20261107121000_forms_file_scope_enum` | Adds `form_upload` to the `file_scope` enum |
+| `20261107122000_forms_file_scope_check` | Extends `file_scope_check` so a `form_upload` file must have null group and student targets |
+
+`FormSubmission.submissionToken` is now `@db.Uuid` and `dedupeKey` is TEXT, matching the shared Zod
+schemas. Added `tests/integration/forms-public.test.ts` covering provenance binding,
+anonymous public submission, unpublished-form hiding, and oversized-file rejection against
+PostgreSQL.
+
+**Phase 3 — remaining confirmed defects (items 3.1–3.3).**
+- **3.1 — Teaching-session drift.** The `TeachingSession` model declared `room`, `location`,
+  `notes`, `teacher_id`, `assistant_id`, `series_id`, `occurrence_no`, `started_at`, and
+  `completed_at`, and the session service writes `status = 'started'`, but no migration ever
+  created them. Two additive migrations
+  (`20261107130000_session_status_started`, `20261107131000_teaching_session_schedule_fields`)
+  apply the nine columns, the `series_id` index, and the enum value. With that drift removed the
+  full integration suite passes for the first time in this checkout.
+- **3.2 — Silent mock database fallback.** `src/lib/db/client.ts` no longer catches environment
+  or connection failures and returns a no-op Prisma proxy. Failures now propagate.
+- **3.3 — Rate limiting on public routes.** Public submit is limited to 10 requests/minute and
+  public upload to 5 requests/minute, keyed per form and client IP (`src/lib/http/rate-limit.ts`).
+
+**Phase 4 — identified public form submission identity safety.**
+The public submit path (`submitFormResponsePublic` in `src/modules/forms/service.ts`) now rejects any client-supplied `studentId` on an identified form with `AppError("CONFLICT", { messageKey: "errors.formSubmissionIdentityMismatch" })`. Because public submissions have no authenticated actor, client-supplied student IDs cannot be verified; anonymous public submissions remain the only supported public mode, while authenticated identified submissions go through the workspace API. Extended `tests/integration/forms-public.test.ts` (now 9 tests).
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint and the cross-file project rules |
+| `npm run typecheck` | **Passed** |
+| `npm run test:unit` | **Passed** — 53 files / 309 tests |
+| `npm run test:ui` | **Passed** — 1 file / 19 tests |
+| `npm run build` | **Passed** — production build |
+| `npm run db:deploy` | **Passed** — 24 migrations applied; live schema confirms forced RLS, tenant foreign keys, form-scoped idempotency indexes, TEXT `dedupe_key`, no `file.form_uploads`, `file_scope` includes `form_upload`, the application role has write access to `form_upload`, and `teaching_session` has all scheduling columns plus the `started` status |
+| Targeted integration (`forms-public`) | **Passed** — 9/9 |
+| Full integration suite | **Passed** — 15 files / 91 tests, no failures |
+
+**Remaining follow-ups recorded by this work (not shipped as claims):**
+
+- The public upload and submit routes carry in-process rate limiting (Phase 3 item 3.3): `public_upload`
+  at 5 requests/minute and `public_submit` at 10 requests/minute per form and client IP. Revisit if a multi-instance deployment topology is introduced.
 
 **Not yet verified:** CI, a staging deploy, the generated isolation and permission matrices, and the
 full M0 release gate. `npm audit` reports high-severity advisories in the dependency tree; they are

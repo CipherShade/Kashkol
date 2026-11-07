@@ -4,11 +4,16 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+type PublicFormSummary = {
+  title: string;
+  description: string | null;
+};
+
 export default function PublicFormPage() {
   const params = useParams();
   const formId = params.formId as string;
   const t = useTranslations("forms");
-  const [formData, setFormData] = useState<any>(null);
+  const [formData, setFormData] = useState<PublicFormSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -16,8 +21,8 @@ export default function PublicFormPage() {
       try {
         const response = await fetch(`/api/forms/public/${formId}/submit`);
         if (!response.ok) throw new Error("Failed to load");
-        const data = await response.json();
-        setFormData(data.form);
+        const data: { form?: PublicFormSummary } = await response.json();
+        setFormData(data.form ?? null);
       } catch (err) {
         console.error(err);
       } finally {

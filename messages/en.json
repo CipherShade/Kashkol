@@ -1217,6 +1217,7 @@
     "examAttemptDeadlinePassed": "The time limit or availability window for this attempt has expired.",
     "formHasNoQuestions": "Add at least one question before publishing the form.",
     "formNotEditable": "Only a draft form can be edited. Duplicate it or archive it instead.",
+    "formNotFound": "This form was not found or is no longer available.",
     "formNotAcceptingResponses": "This form is not accepting responses.",
     "formSubmissionIdentityMismatch": "This form's submission mode does not match the supplied respondent identity.",
     "formDuplicateAnswer": "Each question may be answered only once per submission.",
