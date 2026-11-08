@@ -44,6 +44,7 @@ Every ADR uses the same sections:
 | [0020](0020-qr-rendering-library.md) | QR rendering uses `qrcode-generator`, pinned | Accepted | M2 |
 | [0021](0021-forms-foundation.md) | Relational forms foundation with server-side conditional logic | Accepted (partially superseded by ADR-0022) | M3a |
 | [0022](0022-forms-visual-builder.md) | Forms visual builder supersedes revision deferral | Accepted (approved 2026-11-04) | M4 / extension |
+| [0023](0023-interface-visual-refresh.md) | Interface visual refresh — the Kashkol canvas | Accepted (approved 2026-11-08) | M0–M3 |
 
 ## Conventions
 
@@ -86,3 +87,5 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0018 | `F-P2-04`, `R-02`, `NF-1` |
 | 0020 | `F-P2-05`, `OQ-05` |
 | 0021 | `F-P3-09`, `R-01`, `R-02`, `R-15`, `NF-1`, `NF-8`, `NF-9`, `NF-13` |
+| 0022 | `F-P3-09`, `F-P3-12`, `NF-1`, `NF-12` |
+| 0023 | `F-P0-04`, `F-P0-05`, `F-P1-01`, `F-P1-02`, `F-P1-15`, `NF-10`, `DEF-13` |

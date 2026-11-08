@@ -37,7 +37,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   const { locale } = await params;
   const { user, scope } = await requireStaffSession();
   const t = await getTranslations("Dashboard");
-  const shell = await getTranslations("Shell");
   const workspaceT = await getTranslations("Workspace");
 
   const [workspace, tasks] = await Promise.all([
@@ -60,6 +59,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   const knownTasks = tasks.filter((task) => TASK_KEYS[task.key]);
   const doneTasks = knownTasks.filter((task) => task.completedAt !== null).length;
   const completion = knownTasks.length > 0 ? (doneTasks / knownTasks.length) * 100 : 0;
+  const completionPercent = Math.round(completion);
 
   const columns: Array<Column<MemberRow>> = [
     {
@@ -94,26 +94,26 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow={t("eyebrow")}
-        title={t("title")}
-        description={t("subtitle")}
-        actions={
-          canSeeSettings ? (
-            <Link
-              href="/app/settings"
-              className="ui-button"
-              data-variant="secondary"
-              data-size="md"
-            >
-              <Icon name="gear" size={16} />
-              <span>{t("manageSettings")}</span>
-            </Link>
-          ) : null
-        }
-      />
-
-      <p className="app-muted">{shell("greeting", { name: user.name })}</p>
+      <section className="app-hero">
+        <PageHeader
+          eyebrow={t("eyebrow")}
+          title={t("heroTitle", { name: user.name })}
+          description={t("subtitle")}
+          actions={
+            canSeeSettings ? (
+              <Link
+                href="/app/settings"
+                className="ui-button"
+                data-variant="secondary"
+                data-size="md"
+              >
+                <Icon name="gear" size={16} />
+                <span>{t("manageSettings")}</span>
+              </Link>
+            ) : null
+          }
+        />
+      </section>
 
       <div className="app-stat-grid">
         <Stat
@@ -121,34 +121,38 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
           value={canSeeTeam ? members.length : "—"}
           hint={canSeeTeam ? t("statMembersHint") : t("permissionHidden")}
           icon="users"
+          variant="invert"
         />
         <Stat
           label={t("statSetup")}
           value={`${doneTasks}/${knownTasks.length}`}
           hint={t("statSetupHint")}
           icon="checkCircle"
+          tone="primary"
         />
         <Stat
           label={t("statRole")}
           value={roleLabel(scope.role)}
           hint={t("statRoleHint")}
           icon="shield"
+          tone="muted"
         />
         <Stat
           label={t("statStatus")}
-          value={
-            <Badge tone="success" icon="checkCircle">
-              {workspace.status === "active" ? t("active") : workspace.status}
-            </Badge>
-          }
+          value={workspace.status === "active" ? t("active") : workspace.status}
           hint={<bdi className="ui-code">{workspace.slug}</bdi>}
           icon="activity"
+          tone="success"
         />
       </div>
 
       <div className="app-dashboard-grid">
         <Card labelledBy="workspace-card-title">
-          <CardHeader title={t("workspaceCard")} titleId="workspace-card-title" />
+          <CardHeader
+            title={t("workspaceCard")}
+            titleId="workspace-card-title"
+            description={t("workspaceCardHint")}
+          />
           <CardBody>
             <dl className="app-fact-list">
               <div className="app-fact-row">
@@ -176,44 +180,69 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
         </Card>
 
         <Card labelledBy="checklist-title">
-          <CardHeader
-            title={t("checklist")}
-            titleId="checklist-title"
-            description={t("checklistHint")}
-          />
+          <CardHeader title={t("checklist")} titleId="checklist-title" />
           <CardBody>
-            <div className="app-progress-row">
-              <Progress value={completion} label={t("setupProgress")} />
-              <span className="app-progress-value">
-                {doneTasks}/{knownTasks.length}
-              </span>
-            </div>
-            <ul className="app-checklist">
-              {knownTasks.map((task) => {
-                const key = TASK_KEYS[task.key];
-                if (!key) return null;
-                const done = task.completedAt !== null;
-                const unavailable = UNAVAILABLE_TASKS.has(task.key);
-                return (
-                  <li key={task.key} className="app-checklist-item" data-done={done}>
-                    <span className="app-checklist-label">{t(key)}</span>
-                    {done ? (
-                      <Badge tone="success" icon="checkCircle">
-                        {t("checklistDone")}
-                      </Badge>
-                    ) : unavailable ? (
-                      <Badge tone="accent" icon="clock">
-                        {t("checklistPlanned")}
-                      </Badge>
-                    ) : (
-                      <Badge tone="outline" icon="clock">
-                        {t("checklistPending")}
-                      </Badge>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            {knownTasks.length > 0 ? (
+              <div className="app-setup">
+                <div className="app-setup-summary">
+                  <div
+                    className="app-donut"
+                    role="img"
+                    aria-label={t("setupAria", {
+                      done: doneTasks,
+                      total: knownTasks.length,
+                      percent: completionPercent,
+                    })}
+                    style={{
+                      background: `conic-gradient(var(--primary) ${completionPercent}%, var(--surface-2) 0)`,
+                    }}
+                  >
+                    <span className="app-donut-value">{completionPercent}%</span>
+                  </div>
+                  <div>
+                    <p className="app-donut-caption">
+                      {t("setupPercent", { percent: completionPercent })}
+                    </p>
+                    <p className="app-donut-hint">
+                      {t("setupSummary", { done: doneTasks, total: knownTasks.length })}
+                    </p>
+                    <p className="app-inline-note app-donut-hint">
+                      <Icon name="shield" size={13} />
+                      <span>{t("checklistHint")}</span>
+                    </p>
+                  </div>
+                </div>
+                <Progress value={completion} label={t("setupProgress")} />
+                <ul className="app-checklist">
+                  {knownTasks.map((task) => {
+                    const key = TASK_KEYS[task.key];
+                    if (!key) return null;
+                    const done = task.completedAt !== null;
+                    const unavailable = UNAVAILABLE_TASKS.has(task.key);
+                    return (
+                      <li key={task.key} className="app-checklist-item" data-done={done}>
+                        <span className="app-checklist-label">{t(key)}</span>
+                        {done ? (
+                          <Badge tone="success" icon="checkCircle">
+                            {t("checklistDone")}
+                          </Badge>
+                        ) : unavailable ? (
+                          <Badge tone="accent" icon="clock">
+                            {t("checklistPlanned")}
+                          </Badge>
+                        ) : (
+                          <Badge tone="outline" icon="clock">
+                            {t("checklistPending")}
+                          </Badge>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <p className="app-muted">{t("setupEmpty")}</p>
+            )}
           </CardBody>
         </Card>
 
@@ -236,7 +265,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                 ) : null
               }
             />
-            <CardBody>
+            <CardBody className="app-flush">
               <DataTable
                 caption={t("membersTableCaption")}
                 scrollLabel={t("membersTableScroll")}

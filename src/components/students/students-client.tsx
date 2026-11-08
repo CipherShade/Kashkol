@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { EmptyState, Alert } from "@/components/ui/feedback";
 import { FormField, Input, Textarea } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
+import { Stat } from "@/components/ui/stat";
 import { Link } from "@/i18n/navigation";
 import {
   archiveStudentAction,
@@ -335,8 +336,27 @@ export function StudentsClient({
   const importNameOnlyCount =
     importPreview?.rows.filter((r) => r.warnings.includes("nameOnlyMatch")).length ?? 0;
 
+  const share = (value: number) =>
+    summary.total > 0 ? Math.round((value / summary.total) * 100) : 0;
+  const shareHint = (value: number) =>
+    (labels.kpiShare ?? "{{percent}}% of listed students").replace("{{percent}}", String(share(value)));
+
+  function attendanceTone(rate: number): "success" | "warn" | "danger" {
+    if (rate >= 85) return "success";
+    if (rate >= 70) return "warn";
+    return "danger";
+  }
+
+  function toggleArchived() {
+    const next = !showArchived;
+    const nextStatus = !next && selectedStatus === "archived" ? "all" : selectedStatus;
+    setShowArchived(next);
+    setSelectedStatus(nextStatus);
+    applyFilters({ showArchived: next, status: nextStatus });
+  }
+
   return (
-    <div className="app-page space-y-6">
+    <div className="app-page">
       {statusMessage && (
         <Alert
           tone={statusMessage.tone}
@@ -350,190 +370,174 @@ export function StudentsClient({
         />
       )}
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-5 gap-3">
-        <button
-          type="button"
+      {/* Real KPI filters. Every percentage is computed from the records in view. */}
+      <div className="app-kpi-grid">
+        <Stat
+          label={labels.totalStudents ?? "Total students"}
+          value={summary.total}
+          hint={labels.kpiTotalHint ?? "Students in this view"}
+          icon="users"
+          variant="invert"
+          pressed={selectedStatus === "all"}
           onClick={() => {
             setSelectedStatus("all");
             applyFilters({ status: "all" });
           }}
-          className={`ui-card p-4 text-start transition-all ${
-            selectedStatus === "all" ? "ring-2 ring-indigo-500 shadow-sm" : ""
-          }`}
-        >
-          <div className="text-xs text-muted mb-1">{labels.totalStudents ?? "Total"}</div>
-          <div className="text-2xl font-bold">{summary.total}</div>
-        </button>
-
-        <button
-          type="button"
+        />
+        <Stat
+          label={labels.statusActive ?? "Active"}
+          value={summary.active}
+          hint={shareHint(summary.active)}
+          icon="checkCircle"
+          tone="success"
+          pressed={selectedStatus === "active"}
           onClick={() => {
             setSelectedStatus("active");
             applyFilters({ status: "active" });
           }}
-          className={`ui-card p-4 text-start transition-all ${
-            selectedStatus === "active" ? "ring-2 ring-emerald-500 shadow-sm" : ""
-          }`}
-        >
-          <div className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">
-            {labels.statusActive ?? "Active"}
-          </div>
-          <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-            {summary.active}
-          </div>
-        </button>
-
-        <button
-          type="button"
+        />
+        <Stat
+          label={labels.statusAtRisk ?? "At risk"}
+          value={summary.atRisk}
+          hint={shareHint(summary.atRisk)}
+          icon="alert"
+          tone="warn"
+          pressed={selectedStatus === "at_risk"}
           onClick={() => {
             setSelectedStatus("at_risk");
             applyFilters({ status: "at_risk" });
           }}
-          className={`ui-card p-4 text-start transition-all ${
-            selectedStatus === "at_risk" ? "ring-2 ring-amber-500 shadow-sm" : ""
-          }`}
-        >
-          <div className="text-xs text-amber-600 dark:text-amber-400 mb-1">
-            {labels.statusAtRisk ?? "At Risk"}
-          </div>
-          <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">
-            {summary.atRisk}
-          </div>
-        </button>
-
-        <button
-          type="button"
+        />
+        <Stat
+          label={labels.statusInactive ?? "Inactive"}
+          value={summary.inactive}
+          hint={shareHint(summary.inactive)}
+          icon="clock"
+          tone="muted"
+          pressed={selectedStatus === "inactive"}
           onClick={() => {
             setSelectedStatus("inactive");
             applyFilters({ status: "inactive" });
           }}
-          className={`ui-card p-4 text-start transition-all ${
-            selectedStatus === "inactive" ? "ring-2 ring-neutral-500 shadow-sm" : ""
-          }`}
-        >
-          <div className="text-xs text-muted mb-1">{labels.statusInactive ?? "Inactive"}</div>
-          <div className="text-2xl font-bold">{summary.inactive}</div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setShowArchived(!showArchived);
-            applyFilters({ showArchived: !showArchived });
-          }}
-          className={`ui-card p-4 text-start transition-all ${
-            showArchived ? "ring-2 ring-indigo-500 shadow-sm" : ""
-          }`}
-        >
-          <div className="text-xs text-muted mb-1">{labels.statusArchived ?? "Archived"}</div>
-          <div className="text-2xl font-bold">{summary.archived}</div>
-        </button>
+        />
       </div>
 
-      {/* Action Bar & Search */}
+      {/* Action bar, search, and filters */}
       <Card>
-        <CardBody className="p-4 space-y-4">
-          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-            <form onSubmit={handleSearchSubmit} className="flex-1 flex gap-2">
-              <div className="relative flex-1">
+        <CardBody>
+          <div className="app-toolbar">
+            <div className="app-toolbar-row">
+              <form onSubmit={handleSearchSubmit} className="app-toolbar-search" role="search">
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder={labels.searchPlaceholder ?? "Search by name or phone..."}
-                  className="w-full"
+                  placeholder={labels.searchPlaceholder ?? "Search by name or phone"}
+                  aria-label={labels.searchPlaceholder ?? "Search by name or phone"}
                 />
-              </div>
-              <Button type="submit" variant="secondary">
-                <Icon name="search" size={16} />
-                <span>{labels.search ?? "Search"}</span>
-              </Button>
-            </form>
+                <Button type="submit" variant="secondary">
+                  <Icon name="search" size={16} />
+                  <span>{labels.search ?? "Search"}</span>
+                </Button>
+              </form>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setDuplicateWarning(null);
-                  setAddModalOpen(true);
-                }}
-              >
-                <Icon name="plus" size={16} />
-                <span>{labels.addStudent ?? "Add Student"}</span>
-              </Button>
-
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setImportStep("upload");
-                  setImportFile(null);
-                  setImportPreview(null);
-                  setImportError(null);
-                  setImportResult(null);
-                  setAcknowledgeWarnings(false);
-                  setImportModalOpen(true);
-                }}
-              >
-                <Icon name="file" size={16} />
-                <span>{labels.importSpreadsheet ?? "Import"}</span>
-              </Button>
-
-              <Button variant="ghost" onClick={() => setExportModalOpen(true)}>
-                <Icon name="activity" size={16} />
-                <span>{labels.export ?? "Export"}</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Filter Row */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[var(--color-border)]">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted font-medium">{labels.filterByGroup ?? "Group"}:</span>
-              <select
-                value={selectedGroup}
-                onChange={(e) => {
-                  setSelectedGroup(e.target.value);
-                  applyFilters({ groupId: e.target.value });
-                }}
-                className="ui-select text-sm py-1"
-              >
-                <option value="">{labels.allGroups ?? "All Groups"}</option>
-                {availableGroups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {availableGrades.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted font-medium">{labels.filterByGrade ?? "Grade"}:</span>
-                <select
-                  value={selectedGrade}
-                  onChange={(e) => {
-                    setSelectedGrade(e.target.value);
-                    applyFilters({ grade: e.target.value });
+              <div className="app-toolbar-actions">
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setDuplicateWarning(null);
+                    setAddModalOpen(true);
                   }}
-                  className="ui-select text-sm py-1"
                 >
-                  <option value="">{labels.allGrades ?? "All Grades"}</option>
-                  {availableGrades.map((gr) => (
-                    <option key={gr} value={gr}>
-                      {gr}
+                  <Icon name="plus" size={16} />
+                  <span>{labels.addStudent ?? "Add student"}</span>
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setImportStep("upload");
+                    setImportFile(null);
+                    setImportPreview(null);
+                    setImportError(null);
+                    setImportResult(null);
+                    setAcknowledgeWarnings(false);
+                    setImportModalOpen(true);
+                  }}
+                >
+                  <Icon name="file" size={16} />
+                  <span>{labels.importSpreadsheet ?? "Import"}</span>
+                </Button>
+
+                <Button variant="ghost" onClick={() => setExportModalOpen(true)}>
+                  <Icon name="activity" size={16} />
+                  <span>{labels.export ?? "Export"}</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="app-filter-row">
+              <label className="app-filter">
+                <span>{labels.filterByGroup ?? "Group"}</span>
+                <select
+                  value={selectedGroup}
+                  onChange={(e) => {
+                    setSelectedGroup(e.target.value);
+                    applyFilters({ groupId: e.target.value });
+                  }}
+                  className="ui-select"
+                >
+                  <option value="">{labels.allGroups ?? "All groups"}</option>
+                  {availableGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
+              </label>
 
-            <div className="ms-auto flex items-center gap-3">
-              {(search || selectedGroup || selectedGrade || selectedStatus !== "all" || showArchived) && (
-                <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-                  <Icon name="x" size={14} />
-                  <span>{labels.clearFilters ?? "Clear filters"}</span>
-                </Button>
-              )}
+              {availableGrades.length > 0 ? (
+                <label className="app-filter">
+                  <span>{labels.filterByGrade ?? "Grade"}</span>
+                  <select
+                    value={selectedGrade}
+                    onChange={(e) => {
+                      setSelectedGrade(e.target.value);
+                      applyFilters({ grade: e.target.value });
+                    }}
+                    className="ui-select"
+                  >
+                    <option value="">{labels.allGrades ?? "All grades"}</option>
+                    {availableGrades.map((gr) => (
+                      <option key={gr} value={gr}>
+                        {gr}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <div className="app-toolbar-actions">
+                <button
+                  type="button"
+                  className="app-archived-toggle"
+                  data-pressed={showArchived}
+                  aria-pressed={showArchived}
+                  onClick={toggleArchived}
+                >
+                  <Icon name="file" size={15} />
+                  <span>
+                    {showArchived
+                      ? labels.hideArchived ?? "Hide archived"
+                      : labels.showArchived ?? "Show archived"}
+                  </span>
+                </button>
+                {search || selectedGroup || selectedGrade || selectedStatus !== "all" || showArchived ? (
+                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                    <Icon name="x" size={14} />
+                    <span>{labels.clearFilters ?? "Clear filters"}</span>
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
         </CardBody>
@@ -584,168 +588,185 @@ export function StudentsClient({
           </CardBody>
         </Card>
       ) : (
-        <div className="ui-table-scroll bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg overflow-hidden shadow-sm">
-          <table className="ui-table w-full">
-            <thead>
-              <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-xs text-muted font-medium">
-                <th className="py-3 px-4 text-start">{labels.student ?? "Student"}</th>
-                <th className="py-3 px-4 text-start">{labels.groups ?? "Groups"}</th>
-                <th className="py-3 px-4 text-start">{labels.grade ?? "Grade"}</th>
-                <th className="py-3 px-4 text-start">{labels.attendanceRate ?? "Attendance"}</th>
-                <th className="py-3 px-4 text-start">{labels.quizAverage ?? "Quiz Avg"}</th>
-                <th className="py-3 px-4 text-start">{labels.phone ?? "Phone"}</th>
-                <th className="py-3 px-4 text-start">{labels.parent ?? "Parent"}</th>
-                <th className="py-3 px-4 text-start">{labels.status ?? "Status"}</th>
-                <th className="py-3 px-4 text-end">{labels.actions ?? "Actions"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)] text-sm">
-              {initialStudents.map((student) => (
-                <tr key={student.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar
-                        name={`${student.firstName} ${student.lastName}`}
-                        size="sm"
-                      />
-                      <div>
+        <div className="app-table-card">
+          <div
+            className="ui-table-scroll"
+            role="region"
+            aria-label={labels.tableLabel ?? "Students table"}
+            tabIndex={0}
+          >
+            <table className="ui-table">
+              <caption className="ui-visually-hidden">
+                {labels.tableLabel ?? "Students table"}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{labels.student ?? "Student"}</th>
+                  <th scope="col">{labels.groups ?? "Groups"}</th>
+                  <th scope="col">{labels.grade ?? "Grade"}</th>
+                  <th scope="col">{labels.attendanceRate ?? "Attendance"}</th>
+                  <th scope="col">{labels.quizAverage ?? "Quiz average"}</th>
+                  <th scope="col">{labels.phone ?? "Phone"}</th>
+                  <th scope="col">{labels.parent ?? "Parent"}</th>
+                  <th scope="col">{labels.status ?? "Status"}</th>
+                  <th scope="col" className="ui-table-cell-end">
+                    {labels.actions ?? "Actions"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {initialStudents.map((student) => (
+                  <tr key={student.id}>
+                    <td>
+                      <span className="app-person">
+                        <Avatar name={`${student.firstName} ${student.lastName}`} size="sm" />
+                        <span className="app-person-text">
+                          <Link
+                            href={`/app/students/${student.id}`}
+                            className="app-student-link"
+                          >
+                            {student.firstName} {student.lastName}
+                          </Link>
+                          {student.archivedAt ? (
+                            <span className="app-student-meta">
+                              {labels.archivedMarker ?? "Archived"}
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
+                    </td>
+
+                    <td>
+                      <span className="app-group-chips">
+                        {student.groups.length > 0 ? (
+                          student.groups.map((g) => (
+                            <Badge key={g.id} tone="neutral">
+                              {g.name}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="app-muted">—</span>
+                        )}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span className="app-muted">{student.grade || "—"}</span>
+                    </td>
+
+                    <td>
+                      {student.attendanceRate !== null ? (
+                        <span className="app-meter-row">
+                          <span
+                            className="app-meter"
+                            data-tone={attendanceTone(student.attendanceRate)}
+                            aria-hidden="true"
+                          >
+                            <span style={{ inlineSize: `${student.attendanceRate}%` }} />
+                          </span>
+                          <span className="app-meter-value">{student.attendanceRate}%</span>
+                        </span>
+                      ) : (
+                        <span className="app-muted">—</span>
+                      )}
+                    </td>
+
+                    <td>
+                      {student.quizAverage !== null ? (
+                        <span className="app-meter-value">{student.quizAverage}%</span>
+                      ) : (
+                        <span className="app-muted">—</span>
+                      )}
+                    </td>
+
+                    <td>
+                      {student.phoneE164 ? (
+                        <a
+                          href={`https://wa.me/${student.phoneE164.replace(/\+/g, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="app-whatsapp"
+                        >
+                          <Icon name="whatsapp" size={13} />
+                          <span dir="ltr">{student.phoneE164}</span>
+                        </a>
+                      ) : (
+                        <span className="app-muted">—</span>
+                      )}
+                    </td>
+
+                    <td>
+                      {student.parentName || student.parentPhoneE164 ? (
+                        <span className="app-person-text">
+                          <span className="app-person-name">
+                            {student.parentName || (labels.guardian ?? "Guardian")}
+                          </span>
+                          {student.parentPhoneE164 ? (
+                            <a
+                              href={`https://wa.me/${student.parentPhoneE164.replace(/\+/g, "")}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="app-whatsapp"
+                            >
+                              <Icon name="whatsapp" size={11} />
+                              <span dir="ltr">{student.parentPhoneE164}</span>
+                            </a>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="app-muted">—</span>
+                      )}
+                    </td>
+
+                    <td>{statusBadge(student.status)}</td>
+
+                    <td className="ui-table-cell-end">
+                      <span className="app-row-actions">
                         <Link
                           href={`/app/students/${student.id}`}
-                          className="font-semibold text-foreground hover:text-indigo-600 transition-colors"
+                          className="ui-button"
+                          data-variant="ghost"
+                          data-size="icon-sm"
+                          aria-label={`${labels.viewStudent ?? "View student"}: ${student.firstName} ${student.lastName}`}
                         >
-                          {student.firstName} {student.lastName}
+                          <Icon name="eye" size={15} />
                         </Link>
-                        {student.archivedAt && (
-                          <span className="block text-xs text-muted">{labels.archivedMarker ?? "(Archived)"}</span>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-4">
-                    <div className="flex flex-wrap gap-1 max-w-[200px]">
-                      {student.groups.length > 0 ? (
-                        student.groups.map((g) => (
-                          <Badge key={g.id} tone="neutral" className="text-xs">
-                            {g.name}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted">—</span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-4 text-muted">{student.grade || "—"}</td>
-
-                  <td className="py-3 px-4">
-                    {student.attendanceRate !== null ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${
-                              student.attendanceRate >= 85
-                                ? "bg-emerald-500"
-                                : student.attendanceRate >= 70
-                                ? "bg-amber-500"
-                                : "bg-rose-500"
-                            }`}
-                            style={{ width: `${student.attendanceRate}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium">{student.attendanceRate}%</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted">—</span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4">
-                    {student.quizAverage !== null ? (
-                      <span className="text-xs font-semibold">{student.quizAverage}%</span>
-                    ) : (
-                      <span className="text-xs text-muted">—</span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4">
-                    {student.phoneE164 ? (
-                      <a
-                        href={`https://wa.me/${student.phoneE164.replace(/\+/g, "")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
-                      >
-                        <Icon name="whatsapp" size={13} className="text-emerald-500" />
-                        <span dir="ltr">{student.phoneE164}</span>
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted">—</span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4">
-                    {student.parentName || student.parentPhoneE164 ? (
-                      <div className="text-xs">
-                        <div className="font-medium text-foreground">{student.parentName || (labels.guardian ?? "Guardian")}</div>
-                        {student.parentPhoneE164 && (
-                          <a
-                            href={`https://wa.me/${student.parentPhoneE164.replace(/\+/g, "")}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-muted hover:text-indigo-600"
-                          >
-                            <Icon name="whatsapp" size={11} className="text-emerald-500" />
-                            <span dir="ltr">{student.parentPhoneE164}</span>
-                          </a>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted">—</span>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-4">{statusBadge(student.status)}</td>
-
-                  <td className="py-3 px-4 text-end">
-                    <div className="inline-flex items-center gap-1">
-                      <Link
-                        href={`/app/students/${student.id}`}
-                        className="ui-button"
-                        data-variant="ghost"
-                        data-size="sm"
-                      >
-                        <Icon name="eye" size={14} />
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditingStudent(student);
-                          setEditModalOpen(true);
-                        }}
-                      >
-                        <Icon name="edit" size={14} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleArchiveToggle(student)}
-                      >
-                        <Icon name={student.archivedAt ? "refresh" : "trash"} size={14} />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`${labels.editStudent ?? "Edit"}: ${student.firstName} ${student.lastName}`}
+                          onClick={() => {
+                            setEditingStudent(student);
+                            setEditModalOpen(true);
+                          }}
+                        >
+                          <Icon name="edit" size={15} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={
+                            student.archivedAt
+                              ? `${labels.restoreStudent ?? "Restore"}: ${student.firstName} ${student.lastName}`
+                              : `${labels.archiveStudent ?? "Archive"}: ${student.firstName} ${student.lastName}`
+                          }
+                          onClick={() => handleArchiveToggle(student)}
+                        >
+                          <Icon name={student.archivedAt ? "refresh" : "trash"} size={15} />
+                        </Button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* Pagination controls */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between py-2 text-sm text-muted">
+        <div className="app-pagination">
           <div>
             {labels.pageInfo
               ? labels.pageInfo
@@ -754,7 +775,7 @@ export function StudentsClient({
                   .replace("{total}", String(totalCount))
               : `Page ${currentPage} of ${totalPages} (${totalCount} students)`}
           </div>
-          <div className="flex gap-2">
+          <div className="app-pagination-actions">
             <Button
               variant="secondary"
               size="sm"

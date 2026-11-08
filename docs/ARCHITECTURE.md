@@ -779,7 +779,10 @@ migration later.
 ### 16.3 Theming
 
 - Tokens live in `src/styles/tokens.css` as CSS custom properties, exactly the values in
-  `PRODUCT_REQUIREMENTS.md` §2.1.
+  `PRODUCT_REQUIREMENTS.md` §2.1 (`ADR-0023`). The 2026 canvas uses a paper/near-black background,
+  a floating panel token, and a single blue accent.
+- The older `--color-*` names are compatibility aliases that resolve through the live tokens. They
+  are not a second palette and are removed as each screen migrates.
 - `data-theme="light|dark"` on `<html>`; `system` is resolved by CSS `@media (prefers-color-scheme)`
   and by a tiny inline script that runs **before first paint** to avoid a flash.
 - `color-scheme` is set on the root so native controls (scrollbars, date pickers) match.
@@ -789,7 +792,8 @@ migration later.
 
 ### 16.4 Typography and content
 
-- Manrope (UI), Fraunces (display), Cairo (Arabic). Arabic overrides the display/UI font with Cairo.
+- Manrope (UI and display), Cairo (Arabic). Arabic overrides the display/UI font with Cairo and
+  resets `letter-spacing` (`ADR-0023`).
 - Teacher-authored content is stored and displayed exactly as entered. Only system strings are
   localised. (`PRODUCT_REQUIREMENTS.md` §2)
 - The prototype's i18n catalogue (~330 keys × 2) is the starting point for `messages/ar.json` and

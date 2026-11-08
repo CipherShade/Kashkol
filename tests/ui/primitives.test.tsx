@@ -187,6 +187,34 @@ describe("stat, progress, and avatar", () => {
     expect(html).toContain("Active members");
   });
 
+  it("renders an interactive stat as a pressed-state button", () => {
+    const html = renderToStaticMarkup(
+      <Stat
+        label="Active"
+        value={12}
+        hint="60% of listed students"
+        icon="checkCircle"
+        tone="success"
+        pressed
+        onClick={() => {}}
+      />,
+    );
+    expect(html).toContain("<button");
+    expect(html).toContain('type="button"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('data-interactive="true"');
+    expect(html).toContain('data-tone="success"');
+  });
+
+  it("renders the inverted composition without changing the value", () => {
+    const html = renderToStaticMarkup(
+      <Stat label="Total students" value={20} variant="invert" />,
+    );
+    expect(html).toContain('data-variant="invert"');
+    expect(html).toContain("Total students");
+    expect(html).toContain("20");
+  });
+
   it("renders avatar initials and a deterministic tone", () => {
     const html = renderToStaticMarkup(<Avatar name="Mona Ahmed" />);
     expect(html).toContain("MA");

@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-04 · **Status:** P3 forms and surveys foundation (`F-P3-09`), platform administration (`F-P3-03`) and centralized workspace plans/limits (`F-P3-04`), recorded video (`F-P3-02`), online exams (`F-P3-01`), M2 parent/student portals, PWA/Web Push, teacher workspace administration, sessions/calendar, and asynchronous report exports implemented · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & platform operations
+**Date:** 2026-11-08 · **Status:** Interface visual refresh (`ADR-0023`) applied across the shell, dashboard, and students directory; P3 forms and surveys foundation (`F-P3-09`), platform administration (`F-P3-03`) and centralized workspace plans/limits (`F-P3-04`), recorded video (`F-P3-02`), online exams (`F-P3-01`), M2 parent/student portals, PWA/Web Push, teacher workspace administration, sessions/calendar, and asynchronous report exports implemented · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & platform operations
 
 ---
 
@@ -25,7 +25,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (20 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (22 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -141,7 +141,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | `docs/SECURITY_AND_PRIVACY.md` | 408 | Security objectives, the threat model and boundary map, authentication and session policy, rate limits, authorisation and tenancy rules, input validation, file-handling security, secrets management, log and error redaction, audit-log security, the privacy register with retention and data-subject rights, minors' data, a requirement-to-control matrix, the security test plan, incident response, known security risks, and the security prohibitions. |
 | `docs/INTEGRATIONS.md` | 318 | Integration principles, the package-versioning policy, the integration inventory, the adapter contract pattern, and a contract for each integration: PostgreSQL, object storage, the antivirus scanner, email, the WhatsApp deep link, QR and token services, Railway, observability, and deferred payments — plus the failure matrix and the integration security checklist. |
 | `docs/decisions/README.md` | 65 | The ADR format, the index, the conventions, and the requirement traceability table. |
-| `docs/decisions/0001`–`0016` | 1,200 | Sixteen architecture decisions with context, decision, consequences, rejected alternatives, and a revisit trigger. |
+| `docs/decisions/0001`–`0023` | 1,524 | Twenty-two architecture decisions with context, decision, consequences, rejected alternatives, and a revisit trigger. |
 | `docs/STATUS.md` | this file | Current state and the ordered implementation plan. |
 | `../AGENTS.md` | 193 | The durable instructions an agent or engineer follows when working in this repository. |
 | `../.gitattributes` | 15 | The line-ending convention (LF for every text file) and the binary-file rules. |
@@ -156,7 +156,7 @@ Line counts are **non-blank** lines.
 | Database | Prisma schema, one committed migration, forced RLS, audit append-only grant, embedded PostgreSQL 17.9.0-beta.16 |
 | Tenancy | `withScope()`, tenant-table registry, tenancy repository/service, permission evaluation, RLS integration tests |
 | HTTP and auth | Request-id ULID, error envelope, `/healthz`, `/readyz`, Better Auth handler |
-| UI shell | Arabic/English routing, RTL/LTR layout, design tokens, light/dark/system theme script, bilingual status page, and `< 480px` mobile single-column CSS grid card stacking |
+| UI shell | Arabic/English routing, RTL/LTR layout, design tokens, light/dark/system theme script, bilingual status page, `< 480px` mobile single-column CSS grid card stacking, and the `ADR-0023` floating frame: 16 px canvas gutter, 86 px icon rail with tooltips, and a focus-trapped full-label drawer below 980 px |
 | Local development | Guarded seed, idempotent seed data, standalone start script, Railway configuration |
 | Quality gates | Unit tests, RLS/readiness integration tests, message parity, route registry, Prisma import boundary, logical-CSS and secret-name checks |
 
@@ -246,7 +246,7 @@ buttons, seeded demo content in production, and silent data loss.
 | Targeted changed-file lint | **Passed** — workspace administration, session, attendance, payment/report, and related tests are lint-clean |
 | Full lint | **Passed** — `npm run lint` (`eslint .` + `npm run lint:rules`) |
 | Typecheck | **Passed** — `npm run typecheck` |
-| Unit and UI tests | **Passed** — 32 unit files / 176 tests and 1 UI file / 19 tests |
+| Unit and UI tests | **Passed** — 53 unit files / 309 tests and 1 UI file / 21 tests |
 | Payment integration tests | **Passed** — 2 PostgreSQL tests cover payment-ledger tenant isolation, duplicate retries, refund limits, and separate corrections |
 | Full integration suite | **Resolved on 2026-11-07** — the pre-existing database/schema drift (missing `teaching_session.room` and eight related scheduling columns, plus the `started` session status) is reconciled; the suite now passes 15 files / 89 tests. See §5.1. |
 | Prisma schema and tracked migration state | **Passed with caveat** — schema validates and `db:status` is current; `db:migrate` applies the two feature migrations but then prompts for another migration due existing local database/schema drift |
@@ -341,6 +341,41 @@ sandbox's full-access approval. The application code does not depend on either w
 **Windows development note:** the embedded cluster must be initialised with `--encoding=UTF8`; the
 Windows default code page (WIN1252) cannot store Arabic. `scripts/dev-db.mjs` pins this, and an
 existing WIN1252 cluster must be recreated before seeding.
+
+### 5.2 Interface visual refresh on 2026-11-08 — `ADR-0023`
+
+The shell and the two implemented working screens (dashboard and students) were restyled to the
+supplied reference language without changing behaviour, routes, or dependencies.
+
+- `src/styles/tokens.css` now defines the paper/near-black canvas, the floating `--panel` surface, a
+  blue primary, tinted success/warning/danger/accent tones, chart/avatar/inverted-card tokens, and a
+  compatibility `--color-*` alias layer that resolves through the live palette. Light, dark, and the
+  `prefers-color-scheme` fallback are hand-written per surface.
+- `src/styles/ui.css` and `src/styles/shell.css` carry pill buttons, the larger radius, the `Stat`
+  tone/interactive API, a 16 px floating frame, an 86 px icon rail with tooltips, and the full-label
+  drawer below 980 px. All new CSS uses logical properties.
+- The dashboard composition is a hero header, four computed statistics, workspace facts, a setup
+  donut whose percentage is computed from onboarding records, and the members table.
+- Students uses four real KPI filter buttons (total, active, at risk, inactive) whose percentages are
+  computed from the current result set. The always-zero archived card is gone; an explicit “Show
+  archived” toggle replaces it, and archived totals are claimed only when archived records are in view.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint and the project rules (catalogue parity, route registry, Prisma boundary, logical CSS) |
+| `npm run typecheck` | **Passed** |
+| `npm test` | **Passed** — 53 unit files / 309 tests and 1 UI file / 21 tests |
+| `npm run test:integration` | **Passed** — 15 files / 91 tests against the local PostgreSQL |
+| `npm run build` | **Passed** — production build |
+| Route registry | **Unchanged** — no route was added, removed, or renamed |
+| Dependencies | **Unchanged** — no package was added, removed, or upgraded |
+
+**Visual review performed:** screenshots were captured at `/ar` and `/en` in light and dark at
+1440 px (dashboard and students) and 390 px (dashboard and students). The floating frame, 86 px icon
+rail with tooltips, KPI cards, tables, and the RTL layout render consistently in both themes at both
+widths. `F-P1-15` still requires a final sign-off review on all remaining screens before the M1
+quality gate can pass; screens beyond the dashboard and students resolve through the compatibility
+`--color-*` aliases and need the same light/dark, RTL/LTR, and narrow-width review.
 
 ---
 

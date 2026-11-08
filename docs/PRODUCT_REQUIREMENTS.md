@@ -64,44 +64,53 @@ downgraded.
 | Numbers | Arabic locale may use Arabic-Indic digits; **phone numbers, phone inputs, and share codes always render LTR** (`dir="ltr"`), as the prototype already does for phone fields. |
 | Dates | Week start **Saturday** (`A-02`). Gregorian, `en-GB` / `ar-EG` formatting conventions. |
 | Theming | Light and dark both shipped. Default follows OS preference; user override persists. (`A-13`) |
-| Typography | UI font **Manrope**, display font **Fraunces**, Arabic font **Cairo** — same as prototype. Arabic overrides display/UI font to Cairo with `letter-spacing: 0` and no uppercase transform on labels (the prototype already does this). |
+| Typography | UI font **Manrope**, display font **Manrope**, Arabic font **Cairo** — the 2026 visual system (`ADR-0023`). Arabic overrides display/UI font to Cairo with `letter-spacing: 0` and no uppercase transform on labels. |
 | Content | Teacher-authored content (student names, group names, homework titles, notes) is stored **untranslated** and displayed as entered. Only system/UI strings are localized. |
 
-### 2.1 Design tokens (carried over from the reference prototype)
+### 2.1 Design tokens (the Kashkol canvas, `ADR-0023`)
 
-The prototype's token system is a sound, coherent base and is adopted as the Kashkol design system,
-with the brand name changed from *Madar / مَدار* to **Kashkol / كشكول**.
+The token architecture is unchanged: one CSS custom-property layer, a real light/dark swap, and
+logical properties everywhere. The 2026 visual refresh replaces the prototype's green palette and
+typography with the canvas below. The reference prototype remains read-only and its defects
+(`DEF-01`–`DEF-23`) are not carried forward.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `--bg` | `#EFF0EA` | `#14171A` | App background |
-| `--surface` | `#FFFFFF` | `#1C2023` | Cards, sidebar, topbar, modals |
-| `--surface-2` | `#F7F7F2` | `#22262A` | Inset rows, hover, table header, progress track |
-| `--ink` | `#191D1B` | `#EDEEE9` | Primary text |
-| `--muted` | `#6E7168` | `#9EA29A` | Secondary text |
-| `--muted-2` | `#93958C` | `#767A72` | Tertiary text, table headers, empty-state icons |
-| `--border` | `#E2E1D6` | `#2C3033` | Dividers, card borders |
-| `--border-strong` | `#CFCEC0` | `#3A3F42` | Input borders |
-| `--primary` | `#1F4C4A` | `#4E9B92` | Primary actions, active nav, session accent |
-| `--primary-strong` | `#163837` | `#6CB6AC` | Primary hover, active text |
-| `--primary-tint` | `#E4EDEC` | `#1E2F2E` | Selected rows, active nav background |
-| `--accent` | `#E0A039` | `#E7B45C` | Secondary accent |
-| `--accent-strong` | `#B97F1F` | `#F0C87D` | Accent text on light surfaces |
-| `--accent-tint` | `#FBF0DD` | `#2E2517` | Accent backgrounds |
-| `--success` | `#3C7A5B` | `#6BAE8B` | Present / success badges |
-| `--danger` | `#B9483E` | `#E17C71` | Absent / destructive |
-| `--warn` | `#B97F1F` | `#E7B45C` | Late / at-risk |
-| `--radius` | `6 / 10 / 16` px (`sm/md/lg`) | same | Component radii |
-| `--shadow` | `0 1px 2px` / `0 6px 20px` (rgba black) | same | Elevation |
+| `--bg` | `#ECECE6` | `#08080A` | Canvas behind the floating frame |
+| `--panel` | `#FBFBF8` | `#0F0F11` | The main floating panel |
+| `--surface` | `#FFFFFF` | `#131315` | Cards, sidebar rail, top bar, modals |
+| `--surface-2` | `#F5F5F1` | `#1B1B1E` | Inset rows, hover, table header, progress track |
+| `--ink` | `#0B0B0D` | `#F4F4F6` | Primary text |
+| `--muted` | `#6E6E76` | `#9B9BA4` | Secondary text |
+| `--muted-2` | `#8B8B93` | `#73737C` | Tertiary text, table headers, empty-state icons |
+| `--border` | `#E5E5DF` | `#232326` | Dividers, card borders |
+| `--border-strong` | `#D3D3CB` | `#303035` | Input borders, strong separators |
+| `--primary` | `#4F6BF5` | `#6D8BFF` | Primary actions, active rail item, KPI accent |
+| `--primary-strong` | `#3B55D9` | `#8EA6FF` | Primary hover, active text |
+| `--primary-tint` | `#EDF0FF` | `#1A2141` | Selected rows, active nav background, tinted KPI |
+| `--accent` | `#F0A35E` | `#F0AD6C` | Secondary accent and planned-step marker |
+| `--accent-tint` | `#FDF0E4` | `#2C2218` | Accent backgrounds |
+| `--success` | `#2F9E6B` | `#58C79A` | Present / success badges and KPI |
+| `--danger` | `#DC5A5A` | `#F07C7C` | Absent / destructive |
+| `--warn` | `#D4932F` | `#E7B45C` | Late / at-risk |
+| `--chart-1`–`--chart-6` | blue, green, orange, yellow, coral, violet | brightened equivalents | Data visualisation only |
+| `--card-invert-bg` / `--card-invert-ink` | ink on paper | paper on ink | The inverted feature statistic |
+| `--radius-sm/md/lg/xl` | `10 / 16 / 22 / 28` px | same | Component radii |
+| `--shadow-card` / `--shadow-md` | soft inset highlight + long shade | stronger shade | Card and floating-panel elevation |
+| `--rail-width` / `--shell-gap` / `--content-max` | `86 px` / `16 px` / `1360 px` | same | Shell geometry |
 
-**Status → colour mapping** (matches prototype): `active` → success, `at_risk` → warn, `inactive` → danger.
+**Status → colour mapping** (retained from the semantic contract): `active` → success, `at_risk` →
+warn, `inactive` → danger. A KPI or filter card may use the matching semantic tint, but its label is
+always visible, so colour is never the only meaning.
 
-**Attendance mark → colour mapping** (matches prototype): `present` → success, `late` → warn,
-`absused`/`absent` → danger, `excused` → neutral (`--surface-2` + `--ink`).
+**Attendance mark → colour mapping:** `present` → success, `late` → warn,
+`absent` → danger, `excused` → neutral (`--surface-2` + `--ink`).
 
 **Theme implementation requirement:** dark mode must be a **real token swap** driven by
-`[data-theme="dark"]` on the document root, applied identically to the prototype's
-`prefers-color-scheme` fallback. No component may hardcode a colour outside the token set.
+`[data-theme="dark"]` on the document root, with the same values available through the
+`prefers-color-scheme` fallback when the user chose `system`. No component may hardcode a colour
+outside the token set. The older `--color-*` names remain as aliases that resolve through these
+tokens until the remaining screens are migrated.
 
 ---
 
@@ -254,7 +263,7 @@ right-to-left, so the app feels native to me.
 4. All layout uses CSS logical properties; an automated check confirms no layout-affecting
    `left`/`right`/`margin-left`/`margin-right`/`padding-left`/`padding-right`/`text-align: left|right`
    declarations exist outside of a documented allowlist.
-5. Arabic renders in **Cairo**; Latin headings render in **Fraunces**; UI body renders in **Manrope**.
+5. Arabic renders in **Cairo**; UI and Latin display text render in **Manrope** (`ADR-0023`).
    Arabic headings have `letter-spacing: 0` and are never `text-transform: uppercase`.
 6. Dates, numbers, and percentages format per locale. Phone numbers, share codes, and exam codes
    render LTR inside RTL text.

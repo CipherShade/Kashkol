@@ -1,10 +1,11 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import type { VisibleNavGroup } from "@/lib/navigation/nav";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Icon } from "@/components/ui/icon";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +34,7 @@ function NavList({
 }) {
   const pathname = usePathname();
   const t = useTranslations("Shell");
+  const tooltipSide = useLocale() === "ar" ? "left" : "right";
 
   return (
     <>
@@ -43,8 +45,8 @@ function NavList({
             const active = isActive(pathname, item.href);
             const content = (
               <>
-                <Icon name={item.icon} size={17} />
-                <span>{item.label}</span>
+                <Icon name={item.icon} size={18} />
+                <span className="app-nav-label">{item.label}</span>
                 {item.planned ? (
                   <Badge tone="accent" icon="clock" className="app-nav-planned">
                     {t("plannedWithMilestone", { milestone: item.milestone })}
@@ -71,16 +73,17 @@ function NavList({
             }
 
             return (
-              <Link
-                key={item.key}
-                href={item.href}
-                className="app-nav-item"
-                data-active={active}
-                data-planned={item.planned}
-                aria-current={active ? "page" : undefined}
-              >
-                {content}
-              </Link>
+              <Tooltip key={item.key} label={item.label} side={tooltipSide}>
+                <Link
+                  href={item.href}
+                  className="app-nav-item"
+                  data-active={active}
+                  data-planned={item.planned}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {content}
+                </Link>
+              </Tooltip>
             );
           })}
         </div>
@@ -104,12 +107,40 @@ function SidebarBody({
   const app = useTranslations("App");
   const pathname = usePathname();
   const accountActive = pathname === "/app/account";
+  const workspaceInitial = workspace.name.trim().slice(0, 1);
+  const tooltipSide = useLocale() === "ar" ? "left" : "right";
+
+  const accountLink = (
+    <Link
+      href="/app/account"
+      className="app-sidebar-footer-link"
+      data-active={accountActive}
+      aria-current={accountActive ? "page" : undefined}
+      onClick={onNavigate}
+    >
+      <Icon name="user" size={18} />
+      <span>{t("account")}</span>
+    </Link>
+  );
+
+  const settingsLink = settingsVisible ? (
+    <Link
+      href="/app/settings"
+      className="app-sidebar-footer-link"
+      data-active={pathname === "/app/settings"}
+      aria-current={pathname === "/app/settings" ? "page" : undefined}
+      onClick={onNavigate}
+    >
+      <Icon name="gear" size={18} />
+      <span>{t("settings")}</span>
+    </Link>
+  ) : null;
 
   return (
     <>
       <div className="app-sidebar-brand">
         <span className="app-brand-mark">
-          <Icon name="target" size={19} />
+          <Icon name="target" size={20} />
         </span>
         <span className="app-brand-text">
           <Link href="/app" className="app-brand-name" onClick={onNavigate}>
@@ -120,6 +151,10 @@ function SidebarBody({
       </div>
 
       <div className="app-sidebar-context" aria-label={t("workspaceContext")}>
+        <span className="app-context-initial" aria-hidden="true">
+          {workspaceInitial}
+        </span>
+        {!mobile ? <span className="ui-visually-hidden">{workspace.name}</span> : null}
         <span className="app-context-label">{t("workspaceLabel")}</span>
         <span className="app-context-name">{workspace.name}</span>
         <span className="app-context-meta">
@@ -135,27 +170,21 @@ function SidebarBody({
       </nav>
 
       <div className="app-sidebar-footer">
-        <Link
-          href="/app/account"
-          className="app-sidebar-footer-link"
-          data-active={accountActive}
-          aria-current={accountActive ? "page" : undefined}
-          onClick={onNavigate}
-        >
-          <Icon name="user" size={17} />
-          <span>{t("account")}</span>
-        </Link>
-        {settingsVisible ? (
-          <Link
-            href="/app/settings"
-            className="app-sidebar-footer-link"
-            data-active={pathname === "/app/settings"}
-            aria-current={pathname === "/app/settings" ? "page" : undefined}
-            onClick={onNavigate}
-          >
-            <Icon name="gear" size={17} />
-            <span>{t("settings")}</span>
-          </Link>
+        {mobile ? (
+          accountLink
+        ) : (
+          <Tooltip label={t("account")} side={tooltipSide}>
+            {accountLink}
+          </Tooltip>
+        )}
+        {settingsLink ? (
+          mobile ? (
+            settingsLink
+          ) : (
+            <Tooltip label={t("settings")} side={tooltipSide}>
+              {settingsLink}
+            </Tooltip>
+          )
         ) : null}
         <p className="app-version" title={user.email}>
           {t("footerNote")}
