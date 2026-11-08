@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const uuid = z.string().uuid();
-const fileScope = z.enum(["teacher_only", "groups", "students"]);
+const fileScope = z.enum(["teacher_only", "groups", "students", "form_upload"]);
 
 export const createMaterialSchema = z
   .object({

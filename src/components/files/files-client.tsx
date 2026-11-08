@@ -12,7 +12,7 @@ type Student = { id: string; name: string };
 type Subject = { id: string; name: string };
 type Material = {
   id: string;
-  scope: "teacher_only" | "groups" | "students";
+  scope: "teacher_only" | "groups" | "students" | "form_upload";
   title: string;
   description: string | null;
   topic: string | null;
@@ -35,7 +35,7 @@ type VideoLessonItem = {
   description: string | null;
   topic: string | null;
   subject: Subject | null;
-  scope: "teacher_only" | "groups" | "students";
+  scope: "teacher_only" | "groups" | "students" | "form_upload";
   publicationStatus: "draft" | "published" | "archived";
   assetStatus: "pending_upload" | "processing" | "ready" | "failed";
   durationSeconds: number | null;

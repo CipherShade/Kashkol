@@ -43,7 +43,7 @@ const videoSelection = {
   },
 } satisfies Prisma.VideoLessonSelect;
 
-type VideoScope = "teacher_only" | "groups" | "students";
+type VideoScope = "teacher_only" | "groups" | "students" | "form_upload";
 
 function isVideoScope(scope: string): scope is VideoScope {
   return scope === "teacher_only" || scope === "groups" || scope === "students";

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AppError } from "@/lib/http/errors";
 
-export const videoScopeSchema = z.enum(["teacher_only", "groups", "students"]);
+export const videoScopeSchema = z.enum(["teacher_only", "groups", "students", "form_upload"]);
 export const videoPublicationStatusSchema = z.enum(["draft", "published", "archived"]);
 
 const uuidList = z.array(z.string().uuid()).max(100);
