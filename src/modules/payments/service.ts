@@ -13,8 +13,10 @@ import {
   createAdjustmentTx,
   createFeeRuleTx,
   createPaymentTx,
+  getSessionRevenueDataTx,
   loadPaymentDashboard,
 } from "./repository";
+import { buildSessionRevenueSummary } from "./session-revenue";
 import { egpToMinorUnits } from "./schemas";
 import type {
   CreateAdjustmentInput,
@@ -128,6 +130,7 @@ export async function recordPayment(
       id: newUuidV7(),
       workspaceId: scope.workspaceId,
       studentId: input.studentId,
+      sessionId: input.sessionId ?? null,
       amountMinor: egpToMinorUnits(input.amount),
       period: input.period ?? null,
       purpose: input.purpose ?? null,
@@ -154,6 +157,7 @@ export async function recordPayment(
         action: "payment.recorded",
         diff: {
           studentId: input.studentId,
+          sessionId: input.sessionId ?? null,
           amountMinor: saved.payment.amountMinor,
           period: saved.payment.period,
           purpose: saved.payment.purpose,
@@ -164,6 +168,19 @@ export async function recordPayment(
       });
     }
     return { payment: saved.payment, duplicate: saved.duplicate };
+  });
+}
+
+export async function getSessionRevenueSummary(scope: Scope, sessionId: string) {
+  authorize(scope, "payments", "read");
+  return withScope(scope, async (tx) => {
+    const data = await getSessionRevenueDataTx(tx, scope.workspaceId, sessionId);
+    if (!data) throw new AppError("NOT_FOUND");
+    return buildSessionRevenueSummary(
+      data.pricePerStudentMinor,
+      data.eligibleAttendanceCount,
+      data.payments,
+    );
   });
 }
 

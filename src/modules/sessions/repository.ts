@@ -120,6 +120,7 @@ export async function createOneOffSessionTx(
     notes?: string | null;
     teacherId?: string | null;
     assistantId?: string | null;
+    pricePerStudentMinor?: number | null;
   },
 ) {
   // Verify group belongs to workspace
@@ -127,6 +128,11 @@ export async function createOneOffSessionTx(
     where: { id: data.groupId, workspaceId: scope.workspaceId, archivedAt: null },
   });
   if (!group) throw new Error("NOT_FOUND");
+
+  const effectivePrice =
+    data.pricePerStudentMinor !== undefined
+      ? data.pricePerStudentMinor
+      : (group.defaultPricePerStudentMinor ?? null);
 
   return tx.teachingSession.create({
     data: {
@@ -142,6 +148,7 @@ export async function createOneOffSessionTx(
       notes: data.notes ?? null,
       teacherId: data.teacherId ?? null,
       assistantId: data.assistantId ?? null,
+      pricePerStudentMinor: effectivePrice,
     },
   });
 }
@@ -156,6 +163,7 @@ export async function updateSessionTx(
     notes?: string | null;
     teacherId?: string | null;
     assistantId?: string | null;
+    pricePerStudentMinor?: number | null;
   },
 ) {
   return tx.teachingSession.update({

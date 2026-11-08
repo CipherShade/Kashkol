@@ -64,6 +64,7 @@ export const TENANT_TABLES = [
   "form_answer",
   "form_answer_file",
   "form_upload",
+  "homework_completion_mark",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

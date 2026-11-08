@@ -911,8 +911,13 @@ consolidated form rather than one directory per row above:
 | `20261107122000_forms_file_scope_check` | Extends `file_scope_check` so a `form_upload` file must have null group and student targets |
 | `20261107130000_session_status_started` | Adds `started` to the `session_status` enum |
 | `20261107131000_teaching_session_schedule_fields` | Adds `room`, `location`, `notes`, `teacher_id`, `assistant_id`, `series_id`, `occurrence_no`, `started_at`, and `completed_at` to `teaching_session`, plus its `series_id` index |
+| `20261108000000_session_pricing` | Adds `default_price_per_student_minor` to `group`, `price_per_student_minor` to `teaching_session`, and `session_id` to `payment` |
+| `20261108000001_attendance_payment_verification` | Adds `payment_verified` boolean to `attendance_mark` |
+| `20261108000002_cross_season_attendance` | Adds `is_cross_season` boolean and `primary_group_id` foreign key to `attendance_mark` |
+| `20261108000003_student_qr_identity` | Adds `qr_token_hash` persistent identity token hash to `student` |
+| `20261108000004_homework_completion_marks` | Adds `homework_completion_status` enum and `homework_completion_mark` table with forced RLS and tenant indexes |
 
-The current local development database tracks all twenty-four migrations above. `student` and
+The current local development database tracks all twenty-nine migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

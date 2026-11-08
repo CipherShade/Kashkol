@@ -47,6 +47,33 @@ export const updateSubmissionSchema = z.object({
 
 export const archiveHomeworkSchema = z.object({ archived: z.boolean() });
 
+export const homeworkCompletionStatusSchema = z.enum(["completed", "not_completed", "not_applicable"]);
+export type HomeworkCompletionStatus = z.infer<typeof homeworkCompletionStatusSchema>;
+
+export const recordHomeworkCompletionMarkSchema = z.object({
+  homeworkId: uuid,
+  sessionId: uuid.optional().nullable(),
+  studentId: uuid,
+  status: homeworkCompletionStatusSchema,
+  note: z.string().trim().max(500).optional().nullable(),
+});
+export type RecordHomeworkCompletionMarkInput = z.infer<typeof recordHomeworkCompletionMarkSchema>;
+
+export const bulkRecordHomeworkCompletionSchema = z.object({
+  homeworkId: uuid,
+  sessionId: uuid.optional().nullable(),
+  marks: z
+    .array(
+      z.object({
+        studentId: uuid,
+        status: homeworkCompletionStatusSchema,
+        note: z.string().trim().max(500).optional().nullable(),
+      }),
+    )
+    .min(1, { message: "noMarks" }),
+});
+export type BulkRecordHomeworkCompletionInput = z.infer<typeof bulkRecordHomeworkCompletionSchema>;
+
 export type CreateHomeworkInput = z.infer<typeof createHomeworkSchema>;
 export type UpdateHomeworkInput = z.infer<typeof updateHomeworkSchema>;
 export type HomeworkQuery = z.infer<typeof homeworkQuerySchema>;

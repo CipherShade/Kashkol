@@ -100,6 +100,7 @@ export async function createGroup(
       endTime: input.endTime,
       capacity: input.capacity,
       teacherNote: input.teacherNote,
+      defaultPricePerStudentMinor: input.defaultPricePerStudentMinor,
     });
 
     await writeAuditEvent(tx, {
@@ -117,6 +118,7 @@ export async function createGroup(
         endTime: input.endTime,
         capacity: input.capacity,
         color: input.color,
+        defaultPricePerStudentMinor: group.defaultPricePerStudentMinor,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
@@ -149,6 +151,7 @@ export async function updateGroup(
       endTime: input.endTime,
       capacity: input.capacity,
       teacherNote: input.teacherNote,
+      defaultPricePerStudentMinor: input.defaultPricePerStudentMinor,
     });
 
     await writeAuditEvent(tx, {
@@ -166,6 +169,7 @@ export async function updateGroup(
           weekday: existing.weekday,
           startTime: existing.startTime,
           capacity: existing.capacity,
+          defaultPricePerStudentMinor: existing.defaultPricePerStudentMinor,
         },
         after: {
           name: input.name,
@@ -173,7 +177,45 @@ export async function updateGroup(
           weekday: input.weekday,
           startTime: input.startTime,
           capacity: input.capacity,
+          defaultPricePerStudentMinor: input.defaultPricePerStudentMinor,
         },
+      },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return updated;
+  });
+}
+
+export async function updateGroupPrice(
+  scope: Scope,
+  groupId: string,
+  priceMinor: number | null,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "groups", "write");
+  const ctx = context(reqCtx);
+
+  const existing = await findGroupById(scope, groupId);
+  if (!existing) throw new AppError("NOT_FOUND");
+
+  return withScope(scope, async (tx) => {
+    const updated = await updateGroupTx(tx, scope, groupId, {
+      defaultPricePerStudentMinor: priceMinor,
+    });
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "group",
+      entityId: groupId,
+      action: "group.price_updated",
+      diff: {
+        before: existing.defaultPricePerStudentMinor,
+        after: priceMinor,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,

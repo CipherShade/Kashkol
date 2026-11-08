@@ -61,6 +61,7 @@ type StudentPortalDetail = {
       id: string;
       mark: "present" | "absent" | "late" | "excused";
       recordedAt: string;
+      isCrossSeason?: boolean;
       session: {
         id: string;
         startsAt: string;
@@ -879,9 +880,16 @@ export function StudentPortalClient({
                       className="flex items-center justify-between gap-3 px-4 py-3"
                     >
                       <div>
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {rec.session.groupName}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-[var(--text-primary)]">
+                            {rec.session.groupName}
+                          </p>
+                          {rec.isCrossSeason && (
+                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              {t("crossSeasonBadge")}
+                            </span>
+                          )}
+                        </div>
                         <p className="font-mono text-xs text-[var(--text-secondary)]">
                           {new Date(rec.session.startsAt).toLocaleDateString()}
                         </p>

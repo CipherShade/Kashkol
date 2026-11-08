@@ -8,10 +8,13 @@ import {
   createHomeworkTx,
   ensureGroupHomeworkSubmissionsTx,
   findHomeworkTx,
+  getHomeworkCompletionRosterTx,
   listHomeworkRows,
   toHomeworkDecimal,
+  upsertHomeworkCompletionMarksTx,
 } from "./repository";
 import type {
+  BulkRecordHomeworkCompletionInput,
   CreateHomeworkInput,
   HomeworkQuery,
   UpdateHomeworkInput,
@@ -391,4 +394,54 @@ export async function addNewEnrollmentToHomework(
       requestId,
     });
   }
+}
+
+export async function getHomeworkCompletionRoster(
+  scope: Scope,
+  homeworkId: string,
+  sessionId?: string | null,
+) {
+  authorize(scope, "homework", "read");
+  return withScope(scope, async (tx) => {
+    const data = await getHomeworkCompletionRosterTx(tx, scope.workspaceId, homeworkId, sessionId);
+    if (!data) throw new AppError("NOT_FOUND");
+    return data;
+  });
+}
+
+export async function bulkRecordHomeworkCompletion(
+  scope: Scope,
+  input: BulkRecordHomeworkCompletionInput,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "homework", "write");
+  const ctx = auditContext(reqCtx);
+
+  return withScope(scope, async (tx) => {
+    const records = await upsertHomeworkCompletionMarksTx(tx, {
+      workspaceId: scope.workspaceId,
+      homeworkId: input.homeworkId,
+      sessionId: input.sessionId,
+      marks: input.marks,
+      recordedBy: scope.actorUserId ?? "system",
+    });
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "homework",
+      entityId: input.homeworkId,
+      action: "homework.completion_recorded",
+      diff: {
+        sessionId: input.sessionId,
+        count: input.marks.length,
+      },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return { count: records.length, records };
+  });
 }

@@ -83,12 +83,45 @@ export async function findPaymentByIdTx(
   return tx.payment.findFirst({ where: { id: paymentId, workspaceId } });
 }
 
+export async function getSessionRevenueDataTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+) {
+  const [session, payments, marks] = await Promise.all([
+    tx.teachingSession.findFirst({
+      where: { id: sessionId, workspaceId },
+      select: {
+        id: true,
+        pricePerStudentMinor: true,
+        group: { select: { defaultPricePerStudentMinor: true } },
+      },
+    }),
+    tx.payment.findMany({
+      where: { workspaceId, sessionId },
+      select: { amountMinor: true, voidedAt: true },
+    }),
+    tx.attendanceMark.findMany({
+      where: { workspaceId, sessionId, mark: { in: ["present", "late"] } },
+      select: { id: true },
+    }),
+  ]);
+  if (!session) return null;
+  return {
+    pricePerStudentMinor:
+      session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null,
+    eligibleAttendanceCount: marks.length,
+    payments,
+  };
+}
+
 export async function createPaymentTx(
   tx: Prisma.TransactionClient,
   input: {
     id: string;
     workspaceId: string;
     studentId: string;
+    sessionId?: string | null;
     amountMinor: number;
     period: string | null;
     purpose: string | null;
@@ -118,6 +151,7 @@ export async function createPaymentTx(
       id: input.id,
       workspaceId: input.workspaceId,
       studentId: input.studentId,
+      sessionId: input.sessionId ?? null,
       period: input.period,
       purpose: input.purpose,
       amountMinor: input.amountMinor,
@@ -141,6 +175,7 @@ export async function createPaymentTx(
 function paymentMatches(
   payment: {
     studentId: string;
+    sessionId?: string | null;
     amountMinor: number;
     period: string | null;
     purpose: string | null;
@@ -152,6 +187,7 @@ function paymentMatches(
   },
   input: {
     studentId: string;
+    sessionId?: string | null;
     amountMinor: number;
     period: string | null;
     purpose: string | null;
@@ -164,6 +200,7 @@ function paymentMatches(
 ) {
   return (
     payment.studentId === input.studentId &&
+    payment.sessionId === (input.sessionId ?? null) &&
     payment.amountMinor === input.amountMinor &&
     payment.period === input.period &&
     payment.purpose === input.purpose &&

@@ -154,6 +154,14 @@ enum HomeworkSubmissionStatus {
   @@map("homework_submission_status")
 }
 
+enum HomeworkCompletionStatus {
+  completed
+  not_completed
+  not_applicable
+
+  @@map("homework_completion_status")
+}
+
 enum AssessmentType {
   paper_exam
   quiz
@@ -607,6 +615,7 @@ model Workspace {
   homeworks           Homework[]
   homeworkSubmissions HomeworkSubmission[]
   homeworkResources   HomeworkResource[]
+  homeworkCompletionMarks HomeworkCompletionMark[]
   followUps           StudentFollowUp[]
   followUpEvents      StudentFollowUpEvent[]
   videoLessons        VideoLesson[]
@@ -779,6 +788,7 @@ model Student {
   mergedIntoId    String?   @map("merged_into_id") @db.Uuid
   searchKey       String?   @map("search_key")
   phoneticKey     String?   @map("phonetic_key")
+  qrTokenHash     String?   @unique @map("qr_token_hash")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -804,6 +814,7 @@ model Student {
   onlineExamAssignments OnlineExamStudentAssignment[]
   onlineExamAttempts  OnlineExamAttempt[]
   formSubmissions     FormSubmission[]
+  homeworkCompletionMarks HomeworkCompletionMark[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -986,6 +997,7 @@ model Group {
   endTime     DateTime? @map("end_time") @db.Time(0)
   capacity    Int?
   teacherNote String?   @map("teacher_note")
+  defaultPricePerStudentMinor Int? @map("default_price_per_student_minor")
   searchKey   String?   @map("search_key")
   phoneticKey String?   @map("phonetic_key")
   archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
@@ -1004,6 +1016,7 @@ model Group {
   videoLessons     VideoLesson[]
   videoAccesses    VideoGroupAccess[]
   onlineExams      OnlineExam[]
+  crossSeasonAttendanceMarks AttendanceMark[] @relation("CrossSeasonPrimaryGroup")
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1052,6 +1065,7 @@ model TeachingSession {
   cancelledBy  String?       @map("cancelled_by")
   startedAt    DateTime?     @map("started_at") @db.Timestamptz(6)
   completedAt  DateTime?     @map("completed_at") @db.Timestamptz(6)
+  pricePerStudentMinor Int?  @map("price_per_student_minor")
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1061,6 +1075,8 @@ model TeachingSession {
   attendanceRevisions AttendanceRevision[]
   sessionRevisions    SessionRevision[]
   attendanceTokens    AttendanceToken[]
+  payments            Payment[]
+  homeworkCompletionMarks HomeworkCompletionMark[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1103,12 +1119,16 @@ model AttendanceMark {
   deviceId    String?             @map("device_id")
   recordedBy  String              @map("recorded_by")
   recordedAt  DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  paymentVerified Boolean         @default(false) @map("payment_verified")
+  isCrossSeason   Boolean         @default(false) @map("is_cross_season")
+  primaryGroupId  String?         @map("primary_group_id") @db.Uuid
   createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   session   TeachingSession     @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
   student   Student             @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  primaryGroup Group?           @relation("CrossSeasonPrimaryGroup", fields: [workspaceId, primaryGroupId], references: [workspaceId, id], onDelete: Restrict)
   revisions AttendanceRevision[]
 
   @@unique([workspaceId, id])
@@ -1237,6 +1257,7 @@ model Homework {
   group       Group?              @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
   submissions HomeworkSubmission[]
   resources   HomeworkResource[]
+  completionMarks HomeworkCompletionMark[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, dueAt])
@@ -1280,6 +1301,36 @@ model HomeworkResource {
   @@id([homeworkId, fileId])
   @@index([workspaceId])
   @@map("homework_resource")
+}
+
+/// Offline homework completion tracking per student per homework.
+/// Replaces the need for online submission for session-based homework checks.
+/// A mark here records whether the student completed the homework — no file
+/// upload required. The session link is optional (a homework may be assigned
+/// without a session context).
+model HomeworkCompletionMark {
+  id          String                  @id @default(uuid(7)) @db.Uuid
+  workspaceId String                  @map("workspace_id") @db.Uuid
+  homeworkId  String                  @map("homework_id") @db.Uuid
+  studentId   String                  @map("student_id") @db.Uuid
+  sessionId   String?                 @map("session_id") @db.Uuid
+  status      HomeworkCompletionStatus @default(not_completed)
+  note        String?
+  recordedBy  String                  @map("recorded_by")
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  homework  Homework        @relation(fields: [workspaceId, homeworkId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student         @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  session   TeachingSession? @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([homeworkId, studentId])
+  @@index([workspaceId])
+  @@index([workspaceId, studentId])
+  @@index([sessionId])
+  @@map("homework_completion_mark")
 }
 
 // ---------------------------------------------------------------------------
@@ -1338,6 +1389,7 @@ model Payment {
   id          String        @id @default(uuid(7)) @db.Uuid
   workspaceId String        @map("workspace_id") @db.Uuid
   studentId   String        @map("student_id") @db.Uuid
+  sessionId   String?       @map("session_id") @db.Uuid
   period      String?
   amountMinor Int           @map("amount_minor")
   currency    String        @default("EGP")
@@ -1356,6 +1408,7 @@ model Payment {
 
   workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   student   Student           @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  session   TeachingSession?  @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
   revisions PaymentRevision[]
   adjustments PaymentAdjustment[]
 
@@ -1365,6 +1418,7 @@ model Payment {
   @@index([workspaceId])
   @@index([studentId, period])
   @@index([workspaceId, voidedAt])
+  @@index([workspaceId, sessionId])
   @@map("payment")
 }
 

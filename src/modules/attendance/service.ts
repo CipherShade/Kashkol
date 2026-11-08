@@ -9,11 +9,18 @@ import {
   correctAttendanceMarkTx,
   createQrTokenTx,
   findActiveQrTokenByHash,
+  findStudentForQrScanTx,
+  getActiveEnrollmentForStudent,
   getEnrollmentForStudent,
   getRosterForSession,
   getSessionWithGroup,
+  setPaymentVerifiedTx,
   upsertAttendanceMarkTx,
 } from "./repository";
+import {
+  verifyStudentQrTokenSignature,
+  validateStudentQrAgainstRecord,
+} from "./student-qr";
 import { attendanceAuditActions } from "./audit";
 
 import { createAttendanceNotification } from "@/modules/notifications";
@@ -27,6 +34,8 @@ import type {
   MarkAttendanceInput,
   RotateQrTokenInput,
   ScanQrInput,
+  ScanStudentQrInput,
+  VerifyPaymentInput,
 } from "./schemas";
 
 export type RequestContext = {
@@ -68,17 +77,30 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
   if (!session) throw new AppError("NOT_FOUND");
   if (session.status === "cancelled") throw new AppError("CONFLICT");
 
-  const enrollment = await withScope(scope, async (tx) =>
-    getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, input.studentId),
-  );
-  if (!enrollment) throw new AppError("NOT_FOUND");
-
   const mark = await withScope(scope, async (tx) => {
+    // 1. Check if student is in session's group
+    const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, input.studentId);
+    let isCrossSeason = false;
+    let primaryGroupId: string | null = null;
+
+    if (!primaryEnrollment) {
+      // 2. Cross-season check: student must have an active enrollment in ANY group in this workspace
+      const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, input.studentId);
+      if (!activeEnrollment) {
+        throw new AppError("NOT_FOUND");
+      }
+      isCrossSeason = true;
+      primaryGroupId = activeEnrollment.groupId;
+    }
+
     const m = await upsertAttendanceMarkTx(tx, scope, {
       sessionId: input.sessionId,
       studentId: input.studentId,
       mark: input.mark,
       source: "manual",
+      paymentVerified: input.paymentVerified,
+      isCrossSeason,
+      primaryGroupId,
     });
 
     await writeAuditEvent(tx, {
@@ -89,7 +111,14 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
       entityType: "attendance_mark",
       entityId: m.id,
       action: attendanceAuditActions.attendanceMarked,
-      diff: { sessionId: input.sessionId, studentId: input.studentId, mark: input.mark, source: "manual" },
+      diff: {
+        sessionId: input.sessionId,
+        studentId: input.studentId,
+        mark: input.mark,
+        source: "manual",
+        isCrossSeason,
+        paymentVerified: m.paymentVerified,
+      },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
     });
@@ -126,13 +155,25 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
   const marks = await withScope(scope, async (tx) => {
     const results = [];
     for (const m of input.marks) {
-      const enrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, m.studentId);
-      if (!enrollment) continue;
+      const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, m.studentId);
+      let isCrossSeason = false;
+      let primaryGroupId: string | null = null;
+
+      if (!primaryEnrollment) {
+        const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, m.studentId);
+        if (!activeEnrollment) continue;
+        isCrossSeason = true;
+        primaryGroupId = activeEnrollment.groupId;
+      }
+
       const mark = await upsertAttendanceMarkTx(tx, scope, {
         sessionId: input.sessionId,
         studentId: m.studentId,
         mark: m.mark,
         source: "manual",
+        paymentVerified: m.paymentVerified,
+        isCrossSeason,
+        primaryGroupId,
       });
       results.push(mark);
     }
@@ -145,7 +186,7 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
       entityType: "teaching_session",
       entityId: input.sessionId,
       action: attendanceAuditActions.attendanceSaved,
-      diff: { count: input.marks.length },
+      diff: { count: results.length },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
     });
@@ -589,6 +630,191 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
 
     return { success: true, mark };
   });
+
+  return result;
+}
+
+/**
+ * Verify or unverify payment for a student at a session.
+ * Used by assistants/teachers on the attendance screen.
+ */
+export async function verifySessionPayment(
+  scope: Scope,
+  input: VerifyPaymentInput,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "attendance", "write");
+  const ctx = context(reqCtx);
+
+  return withScope(scope, async (tx) => {
+    const updated = await setPaymentVerifiedTx(
+      tx,
+      scope.workspaceId,
+      input.sessionId,
+      input.studentId,
+      input.verified,
+    );
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "attendance_mark",
+      entityId: updated.id,
+      action: "attendance.payment_verified",
+      diff: {
+        sessionId: input.sessionId,
+        studentId: input.studentId,
+        paymentVerified: input.verified,
+      },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * Scan a student's permanent QR code for session attendance.
+ * Executed by the assistant/teacher using the camera scanner.
+ * Supports cross-season attendance and duplicate scan protection.
+ */
+export async function scanStudentQrCode(
+  scope: Scope,
+  input: ScanStudentQrInput,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "attendance", "write");
+  const ctx = context(reqCtx);
+
+  const session = await getSessionWithGroup(scope, input.sessionId);
+  if (!session) throw new AppError("NOT_FOUND");
+  if (session.status === "cancelled") {
+    throw new AppError("CONFLICT", { messageKey: "attendance.errors.sessionCancelled" });
+  }
+  if (session.status === "completed") {
+    throw new AppError("CONFLICT", { messageKey: "attendance.errors.sessionCompleted" });
+  }
+
+  const result = await withScope(scope, async (tx) => {
+    // 1. Verify student QR token cryptographic signature and active hash in database
+    const verified = verifyStudentQrTokenSignature(input.qrToken);
+    const student = verified
+      ? await findStudentForQrScanTx(tx, scope.workspaceId, verified.studentId)
+      : null;
+
+    if (!student || !validateStudentQrAgainstRecord(input.qrToken, student.qrTokenHash)) {
+      await writeAuditEvent(tx, {
+        workspaceId: scope.workspaceId,
+        actorUserId: scope.actorUserId,
+        actorDisplayName: scope.actorDisplayName,
+        actorType: "user",
+        entityType: "teaching_session",
+        entityId: input.sessionId,
+        action: attendanceAuditActions.qrRejected,
+        diff: { reason: "invalid_or_revoked_student_qr" },
+        requestId: ctx.requestId,
+        ipHash: ctx.ipHash,
+      });
+      throw new AppError("FORBIDDEN", { messageKey: "attendance.errors.invalidQrCode" });
+    }
+
+    // 2. Duplicate scan check
+    const existingMark = await tx.attendanceMark.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        sessionId: input.sessionId,
+        studentId: student.id,
+      },
+    });
+    if (existingMark) {
+      await writeAuditEvent(tx, {
+        workspaceId: scope.workspaceId,
+        actorUserId: scope.actorUserId,
+        actorDisplayName: scope.actorDisplayName,
+        actorType: "user",
+        entityType: "teaching_session",
+        entityId: input.sessionId,
+        action: attendanceAuditActions.qrRejected,
+        diff: { reason: "duplicate_scan", studentId: student.id },
+        requestId: ctx.requestId,
+        ipHash: ctx.ipHash,
+      });
+      throw new AppError("CONFLICT", { messageKey: "attendance.errors.alreadyScanned" });
+    }
+
+    // 3. Enrollment check (regular vs cross-season)
+    const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, student.id);
+    let isCrossSeason = false;
+    let primaryGroupId: string | null = null;
+
+    if (!primaryEnrollment) {
+      const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, student.id);
+      if (!activeEnrollment) {
+        throw new AppError("NOT_FOUND", { messageKey: "attendance.errors.studentNotEnrolled" });
+      }
+      isCrossSeason = true;
+      primaryGroupId = activeEnrollment.groupId;
+    }
+
+    const markValue = input.markLate ? "late" : "present";
+    const mark = await upsertAttendanceMarkTx(tx, scope, {
+      sessionId: input.sessionId,
+      studentId: student.id,
+      mark: markValue,
+      source: "qr",
+      paymentVerified: input.paymentVerified,
+      isCrossSeason,
+      primaryGroupId,
+    });
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "attendance_mark",
+      entityId: mark.id,
+      action: attendanceAuditActions.attendanceMarked,
+      diff: {
+        sessionId: input.sessionId,
+        studentId: student.id,
+        mark: markValue,
+        source: "qr",
+        isCrossSeason,
+        paymentVerified: mark.paymentVerified,
+      },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return {
+      mark,
+      student: {
+        id: student.id,
+        firstName: student.firstName,
+        lastName: student.lastName,
+      },
+      isCrossSeason,
+    };
+  });
+
+  // Notification is created AFTER the attendance transaction succeeds
+  try {
+    await createAttendanceNotification(scope, {
+      sessionId: input.sessionId,
+      studentId: result.student.id,
+      groupName: session.group.name,
+      sessionDate: session.startsAt.toISOString(),
+      sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
+      mark: result.mark.mark as "present" | "late",
+      locale: (scope as unknown as { locale?: "ar" | "en" }).locale,
+    });
+  } catch {
+    // Best effort
+  }
 
   return result;
 }

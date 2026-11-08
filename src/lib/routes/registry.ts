@@ -143,6 +143,13 @@ export const ROUTES: RouteEntry[] = [
     description: "Get profile details, update, or archive a student.",
   },
   {
+    path: "/api/students/[studentId]/qr",
+    methods: ["GET", "POST", "DELETE"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Get, rotate, or revoke a student's permanent QR identity token.",
+  },
+  {
     path: "/api/students/import/preview",
     methods: ["POST"],
     access: "workspace",
@@ -255,6 +262,13 @@ export const ROUTES: RouteEntry[] = [
     description: "Transfer student to another group with historic records preserved.",
   },
   {
+    path: "/api/groups/[groupId]/price",
+    methods: ["PATCH"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Update the group's default price per student for sessions.",
+  },
+  {
     path: "/api/sessions",
     methods: ["GET", "POST"],
     access: "workspace",
@@ -281,6 +295,34 @@ export const ROUTES: RouteEntry[] = [
     access: "workspace",
     tenantScoped: true,
     description: "Issue or rotate QR attendance tokens for a session.",
+  },
+  {
+    path: "/api/sessions/[sessionId]/attendance/scan",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Scan student QR code for live session attendance.",
+  },
+  {
+    path: "/api/sessions/[sessionId]/attendance/[studentId]/payment",
+    methods: ["PATCH"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Verify or update payment status for a student during session attendance.",
+  },
+  {
+    path: "/api/sessions/[sessionId]/revenue",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Get session revenue calculations, expected vs collected payments, and collection rate.",
+  },
+  {
+    path: "/api/sessions/[sessionId]/homework/[homeworkId]",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Get session homework completion roster and bulk record completion status.",
   },
   {
     path: "/api/files",

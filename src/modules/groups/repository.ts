@@ -87,6 +87,7 @@ export async function findGroupById(scope: Scope, groupId: string) {
       startTime: formatTimeFromDate(group.startTime) ?? "16:00",
       endTime: formatTimeFromDate(group.endTime),
       capacity: group.capacity,
+      defaultPricePerStudentMinor: group.defaultPricePerStudentMinor,
       teacherNote: group.teacherNote,
       archivedAt: group.archivedAt,
       enrollments: group.enrollments,
@@ -220,6 +221,7 @@ export async function insertGroupTx(
     endTime?: string | null;
     capacity?: number | null;
     teacherNote?: string | null;
+    defaultPricePerStudentMinor?: number | null;
   },
 ) {
   const group = await tx.group.create({
@@ -236,6 +238,7 @@ export async function insertGroupTx(
       endTime: data.endTime ? parseTimeToDate(data.endTime) : null,
       capacity: data.capacity ?? null,
       teacherNote: data.teacherNote ?? null,
+      defaultPricePerStudentMinor: data.defaultPricePerStudentMinor ?? null,
     },
   });
 
@@ -248,6 +251,7 @@ export async function insertGroupTx(
     data.startTime,
     data.endTime,
     4,
+    data.defaultPricePerStudentMinor ?? null,
   );
 
   return group;
@@ -261,6 +265,7 @@ export async function generateGroupUpcomingSessionsTx(
   startTimeStr: string,
   endTimeStr: string | null | undefined,
   weeksAhead = 4,
+  defaultPricePerStudentMinor: number | null = null,
 ) {
   const now = new Date();
   const [startHour, startMin] = startTimeStr.split(":").map(Number);
@@ -291,6 +296,7 @@ export async function generateGroupUpcomingSessionsTx(
           startsAt,
           endsAt,
           status: "scheduled",
+          pricePerStudentMinor: defaultPricePerStudentMinor,
         },
       });
       sessionsCreated++;
@@ -313,6 +319,7 @@ export async function updateGroupTx(
     endTime?: string | null;
     capacity?: number | null;
     teacherNote?: string | null;
+    defaultPricePerStudentMinor?: number | null;
   },
 ) {
   return tx.group.update({
@@ -333,6 +340,9 @@ export async function updateGroupTx(
         : {}),
       ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
       ...(data.teacherNote !== undefined ? { teacherNote: data.teacherNote } : {}),
+      ...(data.defaultPricePerStudentMinor !== undefined
+        ? { defaultPricePerStudentMinor: data.defaultPricePerStudentMinor }
+        : {}),
     },
   });
 }

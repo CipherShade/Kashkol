@@ -27,6 +27,8 @@ export const paymentQuerySchema = z.object({
 export const recordPaymentSchema = z
   .object({
     studentId: uuid,
+    /** Optional: links this payment to a specific session. */
+    sessionId: uuid.optional(),
     amount: egpAmount,
     period: z.string().trim().max(80).optional(),
     purpose: z.string().trim().max(160).optional(),
@@ -37,7 +39,7 @@ export const recordPaymentSchema = z
     note: z.string().trim().max(1000).optional(),
     idempotencyKey: uuid,
   })
-  .refine((value) => Boolean(value.period || value.purpose), {
+  .refine((value) => Boolean(value.period || value.purpose || value.sessionId), {
     path: ["purpose"],
     message: "periodOrPurposeRequired",
   })

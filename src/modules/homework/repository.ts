@@ -127,3 +127,118 @@ export async function ensureGroupHomeworkSubmissionsTx(
   });
   return missing.map(({ id }) => id);
 }
+
+export async function getHomeworkCompletionRosterTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  homeworkId: string,
+  sessionId?: string | null,
+) {
+  const homework = await tx.homework.findFirst({
+    where: { id: homeworkId, workspaceId },
+    include: { group: { select: { id: true, name: true } } },
+  });
+  if (!homework) return null;
+
+  // Determine which students belong to this roster
+  let students: Array<{ id: string; firstName: string; lastName: string }> = [];
+
+  if (sessionId) {
+    // 1. Session attendance marks (including cross-season students!)
+    const marks = await tx.attendanceMark.findMany({
+      where: { workspaceId, sessionId },
+      include: { student: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    if (marks.length > 0) {
+      students = marks.map((m) => m.student);
+    } else {
+      // If attendance not taken yet, fall back to session's group enrollments
+      const session = await tx.teachingSession.findFirst({
+        where: { id: sessionId, workspaceId },
+        select: { groupId: true },
+      });
+      if (session) {
+        const enrollments = await tx.enrollment.findMany({
+          where: { workspaceId, groupId: session.groupId, leftAt: null },
+          include: { student: { select: { id: true, firstName: true, lastName: true } } },
+        });
+        students = enrollments.map((e) => e.student);
+      }
+    }
+  } else if (homework.groupId) {
+    const enrollments = await tx.enrollment.findMany({
+      where: { workspaceId, groupId: homework.groupId, leftAt: null },
+      include: { student: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    students = enrollments.map((e) => e.student);
+  }
+
+  // Fetch completion marks
+  const completionMarks = await tx.homeworkCompletionMark.findMany({
+    where: { workspaceId, homeworkId },
+  });
+  const markByStudentId = new Map(completionMarks.map((m) => [m.studentId, m]));
+
+  const roster = students.map((s) => {
+    const m = markByStudentId.get(s.id);
+    return {
+      studentId: s.id,
+      firstName: s.firstName,
+      lastName: s.lastName,
+      status: (m?.status ?? "not_completed") as "completed" | "not_completed" | "not_applicable",
+      note: m?.note ?? null,
+      recordedBy: m?.recordedBy ?? null,
+      recordedAt: m?.updatedAt ?? null,
+    };
+  });
+
+  return {
+    homework,
+    roster,
+  };
+}
+
+export async function upsertHomeworkCompletionMarksTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    workspaceId: string;
+    homeworkId: string;
+    sessionId?: string | null;
+    marks: Array<{
+      studentId: string;
+      status: "completed" | "not_completed" | "not_applicable";
+      note?: string | null;
+    }>;
+    recordedBy: string;
+  },
+) {
+  const results = [];
+  for (const m of input.marks) {
+    const record = await tx.homeworkCompletionMark.upsert({
+      where: {
+        homeworkId_studentId: {
+          homeworkId: input.homeworkId,
+          studentId: m.studentId,
+        },
+      },
+      update: {
+        status: m.status,
+        note: m.note ?? null,
+        sessionId: input.sessionId ?? null,
+        recordedBy: input.recordedBy,
+        updatedAt: new Date(),
+      },
+      create: {
+        workspaceId: input.workspaceId,
+        homeworkId: input.homeworkId,
+        studentId: m.studentId,
+        sessionId: input.sessionId ?? null,
+        status: m.status,
+        note: m.note ?? null,
+        recordedBy: input.recordedBy,
+      },
+    });
+    results.push(record);
+  }
+  return results;
+}

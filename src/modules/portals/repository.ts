@@ -631,6 +631,7 @@ export async function loadParentChildDetail(
         id: string;
         mark: "present" | "absent" | "late" | "excused";
         recordedAt: string;
+        isCrossSeason?: boolean;
         session: {
           id: string;
           startsAt: string;
@@ -653,6 +654,7 @@ export async function loadParentChildDetail(
           id: true,
           mark: true,
           recordedAt: true,
+          isCrossSeason: true,
           session: {
             select: {
               id: true,
@@ -679,6 +681,7 @@ export async function loadParentChildDetail(
           id: m.id,
           mark: m.mark,
           recordedAt: m.recordedAt.toISOString(),
+          isCrossSeason: m.isCrossSeason,
           session: {
             id: m.session.id,
             startsAt: m.session.startsAt.toISOString(),
@@ -1446,6 +1449,7 @@ export async function loadStudentPortalDetail(
         id: string;
         mark: "present" | "absent" | "late" | "excused";
         recordedAt: string;
+        isCrossSeason?: boolean;
         session: {
           id: string;
           startsAt: string;
@@ -1468,6 +1472,7 @@ export async function loadStudentPortalDetail(
           id: true,
           mark: true,
           recordedAt: true,
+          isCrossSeason: true,
           session: {
             select: {
               id: true,
@@ -1494,6 +1499,7 @@ export async function loadStudentPortalDetail(
           id: m.id,
           mark: m.mark,
           recordedAt: m.recordedAt.toISOString(),
+          isCrossSeason: m.isCrossSeason,
           session: {
             id: m.session.id,
             startsAt: m.session.startsAt.toISOString(),

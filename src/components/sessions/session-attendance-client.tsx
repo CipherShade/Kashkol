@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { formatReport } from "@/modules/attendance/report";
 import { useToast } from "@/components/ui/toast";
+import { QrScannerPanel } from "./qr-scanner-panel";
 
 export type AttendanceSession = {
   id: string;
@@ -22,6 +23,7 @@ export type AttendanceSession = {
   location: string | null;
   isOneOff?: boolean;
   seriesId?: string | null;
+  pricePerStudentMinor?: number | null;
 };
 
 export type AttendanceMarkValue = "present" | "absent" | "late" | "excused";
@@ -33,6 +35,10 @@ export type AttendanceRosterStudent = {
   mark: AttendanceMarkValue | null;
   source: "manual" | "qr" | null;
   recordedAt: string | null;
+  paymentVerified?: boolean;
+  isCrossSeason?: boolean;
+  primaryGroupId?: string | null;
+  primaryGroupName?: string | null;
 };
 
 type RosterResponse = {
@@ -94,6 +100,7 @@ export function SessionAttendanceClient({
   } | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const isOpen = session.status === "scheduled" || session.status === "started";
 
@@ -105,6 +112,94 @@ export function SessionAttendanceClient({
     }
     return counts;
   }, [roster]);
+
+  const revenueSummary = useMemo(() => {
+    if (session.pricePerStudentMinor == null) return null;
+    const eligibleCount = summary.present + summary.late;
+    const expectedMinor = session.pricePerStudentMinor * eligibleCount;
+    const paidCount = roster.filter(
+      (s) => s.paymentVerified && (s.mark === "present" || s.mark === "late"),
+    ).length;
+    const collectedMinor = session.pricePerStudentMinor * paidCount;
+    const outstandingMinor = expectedMinor - collectedMinor;
+    return {
+      pricePerStudent: (session.pricePerStudentMinor / 100).toFixed(2),
+      expectedEgp: (expectedMinor / 100).toFixed(2),
+      collectedEgp: (collectedMinor / 100).toFixed(2),
+      outstandingEgp: (outstandingMinor / 100).toFixed(2),
+      paidCount,
+      eligibleCount,
+    };
+  }, [session.pricePerStudentMinor, summary.present, summary.late, roster]);
+
+  const togglePayment = useCallback(
+    async (student: AttendanceRosterStudent) => {
+      const newVerified = !student.paymentVerified;
+      setRoster((prev) =>
+        prev.map((s) => (s.studentId === student.studentId ? { ...s, paymentVerified: newVerified } : s)),
+      );
+      try {
+        const res = await fetch(`/api/sessions/${session.id}/attendance/${student.studentId}/payment`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ verified: newVerified }),
+        });
+        if (!res.ok) throw new Error();
+        push({
+          title: newVerified ? t("paymentVerified") : t("paymentNotVerified"),
+          tone: "success",
+        });
+      } catch {
+        setRoster((prev) =>
+          prev.map((s) => (s.studentId === student.studentId ? { ...s, paymentVerified: !newVerified } : s)),
+        );
+        push({ title: t("paymentToggleFailed"), tone: "danger" });
+      }
+    },
+    [session.id, push, t],
+  );
+
+  const handleScanSuccess = useCallback(
+    (data: {
+      student: { id: string; firstName: string; lastName: string };
+      mark: { id: string; mark: string; paymentVerified: boolean; isCrossSeason: boolean };
+      isCrossSeason: boolean;
+    }) => {
+      setRoster((prev) => {
+        const existing = prev.find((s) => s.studentId === data.student.id);
+        if (existing) {
+          return prev.map((s) =>
+            s.studentId === data.student.id
+              ? {
+                  ...s,
+                  mark: data.mark.mark as AttendanceMarkValue,
+                  source: "qr",
+                  recordedAt: new Date().toISOString(),
+                  paymentVerified: data.mark.paymentVerified,
+                  isCrossSeason: data.isCrossSeason,
+                }
+              : s,
+          );
+        }
+        return [
+          ...prev,
+          {
+            studentId: data.student.id,
+            firstName: data.student.firstName,
+            lastName: data.student.lastName,
+            mark: data.mark.mark as AttendanceMarkValue,
+            source: "qr",
+            recordedAt: new Date().toISOString(),
+            paymentVerified: data.mark.paymentVerified,
+            isCrossSeason: true,
+            primaryGroupId: null,
+            primaryGroupName: null,
+          },
+        ];
+      });
+    },
+    [],
+  );
 
   function summaryText(counts: typeof summary): string {
     return [
@@ -275,6 +370,17 @@ export function SessionAttendanceClient({
             <CardBody className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 {isOpen && (
+                  <Button
+                    size="sm"
+                    variant={showScanner ? "primary" : "outline"}
+                    onClick={() => setShowScanner((prev) => !prev)}
+                    disabled={busy}
+                  >
+                    <Icon name="qr" size={16} />
+                    {showScanner ? t("stopCamera") : t("scanQr")}
+                  </Button>
+                )}
+                {isOpen && (
                   <Button size="sm" variant="outline" onClick={() => void markAllPresent()} disabled={busy}>
                     <Icon name="check" size={16} />
                     {t("allPresent")}
@@ -299,6 +405,44 @@ export function SessionAttendanceClient({
                 </Button>
               </div>
 
+              {showScanner && (
+                <div className="mb-4">
+                  <QrScannerPanel
+                    sessionId={session.id}
+                    onScanSuccess={handleScanSuccess}
+                    onClose={() => setShowScanner(false)}
+                  />
+                </div>
+              )}
+
+              {revenueSummary && (
+                <div className="rounded-lg border bg-muted/40 p-3 space-y-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="wallet" size={16} />
+                      {t("sessionPrice")}: {revenueSummary.pricePerStudent} {t("priceUnit")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {revenueSummary.paidCount} / {revenueSummary.eligibleCount} {t("paidStudentsCount")}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="rounded bg-background p-2 border">
+                      <div className="text-muted-foreground">{t("expectedRevenue")}</div>
+                      <div className="font-semibold text-sm">{revenueSummary.expectedEgp} {t("priceUnit")}</div>
+                    </div>
+                    <div className="rounded bg-background p-2 border">
+                      <div className="text-muted-foreground">{t("collectedRevenue")}</div>
+                      <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">{revenueSummary.collectedEgp} {t("priceUnit")}</div>
+                    </div>
+                    <div className="rounded bg-background p-2 border">
+                      <div className="text-muted-foreground">{t("outstandingRevenue")}</div>
+                      <div className="font-semibold text-sm text-amber-600 dark:text-amber-400">{revenueSummary.outstandingEgp} {t("priceUnit")}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {roster.length === 0 ? (
                 <EmptyState icon="users" title={t("noStudents")} description={t("noStudentsHint")} />
               ) : (
@@ -306,8 +450,13 @@ export function SessionAttendanceClient({
                   {roster.map((student) => (
                     <li key={student.studentId} className="ui-attendance-row">
                       <div className="min-w-40 flex-1">
-                        <div className="font-medium text-sm">
-                          {student.firstName} {student.lastName}
+                        <div className="flex items-center gap-2 font-medium text-sm">
+                          <span>{student.firstName} {student.lastName}</span>
+                          {student.isCrossSeason && (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              {student.primaryGroupName ? `${t("crossSeasonBadge")} (${student.primaryGroupName})` : t("crossSeasonBadge")}
+                            </span>
+                          )}
                         </div>
                         {student.mark && student.recordedAt ? (
                           <div className="text-xs text-muted-foreground">
@@ -326,28 +475,47 @@ export function SessionAttendanceClient({
                           <div className="text-xs text-muted-foreground">{t("unrecorded")}</div>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label={t("rosterTitle")}>
-                        {MARKS.map((mark) => (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {session.pricePerStudentMinor != null && (
                           <button
-                            key={mark}
                             type="button"
-                            role="radio"
-                            aria-checked={student.mark === mark}
                             disabled={!isOpen || busy}
-                            onClick={() => {
-                              if (!isOpen) return;
-                              if (student.mark === null || student.mark === undefined) {
-                                void saveMark(student, mark);
-                                return;
-                              }
-                              setCorrection({ student, mark, reason: "" });
-                            }}
-                            className={"ui-attendance-mark" + (student.mark === mark ? " is-active" : "")}
-                            data-mark={mark}
+                            onClick={() => void togglePayment(student)}
+                            className={
+                              "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border transition-colors " +
+                              (student.paymentVerified
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted")
+                            }
+                            title={student.paymentVerified ? t("paymentVerified") : t("paymentNotVerified")}
                           >
-                            {t(`mark_${mark}`)}
+                            <Icon name={student.paymentVerified ? "checkCircle" : "circle"} size={14} />
+                            <span>{student.paymentVerified ? t("paid") : t("unpaid")}</span>
                           </button>
-                        ))}
+                        )}
+                        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label={t("rosterTitle")}>
+                          {MARKS.map((mark) => (
+                            <button
+                              key={mark}
+                              type="button"
+                              role="radio"
+                              aria-checked={student.mark === mark}
+                              disabled={!isOpen || busy}
+                              onClick={() => {
+                                if (!isOpen) return;
+                                if (student.mark === null || student.mark === undefined) {
+                                  void saveMark(student, mark);
+                                  return;
+                                }
+                                setCorrection({ student, mark, reason: "" });
+                              }}
+                              className={"ui-attendance-mark" + (student.mark === mark ? " is-active" : "")}
+                              data-mark={mark}
+                            >
+                              {t(`mark_${mark}`)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </li>
                   ))}

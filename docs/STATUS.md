@@ -1,13 +1,13 @@
 # Kashkol — Status
 
-**Date:** 2026-11-08 · **Status:** Interface visual refresh (`ADR-0023`) applied across the shell, dashboard, and students directory; P3 forms and surveys foundation (`F-P3-09`), platform administration (`F-P3-03`) and centralized workspace plans/limits (`F-P3-04`), recorded video (`F-P3-02`), online exams (`F-P3-01`), M2 parent/student portals, PWA/Web Push, teacher workspace administration, sessions/calendar, and asynchronous report exports implemented · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & platform operations
+**Date:** 2026-11-08 · **Status:** Operational model correction & workflow upgrade complete: session-based revenue calculation, Google Calendar-style sessions scheduling, indefinite-lifetime student QR identity with scanner panel, cross-season attendance tracking with primary group isolation, offline homework completion tracking, and dashboard financial consistency implemented · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
 ## 1. Where the project stands
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
-now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and twenty-four
+now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and twenty-nine
 migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
@@ -418,7 +418,7 @@ task.
 
 | # | Item | Exit condition | State |
 |---|---|---|---|
-| 1.1 | Dashboard | `F-P1-01` passes; every number on it is computed from records | ☐ |
+| 1.1 | Dashboard | Comprehensive 8-section teacher workspace dashboard implemented; every number computed from real records with zero fabrication | ☑ |
 | 1.2 | Students: directory, create, edit, archive | `F-P1-02` passes | ◐ directory, CRUD, archive, duplicate warning, notes, computed metrics, and top-bar search pass; the session/homework-backed profile tabs depend on 1.5–1.9 |
 | 1.3 | CSV import of students | `F-P1-03` passes, including the preview and the partial-failure report | ☑ preview/commit, group mapping, UTF-8/BOM/Windows-1256, 5,000-row limit, duplicate-in-file, name-only acknowledgment, per-row and batch audit, downloadable error report, Arabic round-trip test |
 | 1.4 | Groups and roster | `F-P1-04` passes | ◐ groups CRUD/archive, capacity, roster, multi-group enrollment, and transfer history pass; one-off session creation and generated sessions land with 1.5 |

@@ -6,12 +6,16 @@ export type RosterStudent = {
   studentId: string;
   firstName: string;
   lastName: string;
-  enrolledAt: Date;
+  enrolledAt: Date | null;
   mark: "present" | "absent" | "late" | "excused" | null;
   markId: string | null;
   source: "manual" | "qr" | null;
   recordedAt: Date | null;
   recordedBy: string | null;
+  paymentVerified: boolean;
+  isCrossSeason: boolean;
+  primaryGroupId: string | null;
+  primaryGroupName: string | null;
 };
 
 export async function getSessionWithGroup(scope: Scope, sessionId: string) {
@@ -45,17 +49,27 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
       orderBy: [{ student: { firstName: "asc" } }],
     });
 
-    // Get existing marks
+    // Get existing marks including student and primaryGroup for cross-season attendees
     const marks = await tx.attendanceMark.findMany({
       where: {
         workspaceId: scope.workspaceId,
         sessionId,
       },
+      include: {
+        student: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+        primaryGroup: {
+          select: { id: true, name: true },
+        },
+      },
     });
 
     const markMap = new Map(marks.map((m) => [m.studentId, m]));
+    const enrolledStudentIds = new Set(enrollments.map((e) => e.studentId));
 
-    return enrollments.map((e) => {
+    // 1. Regular roster students from enrollments
+    const roster: RosterStudent[] = enrollments.map((e) => {
       const m = markMap.get(e.studentId);
       return {
         studentId: e.studentId,
@@ -67,8 +81,35 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
         source: m ? m.source : null,
         recordedAt: m ? m.recordedAt : null,
         recordedBy: m ? m.recordedBy : null,
+        paymentVerified: m?.paymentVerified ?? false,
+        isCrossSeason: m?.isCrossSeason ?? false,
+        primaryGroupId: m?.primaryGroupId ?? null,
+        primaryGroupName: m?.primaryGroup?.name ?? null,
       };
     });
+
+    // 2. Cross-season students who attended this session but are not enrolled in session.groupId
+    for (const m of marks) {
+      if (!enrolledStudentIds.has(m.studentId)) {
+        roster.push({
+          studentId: m.studentId,
+          firstName: m.student.firstName,
+          lastName: m.student.lastName,
+          enrolledAt: null,
+          mark: m.mark,
+          markId: m.id,
+          source: m.source,
+          recordedAt: m.recordedAt,
+          recordedBy: m.recordedBy,
+          paymentVerified: m.paymentVerified,
+          isCrossSeason: true,
+          primaryGroupId: m.primaryGroupId,
+          primaryGroupName: m.primaryGroup?.name ?? null,
+        });
+      }
+    }
+
+    return roster;
   });
 }
 
@@ -102,6 +143,9 @@ export async function upsertAttendanceMarkTx(
     mark: "present" | "absent" | "late" | "excused";
     source?: "manual" | "qr";
     deviceId?: string | null;
+    paymentVerified?: boolean;
+    isCrossSeason?: boolean;
+    primaryGroupId?: string | null;
   },
 ) {
   const existing = await tx.attendanceMark.findFirst({
@@ -113,7 +157,16 @@ export async function upsertAttendanceMarkTx(
   });
 
   if (existing) {
+    const paymentVerifiedUpdate =
+      data.paymentVerified !== undefined ? { paymentVerified: data.paymentVerified } : {};
+
     if (existing.mark === data.mark) {
+      if (data.paymentVerified !== undefined && data.paymentVerified !== existing.paymentVerified) {
+        return tx.attendanceMark.update({
+          where: { id: existing.id },
+          data: paymentVerifiedUpdate,
+        });
+      }
       return existing;
     }
     // Create revision
@@ -138,6 +191,7 @@ export async function upsertAttendanceMarkTx(
         deviceId: data.deviceId ?? existing.deviceId,
         recordedBy: scope.actorUserId,
         recordedAt: new Date(),
+        ...paymentVerifiedUpdate,
       },
     });
   } else {
@@ -151,6 +205,9 @@ export async function upsertAttendanceMarkTx(
         source: data.source ?? "manual",
         deviceId: data.deviceId ?? null,
         recordedBy: scope.actorUserId,
+        paymentVerified: data.paymentVerified ?? false,
+        isCrossSeason: data.isCrossSeason ?? false,
+        primaryGroupId: data.primaryGroupId ?? null,
       },
     });
     await tx.attendanceRevision.create({
@@ -233,6 +290,43 @@ export async function getEnrollmentForStudent(
   });
 }
 
+export async function getActiveEnrollmentForStudent(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  studentId: string,
+) {
+  return tx.enrollment.findFirst({
+    where: {
+      workspaceId,
+      studentId,
+      leftAt: null,
+    },
+    include: {
+      group: { select: { id: true, name: true } },
+    },
+    orderBy: { enrolledAt: "desc" },
+  });
+}
+
+export async function setPaymentVerifiedTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+  studentId: string,
+  verified: boolean,
+) {
+  const existing = await tx.attendanceMark.findFirst({
+    where: { workspaceId, sessionId, studentId },
+  });
+  if (!existing) {
+    throw new Error("NOT_FOUND");
+  }
+  return tx.attendanceMark.update({
+    where: { id: existing.id },
+    data: { paymentVerified: verified },
+  });
+}
+
 export async function createQrTokenTx(
   tx: Prisma.TransactionClient,
   scope: Scope,
@@ -291,5 +385,48 @@ export async function getAttendanceMarkCount(
     where: { workspaceId, sessionId },
   });
   return count;
+}
+
+export async function getStudentForQrTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  studentId: string,
+) {
+  return tx.student.findFirst({
+    where: { id: studentId, workspaceId, archivedAt: null },
+    select: { id: true, firstName: true, lastName: true, qrTokenHash: true },
+  });
+}
+
+export async function updateStudentQrHashTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  studentId: string,
+  qrTokenHash: string | null,
+) {
+  return tx.student.update({
+    where: { id: studentId },
+    data: { qrTokenHash },
+  });
+}
+
+export async function findStudentForQrScanTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  studentId: string,
+) {
+  return tx.student.findFirst({
+    where: {
+      id: studentId,
+      workspaceId,
+      archivedAt: null,
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      qrTokenHash: true,
+    },
+  });
 }
 

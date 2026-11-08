@@ -1,0 +1,306 @@
+"use client";
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
+import jsQR from "jsqr";
+import { Icon } from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/feedback";
+
+interface QrScannerPanelProps {
+  sessionId: string;
+  onScanSuccess: (result: {
+    student: { id: string; firstName: string; lastName: string };
+    mark: {
+      id: string;
+      mark: string;
+      paymentVerified: boolean;
+      isCrossSeason: boolean;
+    };
+    isCrossSeason: boolean;
+  }) => void;
+  onClose: () => void;
+}
+
+export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerPanelProps) {
+  const t = useTranslations("Sessions.attendance");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const [hasCamera, setHasCamera] = useState<boolean>(true);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [manualCode, setManualCode] = useState<string>("");
+  const [lastScanMessage, setLastScanMessage] = useState<{
+    type: "success" | "error" | "warning";
+    text: string;
+    studentName?: string;
+  } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Play a short feedback beep
+  const playBeep = useCallback((success: boolean) => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(success ? 880 : 220, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + (success ? 0.15 : 0.3));
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + (success ? 0.15 : 0.3));
+    } catch {
+      // Audio not supported or blocked; safe to ignore
+    }
+  }, []);
+
+  // Post scanned token to backend
+  const handleTokenDetected = useCallback(
+    async (token: string) => {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
+
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}/attendance/scan`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            qrToken: token.trim(),
+            paymentVerified: false,
+            markLate: false,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          playBeep(false);
+          const code = data?.error?.code;
+          if (code === "CONFLICT") {
+            setLastScanMessage({
+              type: "warning",
+              text: t("scanDuplicate"),
+            });
+          } else if (code === "NOT_FOUND") {
+            setLastScanMessage({
+              type: "error",
+              text: t("scanNotEnrolled"),
+            });
+          } else {
+            setLastScanMessage({
+              type: "error",
+              text: t("scanInvalid"),
+            });
+          }
+          return;
+        }
+
+        playBeep(true);
+        const studentName = `${data.student.firstName} ${data.student.lastName}`.trim();
+        setLastScanMessage({
+          type: "success",
+          text: t("scanSuccess"),
+          studentName: data.isCrossSeason
+            ? `${studentName} (${t("crossSeasonBadge")})`
+            : studentName,
+        });
+
+        onScanSuccess({
+          student: data.student,
+          mark: data.mark,
+          isCrossSeason: data.isCrossSeason,
+        });
+      } catch {
+        playBeep(false);
+        setLastScanMessage({
+          type: "error",
+          text: t("cameraError"),
+        });
+      } finally {
+        setTimeout(() => setIsSubmitting(false), 1200); // 1.2s cooldown between scans
+      }
+    },
+    [sessionId, isSubmitting, playBeep, t, onScanSuccess],
+  );
+
+  // Setup camera stream and jsQR detection loop
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let animationFrameId: number;
+    let isCancelled = false;
+
+    async function startCamera() {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setHasCamera(false);
+        setCameraError(t("cameraNotSupported"));
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute("playsinline", "true");
+          await videoRef.current.play();
+          requestScanFrame();
+        }
+      } catch (err) {
+        const error = err as Error;
+        setHasCamera(false);
+        if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+          setCameraError(t("cameraDenied"));
+        } else {
+          setCameraError(t("cameraError"));
+        }
+      }
+    }
+
+    function requestScanFrame() {
+      if (isCancelled) return;
+      animationFrameId = requestAnimationFrame(scanVideoFrame);
+    }
+
+    function scanVideoFrame() {
+      if (isCancelled) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+
+      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (ctx) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+
+          if (code && code.data && code.data.startsWith("kqr_v1.")) {
+            handleTokenDetected(code.data);
+          }
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(scanVideoFrame);
+    }
+
+    startCamera();
+
+    return () => {
+      isCancelled = true;
+      cancelAnimationFrame(animationFrameId);
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [handleTokenDetected, t]);
+
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualCode.trim()) {
+      handleTokenDetected(manualCode.trim());
+      setManualCode("");
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-base)] p-4 shadow-md space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+        <div className="flex items-center gap-2">
+          <Icon name="qr" className="h-5 w-5 text-[var(--fg-accent)]" />
+          <h3 className="text-base font-semibold text-[var(--fg-base)]">{t("scanningTitle")}</h3>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onClose} aria-label={t("closeKeepOpen")}>
+          <Icon name="x" className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <p className="text-xs text-[var(--fg-muted)]">{t("scanningInstructions")}</p>
+
+      {/* Camera Viewport */}
+      {hasCamera ? (
+        <div className="relative aspect-video w-full overflow-hidden rounded-md bg-black">
+          <video
+            ref={videoRef}
+            className="h-full w-full object-cover"
+            muted
+            playsInline
+          />
+          <canvas ref={canvasRef} className="hidden" />
+
+          {/* Targeting reticle overlay */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div
+              className={`h-48 w-48 rounded-lg border-2 border-dashed transition-colors duration-300 ${
+                isSubmitting
+                  ? "border-[var(--status-success)] bg-[var(--status-success)]/10"
+                  : "border-white/70"
+              }`}
+            />
+          </div>
+
+          {isSubmitting && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <span className="text-sm font-medium text-white">{t("qrIssuing")}</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Alert variant="warning" title={t("cameraNotSupported")}>
+          {cameraError ?? t("cameraNotSupported")}
+        </Alert>
+      )}
+
+      {/* Last Scan Status Feedback */}
+      {lastScanMessage && (
+        <div
+          className={`rounded-md p-3 text-sm font-medium transition-all ${
+            lastScanMessage.type === "success"
+              ? "bg-[var(--status-success-subtle)] text-[var(--status-success)] border border-[var(--status-success)]"
+              : lastScanMessage.type === "warning"
+                ? "bg-[var(--status-warning-subtle)] text-[var(--status-warning)] border border-[var(--status-warning)]"
+                : "bg-[var(--status-danger-subtle)] text-[var(--status-danger)] border border-[var(--status-danger)]"
+          }`}
+        >
+          {lastScanMessage.studentName && (
+            <div className="font-bold text-base mb-1">{lastScanMessage.studentName}</div>
+          )}
+          <div>{lastScanMessage.text}</div>
+        </div>
+      )}
+
+      {/* Manual Input Fallback */}
+      <form onSubmit={handleManualSubmit} className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
+        <label className="text-xs font-medium text-[var(--fg-muted)] block">
+          {t("manualInput")}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            placeholder="kqr_v1...."
+            className="flex-1 rounded-md border border-[var(--border-base)] bg-[var(--surface-sunken)] px-3 py-1.5 text-xs text-[var(--fg-base)] focus:outline-none focus:ring-1 focus:ring-[var(--focus-ring)]"
+            dir="ltr"
+          />
+          <Button type="submit" size="sm" variant="secondary" disabled={!manualCode.trim() || isSubmitting}>
+            {t("search")}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

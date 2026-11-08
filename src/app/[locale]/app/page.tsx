@@ -1,25 +1,18 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/table";
-import { PageHeader } from "@/components/ui/page-header";
-import { Progress, Stat } from "@/components/ui/stat";
 import { Icon } from "@/components/ui/icon";
-import { Link } from "@/i18n/navigation";
 import { requireStaffSession } from "@/modules/identity/session";
-import { getOnboardingTasks, getWorkspaceIdentity, listMembers } from "@/modules/tenancy/service";
-import { isAllowed } from "@/modules/tenancy/types";
-
-const TASK_KEYS: Record<string, string> = {
-  teaching_name: "taskTeachingName",
-  grades: "taskGrades",
-  first_group: "taskFirstGroup",
-  first_students: "taskFirstStudents",
-};
-
-const UNAVAILABLE_TASKS = new Set(["first_group", "first_students"]);
+import { getDashboardData } from "@/modules/dashboard/service";
+import { dashboardFilterSchema } from "@/modules/dashboard/schemas";
+import { DashboardHeader } from "./_components/DashboardHeader";
+import { GlobalOverview } from "./_components/GlobalOverview";
+import { TodayOperations } from "./_components/TodayOperations";
+import { AttentionCenter } from "./_components/AttentionCenter";
+import { FinancialOverview } from "./_components/FinancialOverview";
+import { AcademicOverview } from "./_components/AcademicOverview";
+import { PendingWork } from "./_components/PendingWork";
+import { TeamActivity } from "./_components/TeamActivity";
+import { RecentActivity } from "./_components/RecentActivity";
 
 export async function generateMetadata({
   params,
@@ -31,255 +24,71 @@ export async function generateMetadata({
   return { title: t("title") };
 }
 
-type MemberRow = Awaited<ReturnType<typeof listMembers>>[number];
-
-export default async function DashboardPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function DashboardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ period?: string }>;
+}) {
   const { locale } = await params;
+  const resolvedSearchParams = await searchParams;
   const { user, scope } = await requireStaffSession();
   const t = await getTranslations("Dashboard");
-  const workspaceT = await getTranslations("Workspace");
 
-  const [workspace, tasks] = await Promise.all([
-    getWorkspaceIdentity(scope),
-    getOnboardingTasks(scope),
-  ]);
-
-  const canSeeTeam = isAllowed(scope, "team", "read");
-  const canSeeSettings = isAllowed(scope, "settings", "read");
-  const members = canSeeTeam ? await listMembers(scope) : [];
-
-  const roleLabel = (role: string) =>
-    role === "owner" ? workspaceT("roleOwner") : workspaceT("roleAssistant");
-  const listFormat = new Intl.ListFormat(locale, { style: "long", type: "conjunction" });
-  const dateFormat = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", {
-    dateStyle: "medium",
-    timeZone: "UTC",
+  const filter = dashboardFilterSchema.parse({
+    period: resolvedSearchParams.period || "this_month",
   });
 
-  const knownTasks = tasks.filter((task) => TASK_KEYS[task.key]);
-  const doneTasks = knownTasks.filter((task) => task.completedAt !== null).length;
-  const completion = knownTasks.length > 0 ? (doneTasks / knownTasks.length) * 100 : 0;
-  const completionPercent = Math.round(completion);
-
-  const columns: Array<Column<MemberRow>> = [
-    {
-      key: "name",
-      header: t("memberName"),
-      cell: (member) => (
-        <span className="app-person">
-          <Avatar name={member.user.name} size="sm" />
-          <span className="app-person-text">
-            <span className="app-person-name">{member.user.name}</span>
-            <span className="app-person-meta">{roleLabel(member.role)}</span>
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: "role",
-      header: t("memberRole"),
-      cell: (member) => (
-        <Badge tone={member.role === "owner" ? "primary" : "outline"} icon="staff">
-          {roleLabel(member.role)}
-        </Badge>
-      ),
-    },
-    {
-      key: "joined",
-      header: t("memberJoined"),
-      cell: (member) => <span className="app-muted">{dateFormat.format(member.joinedAt)}</span>,
-      align: "end",
-    },
-  ];
+  const data = await getDashboardData(scope, filter);
 
   return (
     <div className="app-page">
-      <section className="app-hero">
-        <PageHeader
-          eyebrow={t("eyebrow")}
-          title={t("heroTitle", { name: user.name })}
-          description={t("subtitle")}
-          actions={
-            canSeeSettings ? (
-              <Link
-                href="/app/settings"
-                className="ui-button"
-                data-variant="secondary"
-                data-size="md"
-              >
-                <Icon name="gear" size={16} />
-                <span>{t("manageSettings")}</span>
-              </Link>
-            ) : null
-          }
-        />
-      </section>
+      {/* Dashboard Header */}
+      <DashboardHeader
+        userName={user.name}
+        workspace={data.workspace}
+        activePeriod={filter.period}
+        canSeeSettings={data.permissions.canSeeTeam}
+      />
 
-      <div className="app-stat-grid">
-        <Stat
-          label={t("statMembers")}
-          value={canSeeTeam ? members.length : "—"}
-          hint={canSeeTeam ? t("statMembersHint") : t("permissionHidden")}
-          icon="users"
-          variant="invert"
-        />
-        <Stat
-          label={t("statSetup")}
-          value={`${doneTasks}/${knownTasks.length}`}
-          hint={t("statSetupHint")}
-          icon="checkCircle"
-          tone="primary"
-        />
-        <Stat
-          label={t("statRole")}
-          value={roleLabel(scope.role)}
-          hint={t("statRoleHint")}
-          icon="shield"
-          tone="muted"
-        />
-        <Stat
-          label={t("statStatus")}
-          value={workspace.status === "active" ? t("active") : workspace.status}
-          hint={<bdi className="ui-code">{workspace.slug}</bdi>}
-          icon="activity"
-          tone="success"
-        />
-      </div>
+      {/* Section 1: Global Overview */}
+      <GlobalOverview
+        data={data.globalOverview}
+        canSeeFinancials={data.permissions.canSeeFinancials}
+      />
 
-      <div className="app-dashboard-grid">
-        <Card labelledBy="workspace-card-title">
-          <CardHeader
-            title={t("workspaceCard")}
-            titleId="workspace-card-title"
-            description={t("workspaceCardHint")}
-          />
-          <CardBody>
-            <dl className="app-fact-list">
-              <div className="app-fact-row">
-                <dt className="app-fact-label">{workspaceT("name")}</dt>
-                <dd className="app-fact-value">{workspace.name}</dd>
-              </div>
-              <div className="app-fact-row">
-                <dt className="app-fact-label">{t("teachingName")}</dt>
-                <dd className="app-fact-value">{workspace.teachingName}</dd>
-              </div>
-              <div className="app-fact-row">
-                <dt className="app-fact-label">{t("primarySubject")}</dt>
-                <dd className="app-fact-value">{workspace.primarySubject ?? "—"}</dd>
-              </div>
-              <div className="app-fact-row">
-                <dt className="app-fact-label">{t("grades")}</dt>
-                <dd className="app-fact-value">
-                  {workspace.gradesTaught.length > 0
-                    ? listFormat.format(workspace.gradesTaught)
-                    : "—"}
-                </dd>
-              </div>
-            </dl>
-          </CardBody>
-        </Card>
+      {/* Section 2: Today's Operations */}
+      <TodayOperations data={data.todayOperations} locale={locale} />
 
-        <Card labelledBy="checklist-title">
-          <CardHeader title={t("checklist")} titleId="checklist-title" />
-          <CardBody>
-            {knownTasks.length > 0 ? (
-              <div className="app-setup">
-                <div className="app-setup-summary">
-                  <div
-                    className="app-donut"
-                    role="img"
-                    aria-label={t("setupAria", {
-                      done: doneTasks,
-                      total: knownTasks.length,
-                      percent: completionPercent,
-                    })}
-                    style={{
-                      background: `conic-gradient(var(--primary) ${completionPercent}%, var(--surface-2) 0)`,
-                    }}
-                  >
-                    <span className="app-donut-value">{completionPercent}%</span>
-                  </div>
-                  <div>
-                    <p className="app-donut-caption">
-                      {t("setupPercent", { percent: completionPercent })}
-                    </p>
-                    <p className="app-donut-hint">
-                      {t("setupSummary", { done: doneTasks, total: knownTasks.length })}
-                    </p>
-                    <p className="app-inline-note app-donut-hint">
-                      <Icon name="shield" size={13} />
-                      <span>{t("checklistHint")}</span>
-                    </p>
-                  </div>
-                </div>
-                <Progress value={completion} label={t("setupProgress")} />
-                <ul className="app-checklist">
-                  {knownTasks.map((task) => {
-                    const key = TASK_KEYS[task.key];
-                    if (!key) return null;
-                    const done = task.completedAt !== null;
-                    const unavailable = UNAVAILABLE_TASKS.has(task.key);
-                    return (
-                      <li key={task.key} className="app-checklist-item" data-done={done}>
-                        <span className="app-checklist-label">{t(key)}</span>
-                        {done ? (
-                          <Badge tone="success" icon="checkCircle">
-                            {t("checklistDone")}
-                          </Badge>
-                        ) : unavailable ? (
-                          <Badge tone="accent" icon="clock">
-                            {t("checklistPlanned")}
-                          </Badge>
-                        ) : (
-                          <Badge tone="outline" icon="clock">
-                            {t("checklistPending")}
-                          </Badge>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ) : (
-              <p className="app-muted">{t("setupEmpty")}</p>
-            )}
-          </CardBody>
-        </Card>
+      {/* Section 3: Attention Center */}
+      <AttentionCenter
+        students={data.attentionCenter.students}
+        alerts={data.attentionCenter.alerts}
+      />
 
-        {canSeeTeam ? (
-          <Card labelledBy="members-title" className="app-dashboard-span">
-            <CardHeader
-              title={t("membersTitle")}
-              titleId="members-title"
-              description={t("membersHint")}
-              actions={
-                canSeeSettings ? (
-                  <Link
-                    href="/app/settings"
-                    className="ui-button"
-                    data-variant="ghost"
-                    data-size="sm"
-                  >
-                    {t("manageSettings")}
-                  </Link>
-                ) : null
-              }
-            />
-            <CardBody className="app-flush">
-              <DataTable
-                caption={t("membersTableCaption")}
-                scrollLabel={t("membersTableScroll")}
-                columns={columns}
-                rows={members}
-                rowKey={(member) => member.id}
-                empty={workspaceT("membersEmpty")}
-              />
-            </CardBody>
-          </Card>
-        ) : null}
-      </div>
+      {/* Section 4: Financial Overview */}
+      <FinancialOverview
+        data={data.financialOverview}
+        currency={data.workspace.currency}
+      />
 
-      <p className="app-inline-note">
+      {/* Section 5: Academic Overview */}
+      <AcademicOverview data={data.academicOverview} />
+
+      {/* Section 6: Pending Work */}
+      <PendingWork data={data.pendingWork} />
+
+      {/* Section 7: Team Activity */}
+      {data.permissions.canSeeTeam ? (
+        <TeamActivity data={data.teamActivity} locale={locale} />
+      ) : null}
+
+      {/* Section 8: Recent Activity */}
+      <RecentActivity events={data.recentActivity} locale={locale} />
+
+      {/* Trust & Audit Note */}
+      <p className="app-inline-note" style={{ marginTop: "16px" }}>
         <Icon name="shield" size={15} />
         <span>{t("auditNote")}</span>
       </p>

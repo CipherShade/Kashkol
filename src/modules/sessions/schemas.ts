@@ -21,6 +21,7 @@ export const createOneOffSessionSchema = z
     notes: z.string().trim().max(1000).optional().nullable(),
     teacherId: z.string().trim().optional().nullable(),
     assistantId: z.string().trim().optional().nullable(),
+    pricePerStudentMinor: z.coerce.number().int().min(0).nullable().optional(),
   })
   .refine(
     (data) => {
@@ -67,6 +68,7 @@ export const updateSessionSchema = z
     teacherId: z.string().trim().optional().nullable(),
     assistantId: z.string().trim().optional().nullable(),
     reason: z.string().trim().max(500).optional().nullable(),
+    pricePerStudentMinor: z.coerce.number().int().min(0).nullable().optional(),
   });
 
 export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;

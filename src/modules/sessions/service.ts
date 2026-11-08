@@ -84,6 +84,7 @@ export async function createOneOffSession(
       notes: input.notes,
       teacherId: input.teacherId,
       assistantId: input.assistantId,
+      pricePerStudentMinor: input.pricePerStudentMinor,
     });
 
     await writeAuditEvent(tx, {
@@ -101,6 +102,7 @@ export async function createOneOffSession(
         isOneOff: true,
         room: input.room,
         location: input.location,
+        pricePerStudentMinor: session.pricePerStudentMinor,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
@@ -128,6 +130,7 @@ export async function updateSession(
       notes: input.notes,
       teacherId: input.teacherId,
       assistantId: input.assistantId,
+      pricePerStudentMinor: input.pricePerStudentMinor,
     });
 
     await writeAuditEvent(tx, {
@@ -144,6 +147,7 @@ export async function updateSession(
         notes: input.notes,
         teacherId: input.teacherId,
         assistantId: input.assistantId,
+        pricePerStudentMinor: input.pricePerStudentMinor,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,

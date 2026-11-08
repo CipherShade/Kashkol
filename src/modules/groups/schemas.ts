@@ -74,6 +74,7 @@ export const createGroupSchema = z
       .optional()
       .nullable()
       .transform((v) => (v && v.length > 0 ? v : null)),
+    defaultPricePerStudentMinor: z.coerce.number().int().min(0).nullable().optional(),
   })
   .refine(
     (data) => {
@@ -144,6 +145,7 @@ export const updateGroupSchema = z
       .optional()
       .nullable()
       .transform((v) => (v && v.length > 0 ? v : null)),
+    defaultPricePerStudentMinor: z.coerce.number().int().min(0).nullable().optional(),
   })
   .refine(
     (data) => {
@@ -154,6 +156,12 @@ export const updateGroupSchema = z
   );
 
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
+
+export const updateGroupPriceSchema = z.object({
+  defaultPricePerStudentMinor: z.coerce.number().int().min(0).nullable(),
+});
+
+export type UpdateGroupPriceInput = z.infer<typeof updateGroupPriceSchema>;
 
 export const groupQuerySchema = z.object({
   search: z.string().trim().optional(),
