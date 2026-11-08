@@ -1,27 +1,27 @@
 import { z } from "zod";
 
-const emailField = z.string().trim().toLowerCase().pipe(z.email("auth.errors.emailInvalid"));
+const emailField = z.string().trim().toLowerCase().pipe(z.email("Auth.errors.emailInvalid"));
 
 const passwordField = z
   .string()
-  .min(10, "auth.errors.passwordTooShort")
-  .max(128, "auth.errors.passwordTooLong");
+  .min(10, "Auth.errors.passwordTooShort")
+  .max(128, "Auth.errors.passwordTooLong");
 
 export const signUpSchema = z
   .object({
-    name: z.string().trim().min(2, "auth.errors.nameRequired").max(80, "auth.errors.nameTooLong"),
+    name: z.string().trim().min(2, "Auth.errors.nameRequired").max(80, "Auth.errors.nameTooLong"),
     email: emailField,
     password: passwordField,
     confirmPassword: z.string(),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
-    message: "auth.errors.passwordMismatch",
+    message: "Auth.errors.passwordMismatch",
   });
 
 export const signInSchema = z.object({
   email: emailField,
-  password: z.string().min(1, "auth.errors.passwordRequired").max(128),
+  password: z.string().min(1, "Auth.errors.passwordRequired").max(128),
 });
 
 export const requestPasswordResetSchema = z.object({
@@ -30,13 +30,13 @@ export const requestPasswordResetSchema = z.object({
 
 export const resetPasswordSchema = z
   .object({
-    token: z.string().min(10, "auth.errors.tokenInvalid").max(512),
+    token: z.string().min(10, "Auth.errors.tokenInvalid").max(512),
     password: passwordField,
     confirmPassword: z.string(),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
-    message: "auth.errors.passwordMismatch",
+    message: "Auth.errors.passwordMismatch",
   });
 
 export const resendVerificationSchema = z.object({

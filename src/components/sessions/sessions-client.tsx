@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useFormState } from "react-dom";
+import { useEffect, useMemo, useState, useActionState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -75,11 +74,11 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
   const [selectedSession, setSelectedSession] = useState<SessionItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const [createState, createAction] = useFormState(createOneOffSessionAction, initialFormState);
-  const [rescheduleState, rescheduleAction] = useFormState(rescheduleSessionAction, initialFormState);
-  const [cancelState, cancelAction] = useFormState(cancelSessionAction, initialFormState);
-  const [updateState, updateAction] = useFormState(updateSessionAction, initialFormState);
-  const [startState, startSessionFormAction] = useFormState(startSessionAction, initialFormState);
+  const [createState, createAction] = useActionState(createOneOffSessionAction, initialFormState);
+  const [rescheduleState, rescheduleAction] = useActionState(rescheduleSessionAction, initialFormState);
+  const [cancelState, cancelAction] = useActionState(cancelSessionAction, initialFormState);
+  const [updateState, updateAction] = useActionState(updateSessionAction, initialFormState);
+  const [startState, startSessionFormAction] = useActionState(startSessionAction, initialFormState);
 
   useEffect(() => {
     if (createState.status === "success") {

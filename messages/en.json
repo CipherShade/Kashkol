@@ -97,7 +97,9 @@
     "emailDisabledNotice": "Outbound email is not configured in this environment. Verification and account recovery cannot complete until a provider is selected.",
     "signedOut": "You have been signed out.",
     "sessionExpired": "Your session expired. Sign in again.",
-    "signInLink": "Go to sign in",
+    "signInLink": "Go to sign in"
+  },
+  "auth": {
     "errors": {
       "invalidCredentials": "The email address or password is incorrect.",
       "rateLimited": "Too many attempts. Try again shortly.",
@@ -494,7 +496,7 @@
     "saveChanges": "Save changes",
     "totalStudents": "Total students",
     "kpiTotalHint": "Students in this view",
-    "kpiShare": "{{percent}}% of listed students",
+    "kpiShare": "{percent}% of listed students",
     "showArchived": "Show archived",
     "hideArchived": "Hide archived",
     "tableLabel": "Student directory",
