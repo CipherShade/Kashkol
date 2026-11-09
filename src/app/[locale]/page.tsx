@@ -1,4 +1,5 @@
 import NextLink from "next/link";
+import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { directionForLocale, type AppLocale } from "@/i18n/routing";
@@ -23,8 +24,10 @@ function otherLocale(locale: AppLocale): AppLocale {
 
 export default async function StatusPage({ params }: StatusPageProps) {
   const { locale } = await params;
-  setRequestLocale(locale);
-  const appLocale = locale as AppLocale;
+  // Normalise before use: an unknown value must never reach `Intl`, which
+  // throws a `RangeError` for malformed locale tags.
+  const appLocale: AppLocale = locale === "ar" ? "ar" : "en";
+  setRequestLocale(appLocale);
 
   const t = await getTranslations("Status");
   const readiness = await getReadiness();
@@ -41,6 +44,12 @@ export default async function StatusPage({ params }: StatusPageProps) {
     { label: t("migrations"), check: readiness.checks.migrations },
   ];
 
+  // If the system is ready, redirect to the actual app (or sign-in if not authenticated)
+  if (readiness.status === "ready") {
+    const redirectUrl = user ? "/app" : "/sign-in";
+    redirect(`/${locale}${redirectUrl}`);
+  }
+
   return (
     <main className="status-page">
       <div className="status-shell">
@@ -50,8 +59,8 @@ export default async function StatusPage({ params }: StatusPageProps) {
             <h1 className="status-title">{t("title")}</h1>
             <p className="status-subtitle">{t("subtitle")}</p>
           </div>
-          <span className="status-badge" data-state={readiness.status === "ready" ? "ok" : "fail"}>
-            {readiness.status === "ready" ? t("ready") : t("notReady")}
+          <span className="status-badge" data-state="fail">
+            {t("notReady")}
           </span>
         </header>
 

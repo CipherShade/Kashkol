@@ -218,6 +218,8 @@ enum ReportExportStatus {
   processing
   ready
   failed
+
+  @@map("report_export_status")
 }
 
 enum FileScope {

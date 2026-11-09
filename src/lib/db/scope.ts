@@ -20,11 +20,15 @@ export type TenantScope = {
 export async function withScope<T>(
   scope: Pick<TenantScope, "workspaceId">,
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  options?: { maxWait?: number; timeout?: number },
 ): Promise<T> {
-  return getDb().$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT set_config('app.workspace_id', ${scope.workspaceId}, true)`;
-    return fn(tx);
-  });
+  return getDb().$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.workspace_id', ${scope.workspaceId}, true)`;
+      return fn(tx);
+    },
+    options,
+  );
 }
 
 /**
