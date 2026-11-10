@@ -154,6 +154,130 @@ describe("manual payment currency and balances", () => {
     expect(balance).toMatchObject({ expectedMinor: 10_000, balanceMinor: 10_000 });
   });
 
+  it("bills session-priced groups per attended session instead of monthly", () => {
+    const [balance] = calculateStudentBalances({
+      students: [{ id: "student-1" }],
+      feeRules: [
+        {
+          studentId: null,
+          groupId: "group-1",
+          amountMinor: 10_000,
+          effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      ],
+      enrollments: [
+        {
+          studentId: "student-1",
+          groupId: "group-1",
+          enrolledAt: new Date("2026-01-10T00:00:00.000Z"),
+          leftAt: null,
+        },
+      ],
+      payments: [{ studentId: "student-1", amountMinor: 15_000, voidedAt: null }],
+      adjustments: [],
+      sessionCharges: [
+        { studentId: "student-1", amountMinor: 5_000 },
+        { studentId: "student-1", amountMinor: 5_000 },
+        { studentId: "student-1", amountMinor: 5_000 },
+      ],
+      sessionPricedGroupIds: ["group-1"],
+      asOfMonth: "2026-03",
+      timezone: "Africa/Cairo",
+    });
+    expect(balance).toMatchObject({
+      expectedMinor: 15_000,
+      receivedMinor: 15_000,
+      balanceMinor: 0,
+    });
+  });
+
+  it("does not charge a session-priced group before any session is attended", () => {
+    const [balance] = calculateStudentBalances({
+      students: [{ id: "student-1" }],
+      feeRules: [
+        {
+          studentId: null,
+          groupId: "group-1",
+          amountMinor: 10_000,
+          effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      ],
+      enrollments: [
+        {
+          studentId: "student-1",
+          groupId: "group-1",
+          enrolledAt: new Date("2026-01-10T00:00:00.000Z"),
+          leftAt: null,
+        },
+      ],
+      payments: [],
+      adjustments: [],
+      sessionCharges: [],
+      sessionPricedGroupIds: ["group-1"],
+      asOfMonth: "2026-03",
+      timezone: "Africa/Cairo",
+    });
+    expect(balance.expectedMinor).toBe(0);
+  });
+
+  it("keeps a monthly group fee when a student also attends session-priced sessions", () => {
+    const [balance] = calculateStudentBalances({
+      students: [{ id: "student-1" }],
+      feeRules: [
+        {
+          studentId: null,
+          groupId: "monthly-group",
+          amountMinor: 10_000,
+          effectiveFrom: new Date("2026-02-01T00:00:00.000Z"),
+        },
+        {
+          studentId: null,
+          groupId: "session-group",
+          amountMinor: 99_999,
+          effectiveFrom: new Date("2026-02-01T00:00:00.000Z"),
+        },
+      ],
+      enrollments: [
+        {
+          studentId: "student-1",
+          groupId: "monthly-group",
+          enrolledAt: new Date("2026-02-01T00:00:00.000Z"),
+          leftAt: null,
+        },
+        {
+          studentId: "student-1",
+          groupId: "session-group",
+          enrolledAt: new Date("2026-02-01T00:00:00.000Z"),
+          leftAt: null,
+        },
+      ],
+      payments: [],
+      adjustments: [],
+      sessionCharges: [{ studentId: "student-1", amountMinor: 5_000 }],
+      sessionPricedGroupIds: ["session-group"],
+      asOfMonth: "2026-03",
+      timezone: "Africa/Cairo",
+    });
+    expect(balance.expectedMinor).toBe(25_000); // 10,000 × 2 months + 5,000 session
+  });
+
+  it("ignores voided payments when settling session charges", () => {
+    const [balance] = calculateStudentBalances({
+      students: [{ id: "student-1" }],
+      feeRules: [],
+      enrollments: [],
+      payments: [
+        { studentId: "student-1", amountMinor: 5_000, voidedAt: new Date("2026-03-01T00:00:00.000Z") },
+      ],
+      adjustments: [],
+      sessionCharges: [{ studentId: "student-1", amountMinor: 5_000 }],
+      sessionPricedGroupIds: [],
+      asOfMonth: "2026-03",
+      timezone: "Africa/Cairo",
+    });
+    expect(balance).toMatchObject({ expectedMinor: 5_000, receivedMinor: 0, balanceMinor: 5_000 });
+  });
+
   it("uses the workspace timezone for local dates and months", () => {
     const now = new Date("2026-10-28T22:30:00.000Z");
     expect(currentDateInTimezone(now, "Africa/Cairo")).toBe("2026-10-29");

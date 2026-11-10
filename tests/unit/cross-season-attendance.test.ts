@@ -4,6 +4,7 @@ import {
   verifySessionPayment,
 } from "../../src/modules/attendance/service.js";
 import * as attendanceRepo from "../../src/modules/attendance/repository.js";
+import * as paymentsRepo from "../../src/modules/payments/repository.js";
 import * as dbScope from "../../src/lib/db/scope.js";
 import { AppError } from "../../src/lib/http/errors.js";
 import type { Scope } from "../../src/modules/tenancy/types.js";
@@ -27,12 +28,38 @@ describe("Cross-Season Attendance & Payment Verification", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
 
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      auditEvent: { create: vi.fn().mockResolvedValue({}) },
+      attendanceMark: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "mark-1",
+          sessionId,
+          studentId: regularStudentId,
+        }),
+      },
+    };
+
     // Mock withScope to run the callback with a fake tx
     vi.spyOn(dbScope, "withScope").mockImplementation(async (_s, cb) => {
-      return cb({
-        auditEvent: { create: vi.fn().mockResolvedValue({}) },
-      } as unknown as Parameters<Parameters<typeof dbScope.withScope>[1]>[0]);
+      return cb(tx as unknown as Parameters<Parameters<typeof dbScope.withScope>[1]>[0]);
     });
+
+    // Payment helpers now live in @/modules/payments/repository, called from
+    // attendance.service.verifySessionPayment.
+    vi.spyOn(paymentsRepo, "findSessionForPaymentTx").mockResolvedValue({
+      id: sessionId,
+      status: "completed",
+      startsAt: new Date("2026-11-10T14:00:00Z"),
+      pricePerStudentMinor: 40000,
+      group: { defaultPricePerStudentMinor: 40000 },
+    });
+    vi.spyOn(paymentsRepo, "findSessionLinkedPaymentsTx").mockResolvedValue([]);
+    vi.spyOn(paymentsRepo, "createPaymentTx").mockImplementation(async () => ({
+      payment: { id: "pay-1", amountMinor: 40000 } as never,
+      duplicate: false,
+      matches: true,
+    }));
 
     // Mock getSessionWithGroup
     vi.spyOn(attendanceRepo, "getSessionWithGroup").mockResolvedValue({

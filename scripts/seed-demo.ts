@@ -32,6 +32,14 @@ import { normalizeSearchTerm } from "../src/modules/search/schemas";
 
 loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ quiet: true });
+// The demo seed intentionally uses the owner role for local-only reset
+// (same pattern as `scripts/grant-permissions.ts`): the studio app role cannot
+// insert or delete payment/ledger rows (enforced append-only by the migration
+// and the grant script). The tenant isolation guard in `seed-guard.ts` ensures
+// this script refuses to run against any non-loopback or non-`local` target.
+if (process.env.DIRECT_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.DIRECT_DATABASE_URL;
+}
 
 // ---------------------------------------------------------------------------
 // Fixed identities (created by `scripts/seed.ts`).
@@ -603,6 +611,104 @@ function buildSessionPlan(): SessionPlan[] {
   return plan;
 }
 
+const MARK_PATTERN = [
+  "present",
+  "present",
+  "present",
+  "absent",
+  "present",
+  "late",
+  "present",
+  "present",
+  "excused",
+  "present",
+  "present",
+  "present",
+] as const;
+
+type MarkPlanEntry = {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  groupIndex: number;
+  occurrenceNo: number;
+  studentIndex: number;
+  mark: (typeof MARK_PATTERN)[number];
+  revision?: { oldMark: "absent" | "late" | "excused"; newMark: "present" };
+  startsAt: Date;
+  pricePerStudentMinor: number;
+};
+
+/**
+ * The single deterministic attendance plan shared by the attendance-mark seed
+ * and the ledger seed, so `paymentVerified` and the seeded session payments
+ * always agree with what was attended.
+ *
+ * The most recent completed session of each group leaves its last enrolled
+ * student unpaid — a small, truthful outstanding subset for the demo.
+ */
+function buildMarkPlan(): MarkPlanEntry[] {
+  const plan = buildSessionPlan();
+  const marks: MarkPlanEntry[] = [];
+  let markCounter = 0;
+  for (const session of plan) {
+    if (session.status !== "completed") continue;
+    const roster = studentsInGroup(session.groupIndex);
+    for (const [index, student] of roster.entries()) {
+      markCounter += 1;
+      const markId = fid(0x72, markCounter);
+      const mark = MARK_PATTERN[(index * 3 + session.occurrenceNo * 5) % MARK_PATTERN.length];
+      const entry: MarkPlanEntry = {
+        id: markId,
+        sessionId: session.id,
+        studentId: student.id,
+        groupIndex: session.groupIndex,
+        occurrenceNo: session.occurrenceNo,
+        studentIndex: index,
+        mark,
+        startsAt: session.startsAt,
+        pricePerStudentMinor: GROUPS[session.groupIndex].pricePerStudentMinor,
+      };
+      // One recorded correction, with a matching revision row.
+      if (session.groupIndex === 0 && session.occurrenceNo === 4 && index === 2) {
+        entry.mark = "present";
+        entry.revision = { oldMark: "absent", newMark: "present" };
+      }
+      marks.push(entry);
+    }
+  }
+  return marks;
+}
+
+/** Eligible (present/late) marks that deliberately have no payment yet. */
+function unpaidMarkIds(): Set<string> {
+  const marks = buildMarkPlan();
+  const byGroup = new Map<number, MarkPlanEntry[]>();
+  for (const mark of marks) {
+    const list = byGroup.get(mark.groupIndex) ?? [];
+    list.push(mark);
+    byGroup.set(mark.groupIndex, list);
+  }
+  const unpaid = new Set<string>();
+  for (const [groupIndex, list] of byGroup) {
+    const latest = Math.max(...list.map((mark) => mark.occurrenceNo));
+    const roster = studentsInGroup(groupIndex);
+    const targetStudent = roster[roster.length - 1];
+    const target = list.find(
+      (mark) =>
+        mark.occurrenceNo === latest &&
+        mark.studentId === targetStudent.id &&
+        (mark.mark === "present" || mark.mark === "late"),
+    );
+    if (target) unpaid.add(target.id);
+  }
+  return unpaid;
+}
+
+function isPayableMark(mark: MarkPlanEntry): boolean {
+  return mark.mark === "present" || mark.mark === "late";
+}
+
 function studentsInGroup(groupIndex: number): StudentSeed[] {
   return STUDENTS.filter((student) => student.groupIndex === groupIndex);
 }
@@ -645,67 +751,37 @@ async function seedSessionsAndAttendance(): Promise<void> {
         });
       }
 
-      const markPattern = [
-        "present",
-        "present",
-        "present",
-        "absent",
-        "present",
-        "late",
-        "present",
-        "present",
-        "excused",
-        "present",
-        "present",
-        "present",
-      ] as const;
+      const unpaidIds = unpaidMarkIds();
+      const marks = buildMarkPlan();
+      const revisionSeeds = marks
+        .filter((mark) => mark.revision)
+        .map((mark) => ({
+          markId: mark.id,
+          sessionId: mark.sessionId,
+          studentId: mark.studentId,
+          ...(mark.revision as NonNullable<MarkPlanEntry["revision"]>),
+        }));
 
-      let markCounter = 0;
-      const revisionSeeds: Array<{
-        markId: string;
-        sessionId: string;
-        studentId: string;
-        oldMark: "absent" | "late" | "excused";
-        newMark: "present";
-      }> = [];
-
-      for (const session of plan) {
-        if (session.status !== "completed") continue;
-        const roster = studentsInGroup(session.groupIndex);
-        for (const [index, student] of roster.entries()) {
-          markCounter += 1;
-          const markId = fid(0x72, markCounter);
-          let mark = markPattern[(index * 3 + session.occurrenceNo * 5) % markPattern.length];
-          // One recorded correction, with a matching revision row below.
-          if (session.groupIndex === 0 && session.occurrenceNo === 4 && index === 2) {
-            mark = "present";
-            revisionSeeds.push({
-              markId,
-              sessionId: session.id,
-              studentId: student.id,
-              oldMark: "absent",
-              newMark: "present",
-            });
-          }
-          const data = {
-            workspaceId: NILE_WORKSPACE_ID,
-            sessionId: session.id,
-            studentId: student.id,
-            mark,
-            source: (index === 1 ? "qr" : "manual") as "qr" | "manual",
-            deviceId: index === 1 ? "demo-device-1" : null,
-            recordedBy: session.groupIndex === 1 ? ASSISTANT_USER_ID : OWNER_USER_ID,
-            recordedAt: new Date(session.startsAt.getTime() + 30 * 60000),
-            paymentVerified: true,
-            isCrossSeason: false,
-            primaryGroupId: null,
-          };
-          await tx.attendanceMark.upsert({
-            where: { sessionId_studentId: { sessionId: session.id, studentId: student.id } },
-            create: { id: markId, ...data },
-            update: data,
-          });
-        }
+      for (const mark of marks) {
+        const payable = isPayableMark(mark);
+        const data = {
+          workspaceId: NILE_WORKSPACE_ID,
+          sessionId: mark.sessionId,
+          studentId: mark.studentId,
+          mark: mark.mark,
+          source: (mark.studentIndex === 1 ? "qr" : "manual") as "qr" | "manual",
+          deviceId: mark.studentIndex === 1 ? "demo-device-1" : null,
+          recordedBy: mark.groupIndex === 1 ? ASSISTANT_USER_ID : OWNER_USER_ID,
+          recordedAt: new Date(mark.startsAt.getTime() + 30 * 60000),
+          paymentVerified: payable && !unpaidIds.has(mark.id),
+          isCrossSeason: false,
+          primaryGroupId: null,
+        };
+        await tx.attendanceMark.upsert({
+          where: { sessionId_studentId: { sessionId: mark.sessionId, studentId: mark.studentId } },
+          create: { id: mark.id, ...data },
+          update: data,
+        });
       }
 
       for (const revision of revisionSeeds) {
@@ -1087,179 +1163,149 @@ async function seedPayments(): Promise<void> {
   await withScope(
     scope,
     async (tx) => {
+      // 1. The financial ledger is append-only by design (migration
+      //    20261029150000_manual_payment_ledger creates triggers that forbid
+      //    UPDATE and DELETE on payment / payment_adjustment / fee_rule, and
+      //    REVOKE from the app role). A local-only demo reset therefore cannot
+      //    rewrite individual rows. `TRUNCATE` does not fire row triggers and
+      //    this script refuses to run outside the local loopback database
+      //    (see assertLocalSeedTarget), so it is the honest way to rebuild the
+      //    demo ledger from scratch. The complete row set is re-created below
+      //    in the same transaction. Nothing here fabricates the billing model:
+      //    one session-linked payment per non-cancelled completed/started
+      //    present-or-late mark, an explicitly voided mistaken entry, a payment
+      //    revision, a discount adjustment, and a refund adjustment.
+      //
+      //    NOTE: this wipes ledger rows for every workspace in the local
+      //    database. That is safe locally (scripts/seed.ts creates no ledger
+      //    rows) and would be unacceptable anywhere else.
+      await tx.$executeRawUnsafe(
+        'TRUNCATE TABLE "payment", "payment_adjustment", "fee_rule", "payment_revision"',
+      );
+
+      // 2. Payment rows: one non-voided ledger row for every present/late mark
+      //    that has not been deliberately left unpaid, at that session's price.
       const today = todayInCairo();
-      const effectiveFrom = new Date(Date.UTC(today.year, today.month - 4, 1));
-
-      const feeRuleRows = GROUPS.map((group, groupIndex) => ({
-        id: fid(0x93, groupIndex + 1),
-        workspaceId: NILE_WORKSPACE_ID,
-        studentId: null,
-        groupId: group.id,
-        amountMinor: group.pricePerStudentMinor,
-        effectiveFrom,
-        purpose: "اشتراك شهري",
-        createdBy: OWNER_USER_ID,
-      }));
-      await tx.feeRule.createMany({
-        data: feeRuleRows,
-        skipDuplicates: true,
-      });
-
+      const eligibleMarks = buildMarkPlan().filter((mark) =>
+        isPayableMark(mark) && !unpaidMarkIds().has(mark.id),
+      );
       const paymentRows: Prisma.PaymentUncheckedCreateInput[] = [];
-      const paymentIds: string[] = [];
-      for (const [studentIndex, student] of STUDENTS.entries()) {
-        const group = GROUPS[student.groupIndex];
-        for (const monthOffset of [-1, -2]) {
-          const paymentId = fid(0x91, studentIndex * 10 + (monthOffset === -1 ? 1 : 2));
-          paymentIds.push(paymentId);
-          const period = monthKey(today, monthOffset);
-          paymentRows.push({
-            id: paymentId,
-            workspaceId: NILE_WORKSPACE_ID,
-            studentId: student.id,
-            sessionId: null,
-            period,
-            amountMinor: group.pricePerStudentMinor,
-            currency: "EGP",
-            method: (studentIndex % 3 === 0 ? "transfer" : "cash") as "cash" | "transfer",
-            methodLabel: studentIndex % 3 === 0 ? "تحويل بنكي" : null,
-            paidOn: dateOnly(monthDay(monthOffset, 3)),
-            purpose: "اشتراك شهري",
-            referenceNumber: studentIndex % 3 === 0 ? `TRX-${period}-${studentIndex + 1}` : null,
-            idempotencyKey: `demo-payment-${studentIndex + 1}-${period}`,
-            note: null,
-            voidedAt: null,
-            voidReason: null,
-            createdBy: OWNER_USER_ID,
-          });
-        }
+      for (let index = 0; index < eligibleMarks.length; index += 1) {
+        const mark = eligibleMarks[index];
+        const parts = cairoParts(mark.startsAt);
+        const period = `${parts.year}-${String(parts.month).padStart(2, "0")}`;
+        const method = (index % 3 === 0 ? "transfer" : "cash") as "cash" | "transfer";
+        paymentRows.push({
+          id: fid(0x91, 200 + index),
+          workspaceId: NILE_WORKSPACE_ID,
+          studentId: mark.studentId,
+          sessionId: mark.sessionId,
+          period,
+          amountMinor: mark.pricePerStudentMinor,
+          currency: "EGP",
+          method,
+          methodLabel: method === "transfer" ? "تحويل بنكي" : null,
+          paidOn: new Date(Date.UTC(parts.year, parts.month - 1, parts.day)),
+          purpose: "سداد حصة",
+          referenceNumber: method === "transfer" ? `TRX-${period}-${index + 1}` : null,
+          idempotencyKey: `demo-session-payment-${index}`,
+          note: `دفع لحصة حضور/تأخر في ${mark.startsAt.toISOString().slice(0, 10)}`,
+          voidedAt: null,
+          voidReason: null,
+          createdBy: OWNER_USER_ID,
+        });
       }
 
-      // One per-session top-up payment and one voided mistaken entry, both real
-      // ledger rows with their own state.
-      const plan = buildSessionPlan();
-      const extraSession = plan.find(
-        (session) => session.groupIndex === 0 && session.status === "completed",
-      );
-      const topUpId = fid(0x91, 100);
-      paymentRows.push({
-        id: topUpId,
-        workspaceId: NILE_WORKSPACE_ID,
-        studentId: STUDENTS[0].id,
-        sessionId: extraSession?.id ?? null,
-        period: monthKey(today, -1),
-        amountMinor: 10000,
-        currency: "EGP",
-        method: "cash" as const,
-        methodLabel: null,
-        paidOn: dateOnly(monthDay(-1, 12)),
-        purpose: "حصة إضافية",
-        referenceNumber: null,
-        idempotencyKey: "demo-payment-topup-1",
-        note: "حصة مراجعة إضافية قبل الامتحان.",
-        voidedAt: null,
-        voidReason: null,
-        createdBy: OWNER_USER_ID,
-      });
+      await tx.payment.createMany({ data: paymentRows, skipDuplicates: true });
 
+      // A voided mistaken entry on the demo ledger — a real ledger row, not an
+      // inferred balance.
       const voidedId = fid(0x91, 101);
-      paymentRows.push({
-        id: voidedId,
-        workspaceId: NILE_WORKSPACE_ID,
-        studentId: STUDENTS[4].id,
-        sessionId: null,
-        period: monthKey(today, -1),
-        amountMinor: GROUPS[1].pricePerStudentMinor,
-        currency: "EGP",
-        method: "cash" as const,
-        methodLabel: null,
-        paidOn: dateOnly(monthDay(-1, 4)),
-        purpose: "اشتراك شهري",
-        referenceNumber: null,
-        idempotencyKey: "demo-payment-voided-1",
-        note: "قيد خاطئ أُلغي بعد مراجعة الخزينة.",
-        voidedAt: daysAgo(20, 13),
-        voidReason: "سُجّل المبلغ مرتين بالخطأ.",
-        createdBy: OWNER_USER_ID,
+      await tx.payment.create({
+        data: {
+          id: voidedId,
+          workspaceId: NILE_WORKSPACE_ID,
+          studentId: STUDENTS[4].id,
+          sessionId: null,
+          period: monthKey(today, -1),
+          amountMinor: GROUPS[1].pricePerStudentMinor,
+          currency: "EGP",
+          method: "cash" as const,
+          methodLabel: null,
+          paidOn: dateOnly(monthDay(-1, 4)),
+          purpose: "اشتراك شهري",
+          referenceNumber: null,
+          idempotencyKey: "demo-payment-voided-1",
+          note: "قيد خاطئ أُلغي بعد مراجعة الخزينة.",
+          voidedAt: daysAgo(20, 13),
+          voidReason: "سُجّل المبلغ مرتين بالخطأ.",
+          createdBy: OWNER_USER_ID,
+        },
       });
 
-      await tx.payment.createMany({
-        data: paymentRows,
-        skipDuplicates: true,
-      });
-
-      const revisionPaymentId = paymentIds[0];
-      await tx.paymentRevision.createMany({
-        data: [
-          {
+      // 3. A payment revision pointing at the first eligible mark's payment.
+      const firstPaymentId: string = paymentRows[0]?.id ?? "";
+      if (eligibleMarks.length > 0) {
+        await tx.paymentRevision.upsert({
+          where: { id: fid(0x94, 1) },
+          create: {
             id: fid(0x94, 1),
             workspaceId: NILE_WORKSPACE_ID,
-            paymentId: revisionPaymentId,
+            paymentId: firstPaymentId,
             actorId: OWNER_USER_ID,
-            before: { amountMinor: GROUPS[0].pricePerStudentMinor, method: "cash", methodLabel: null },
+            before: { amountMinor: eligibleMarks[0].pricePerStudentMinor, method: "cash", methodLabel: null },
             after: {
-              amountMinor: GROUPS[0].pricePerStudentMinor,
+              amountMinor: eligibleMarks[0].pricePerStudentMinor,
               method: "transfer",
               methodLabel: "تحويل بنكي",
             },
             reason: "تصحيح طريقة الدفع بعد مطابقة كشف الحساب البنكي.",
             createdAt: daysAgo(25, 11),
           },
-        ],
-        skipDuplicates: true,
-      });
+          update: {
+            paymentId: firstPaymentId,
+            before: { amountMinor: eligibleMarks[0].pricePerStudentMinor, method: "cash", methodLabel: null },
+            after: {
+              amountMinor: eligibleMarks[0].pricePerStudentMinor,
+              method: "transfer",
+              methodLabel: "تحويل بنكي",
+            },
+            reason: "تصحيح طريقة الدفع بعد مطابقة كشف الحساب البنكي.",
+          },
+        });
+      }
 
-      const adjustments = [
+      // 4. Adjustments (real rows on the same ledger, not UI voodoo).
+      const adjustments: Prisma.PaymentAdjustmentUncheckedCreateInput[] = [
         {
           id: fid(0x92, 1),
+          workspaceId: NILE_WORKSPACE_ID,
           studentId: STUDENTS[2].id,
           paymentId: null,
-          kind: "discount" as const,
+          kind: "discount",
           amountMinor: 5000,
           balanceImpact: -1,
           paidOn: dateOnly(monthDay(-1, 5)),
           reason: "خصم أخوة — شقيقان في نفس المجموعة.",
           idempotencyKey: "demo-adjustment-discount-1",
+          createdBy: OWNER_USER_ID,
         },
         {
           id: fid(0x92, 2),
+          workspaceId: NILE_WORKSPACE_ID,
           studentId: STUDENTS[7].id,
           paymentId: null,
-          kind: "refund" as const,
+          kind: "refund",
           amountMinor: 10000,
           balanceImpact: 1,
           paidOn: dateOnly(monthDay(-1, 18)),
-          reason: "استرداد قيمة حصة ملغاة.",
+          reason: "استرداد مقابل سجل دفع مبالغ فيه.",
           idempotencyKey: "demo-adjustment-refund-1",
-        },
-        {
-          id: fid(0x92, 3),
-          studentId: STUDENTS[0].id,
-          paymentId: topUpId,
-          kind: "correction" as const,
-          amountMinor: 2000,
-          balanceImpact: 1,
-          paidOn: dateOnly(monthDay(-1, 13)),
-          reason: "تسوية فرق سعر الحصة الإضافية.",
-          idempotencyKey: "demo-adjustment-correction-1",
+          createdBy: OWNER_USER_ID,
         },
       ];
-
       await tx.paymentAdjustment.createMany({
-        data: adjustments.map((adjustment) => ({
-          id: adjustment.id,
-          workspaceId: NILE_WORKSPACE_ID,
-          studentId: adjustment.studentId,
-          paymentId: adjustment.paymentId,
-          kind: adjustment.kind,
-          amountMinor: adjustment.amountMinor,
-          balanceImpact: adjustment.balanceImpact,
-          currency: "EGP",
-          paidOn: adjustment.paidOn,
-          reason: adjustment.reason,
-          idempotencyKey: adjustment.idempotencyKey,
-          createdBy: OWNER_USER_ID,
-        })),
+        data: adjustments,
         skipDuplicates: true,
       });
     },
@@ -2736,8 +2782,10 @@ async function seedPortalsInvitationsReportsAndAudit(): Promise<void> {
         createdAt: daysAgo(1, 8),
         completedAt: null,
       };
-      await tx.reportExport.create({
-        data: { id: reportId, ...reportData },
+      await tx.reportExport.upsert({
+        where: { id: reportId },
+        create: { id: reportId, ...reportData },
+        update: reportData,
       });
 
       const auditEvents = [

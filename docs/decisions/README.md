@@ -40,7 +40,8 @@ Every ADR uses the same sections:
 | [0015](0015-shared-zod-validation-schemas.md) | Shared Zod validation schemas | Accepted | M0–M3 |
 | [0016](0016-spreadsheet-library-exceljs.md) | Spreadsheet processing with exceljs | Accepted | M1–M3 |
 | [0017](0017-clamav-and-learning-materials.md) | ClamAV scanning and the learning-materials library | Accepted | M1 |
-| [0018](0018-monthly-fees-and-cancelled-sessions.md) | Period-based fees and session cancellation | Accepted | M2 |
+| [0018](0018-monthly-fees-and-cancelled-sessions.md) | Period-based fees and session cancellation | Accepted (partially superseded by ADR-0025) | M2 |
+| [0025](0025-per-session-attendance-billing.md) | Per-session attendance-based billing | Accepted | M2 |
 | [0020](0020-qr-rendering-library.md) | QR rendering uses `qrcode-generator`, pinned | Accepted | M2 |
 | [0021](0021-forms-foundation.md) | Relational forms foundation with server-side conditional logic | Accepted (partially superseded by ADR-0022) | M3a |
 | [0022](0022-forms-visual-builder.md) | Forms visual builder supersedes revision deferral | Accepted (approved 2026-11-04) | M4 / extension |
@@ -86,6 +87,7 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0016 | `F-P1-03`, `F-P2-10`, `NF-13` |
 | 0017 | `F-P1-11`, `F-P0-01`, `A-09` |
 | 0018 | `F-P2-04`, `R-02`, `NF-1` |
+| 0025 | `F-P2-04`, `R-02`, `NF-1` |
 | 0020 | `F-P2-05`, `OQ-05` |
 | 0021 | `F-P3-09`, `R-01`, `R-02`, `R-15`, `NF-1`, `NF-8`, `NF-9`, `NF-13` |
 | 0022 | `F-P3-09`, `F-P3-12`, `NF-1`, `NF-12` |

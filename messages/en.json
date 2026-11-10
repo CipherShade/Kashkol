@@ -606,6 +606,8 @@
     "pageDescription": "The workspace student directory with search, filters, import, and export.",
     "studentProfile": "Student profile",
     "backToDirectory": "Back to students",
+    "openAttendance": "Attendance",
+    "openQrCard": "QR card",
     "joinedDate": "Joined",
     "noGradeAssigned": "No grade assigned",
     "whatsappParent": "Message parent",
@@ -857,7 +859,8 @@
     "errors": {
       "totalOutOfRange": "The total exceeds the supported exact currency range.",
       "duplicateMismatch": "This submission key was already used for different payment data.",
-      "feeRuleAlreadyExists": "A fee convention already exists for that target and effective month."
+      "feeRuleAlreadyExists": "A fee convention already exists for that target and effective month.",
+      "sessionPriceMissing": "This session has no price, so a payment cannot be recorded automatically."
     }
   },
   "Reports": {
@@ -1416,6 +1419,9 @@
     "rescheduleSeries": "Reschedule series",
     "confirm": "Confirm",
     "actions": "Actions",
+    "status": "Status",
+    "openAttendance": "Open attendance",
+    "viewAttendance": "View attendance",
     "sessionCreated": "Session created",
     "sessionRescheduled": "Session rescheduled",
     "sessionCancelled": "Session cancelled",
@@ -1496,7 +1502,16 @@
       "paymentNotVerified": "Payment marked as unpaid",
       "paid": "Paid",
       "unpaid": "Unpaid",
-      "paymentToggleFailed": "Failed to update payment status"
+      "paymentToggleFailed": "Failed to update payment status",
+      "revenueUnavailable": "Session payment summary could not be loaded.",
+      "revenueRetry": "Retry",
+      "loadingRevenue": "Loading session payment summary…",
+      "startAttendance": "Start attendance",
+      "scanRecording": "Recording…",
+      "homeworkQuestion": "Did the student do the homework ({title})?",
+      "homeworkYes": "Yes",
+      "homeworkNo": "No",
+      "homeworkToggleFailed": "Couldn't save homework status. Please retry."
     }
   },
   "Portal": {

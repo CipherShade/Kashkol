@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db/client";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Scope } from "@/modules/tenancy/types";
 import { calculateStudentBalances } from "@/modules/payments/calculations";
+import { buildSessionCharges } from "@/modules/payments/session-revenue";
 import type { ReportExportQuery, ReportQuery } from "./schemas";
 
 type DateBounds = { from?: Date; toExclusive?: Date; dateFrom?: Date; dateTo?: Date };
@@ -207,7 +208,7 @@ export async function loadReport(
           ? { enrollments: { some: { groupId: query.groupId } } }
           : {}),
       };
-      const [students, selectedGroup, feeRules, enrollments, paymentTotals, adjustmentTotals] =
+      const [students, selectedGroup, feeRules, enrollments, pricedSessions, chargedMarks, paymentTotals, adjustmentTotals, sessionPricedGroups] =
         await Promise.all([
           tx.student.findMany({
             where: studentWhere,
@@ -228,6 +229,31 @@ export async function loadReport(
             where: { workspaceId: scope.workspaceId },
             select: { studentId: true, groupId: true, enrolledAt: true, leftAt: true },
           }),
+          tx.teachingSession.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              status: { not: "cancelled" },
+              startsAt: { lt: bounds.toExclusive },
+            },
+            select: {
+              id: true,
+              groupId: true,
+              pricePerStudentMinor: true,
+              group: { select: { defaultPricePerStudentMinor: true } },
+            },
+          }),
+          tx.attendanceMark.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              student: studentWhere,
+              mark: { in: ["present", "late"] },
+              session: {
+                status: { not: "cancelled" },
+                startsAt: { lt: bounds.toExclusive },
+              },
+            },
+            select: { studentId: true, sessionId: true },
+          }),
           tx.payment.groupBy({
             by: ["studentId"],
             where: {
@@ -247,9 +273,18 @@ export async function loadReport(
             },
             _sum: { amountMinor: true },
           }),
+          tx.group.findMany({
+            where: { workspaceId: scope.workspaceId, defaultPricePerStudentMinor: { gt: 0 } },
+            select: { id: true },
+          }),
         ]);
       const paymentByStudent = new Map(
         paymentTotals.map((row) => [row.studentId, row._sum.amountMinor ?? 0]),
+      );
+      const sessionCharges = buildSessionCharges(
+        pricedSessions,
+        chargedMarks,
+        sessionPricedGroups.map((g) => g.id),
       );
       const balances = calculateStudentBalances({
         students,
@@ -265,6 +300,8 @@ export async function loadReport(
           amountMinor: row._sum.amountMinor ?? 0,
           balanceImpact: row.balanceImpact,
         })),
+        sessionCharges: sessionCharges.charges,
+        sessionPricedGroupIds: sessionCharges.sessionPricedGroupIds,
         asOfMonth,
         timezone,
       });

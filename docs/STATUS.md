@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-08 · **Status:** Operational model correction & workflow upgrade complete: session-based revenue calculation, Google Calendar-style sessions scheduling, indefinite-lifetime student QR identity with scanner panel, cross-season attendance tracking with primary group isolation, offline homework completion tracking, and dashboard financial consistency implemented · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-10 · **Status:** Operational model correction & workflow upgrade complete: session-based revenue calculation (`ADR-0025`), Google Calendar-style sessions scheduling, indefinite-lifetime student QR identity with scanner panel (fast mode + per-student homework yes/no on the session attendance screen, 2026-11-10), cross-season attendance tracking with primary group isolation, offline homework completion tracking, dashboard financial consistency, SVG/PNG QR card downloads on the student profile, and a demo ledger rebuilt truthfully under the per-session billing model · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -25,7 +25,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (23 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (24 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -143,8 +143,9 @@ health/readiness probes, the route registry, and the project-rule checks.
 | `docs/DATA_MODEL.md` | 663 | Design rules and naming conventions, the core M0–M2 ERD, the reserved P3 ERD, the table reference, the RLS mechanics, the derived-value SQL, the index strategy, retention, the migration sequence, integrity checks, and data-model risks. |
 | `docs/SECURITY_AND_PRIVACY.md` | 408 | Security objectives, the threat model and boundary map, authentication and session policy, rate limits, authorisation and tenancy rules, input validation, file-handling security, secrets management, log and error redaction, audit-log security, the privacy register with retention and data-subject rights, minors' data, a requirement-to-control matrix, the security test plan, incident response, known security risks, and the security prohibitions. |
 | `docs/INTEGRATIONS.md` | 318 | Integration principles, the package-versioning policy, the integration inventory, the adapter contract pattern, and a contract for each integration: PostgreSQL, object storage, the antivirus scanner, email, the WhatsApp deep link, QR and token services, Railway, observability, and deferred payments — plus the failure matrix and the integration security checklist. |
+| `docs/OPERATIONS_RUNBOOK.md` | 214 | Backup model (Railway-managed vs. logical encrypted archive), backup procedure, 35-day retention, alerting, what "verified" means, RTO/RPO, incident restore procedure, monthly drill checklist, what was done and what is unverified. |
 | `docs/decisions/README.md` | 65 | The ADR format, the index, the conventions, and the requirement traceability table. |
-| `docs/decisions/0001`–`0023` | 1,524 | Twenty-two architecture decisions with context, decision, consequences, rejected alternatives, and a revisit trigger. |
+| `docs/decisions/0001`–`0025` | 1,524 | Twenty-four architecture decisions with context, decision, consequences, rejected alternatives, and a revisit trigger. |
 | `docs/STATUS.md` | this file | Current state and the ordered implementation plan. |
 | `../AGENTS.md` | 193 | The durable instructions an agent or engineer follows when working in this repository. |
 | `../.gitattributes` | 15 | The line-ending convention (LF for every text file) and the binary-file rules. |
@@ -433,6 +434,144 @@ already present in the code are the ones used (`FOR UPDATE SKIP LOCKED`), so job
 observability SDK choice (OI-3) remains open; per-workspace report export claiming still runs inside a
 non-request process, so a multi-instance worker deployment has not been load-tested here.
 
+### 5.4 Operations — backup verification and the restore drill on 2026-11-10
+
+`scripts/backup-db.mjs` (`npm run db:backup`) and `scripts/restore-drill.mjs` (`npm run db:restore:drill`)
+were added as the F-P0-09 AC-3 database backup and monthly restore-drill mechanism, verified against the
+local embedded PostgreSQL 17.9 on the seeded synthetic fixture.
+
+- Backup is a single-file, AES-256-GCM encrypted dump (magic `KSHKBACKUP\x00` + IV + auth tag + ciphertext),
+  compressed with zlib, containing every `public`-schema table including `_prisma_migrations`; the connecting
+  role must bypass RLS or no artifact is produced at all; non-loopback/private hosts are refused unless
+  `ALLOW_PRODUCTION_BACKUP=true`; artifacts are written `0600` into `.data/backups/` (`0700`) and swept after
+  `BACKUP_RETENTION_DAYS` (default 35).
+- Every backup self-verifies: decrypt, decompress, hash, and row-count against the source before printing
+  `BACKUP_OK … verified=true`. Any mismatch prints `BACKUP_FAILED: …` and exits non-zero.
+- The restore drill recreates an isolated scratch database (`kashkol_restore_drill`, never dev, never prod),
+  applies every migration from repo migrations, bulk-restores with `session_replication_role='replica'`,
+  then re-enables FKs and verifies counts, single-column FK integrity (0 orphans), tenant isolation under
+  `kashkol_app` (workspace-scoped `student` counts + unset-GUC zero rows), and `prisma migrate status`.
+  `--keepdb` (incident mode) restores as-is into an explicitly approved isolated replacement database; it
+  fails loudly on FK/PK violations and never drops a non-loopback target.
+- `/readyz` and `/healthz` were 200 against the restored database; `migrations.applied.30`.
+- Production Railway-managed daily backups/PITR (ADR-0011) are **unverified**; file-storage backups are
+  **unverified**; S3 sink path is implemented but not exercised against a live bucket; production-sized
+  restore measurements are unknown. Details in §Unverified in `docs/OPERATIONS_RUNBOOK.md`.
+
+| Check | Result |
+|---|---|
+| Backup (`npm run db:backup`) | **Passed** — `BACKUP_OK tables=71 rows=1319 bytes=78989 verified=true elapsed=0.7s`; manifest records per-table counts, archive SHA-256, redacted source host |
+| Restore drill (`npm run db:restore:drill`) | **Passed** — `RESTORE_OK tables=70 migrationHistory=30 rows=1289 elapsed=19.0s`; fresh scratch DB from empty; 30 migrations applied; `FK scan: 67 single-column FK(s) verified, orphans=0`; 0 orphans |
+| Migration history | **Passed** — 30 migrations recomputed by `prisma migrate deploy`, no duplication; `prisma migrate status` on restored DB: schema up to date (30/30) |
+| Row-count verification | **Passed** — every table matches manifest; totals `1289 + 30 recomputed history = 1319` manifest rows |
+| Tenant isolation post-restore | **Passed** — `kashkol_app` scoped to workspace `...0001` reads 34 `student` rows, workspace `...0002` reads 0, unset `app.workspace_id` reads 0 |
+| Referential integrity | **Passed** — `FK scan: 67 single-column FK(s) verified, orphans=0` |
+| App readiness against restored DB | **Passed** — `/readyz` `status=ready`, `database.reachable`, `migrations.applied.30`; `/healthz` 200 |
+| `--keepdb` on empty isolated target | **Passed** — `RESTORE_OK … elapsed=13.5s` |
+| `--keepdb` on non-empty target | **Failed loudly as required** — `duplicate key value violates unique constraint "account_pkey"`; drill exits non-zero |
+| Production Railway backups/PITR | **Not verified** — cannot be reached from this environment; must be verified by opening the Railway project and executing a point-in-time restore into staging |
+| File-storage backups (S3/IN-2) | **Not verified** — documented only in `docs/OPERATIONS_RUNBOOK.md` §7 |
+| S3 sink for archives | **Implemented, untested** — do not rely on `BACKUP_STORE_DRIVER=s3` in production until a non-prod bucket is exercised and retrieved |
+| Integration suite (`npm run test:integration`) | **Passed** — 99/99 tests across 16 files on the seeded dev fixture |
+| Integration shared-fixture hygiene | **Fixed** — `tests/integration/workspace-authorization.test.ts` "keeps the revision chain append-only" created an active `Revision Group` in NILE and never cleaned it up; repeated test runs accumulated 8 active groups, saturating pilot `maxActiveGroups=12`. The test now archives its group in a `finally` block, and the eight accumulated rows were archived on 2026-11-10, returning the dev NILE fixture to the 4 seed groups |
+| Test-order dependence | **Known risk** — integration tests share the mutable NILE fixture by design; the pilot quota makes the suite order-dependent if any test leaks active groups. `tests/integration/*` must run against the seeded dev fixture, not a shared external database |
+
+**Procedure documented** in `docs/OPERATIONS_RUNBOOK.md` (procedure, 35-day retention, off-machine storage,
+monthly drill checklist, restore runbook, unverified items, log-output reference). No production database,
+credential, or existing backup was touched. The drill used only the git-ignored, seeded synthetic dev fixture.
+The dev fixture itself was intentionally modified in-place — eight leaked active `Revision Group` rows in
+`nile-academy` were archived by a one-off UPDATE before this session's final integration run; no dev rows
+were deleted, and the shared-fixture hygiene fix prevents future saturation regardless of test order.
+
+---
+
+### 5.5 Demo ledger consistency and per-session billing on 2026-11-10 — `ADR-0025`
+
+This work makes the demo tenant (`Nile Academy`) money-honest under the per-session model and supersedes ADR-0018's per-session prohibition.
+
+- **Balance engine.** `calculateStudentBalances` accepts `sessionCharges` (expected = session price × `present`/`late` marks on non-cancelled sessions) **+** `sessionPricedGroupIds`. Session-priced groups never accrue monthly fee rules for their enrolled students. Dashboard, payments, reports, parent portal, and dashboard collection rate all pass the same computed charges.
+- **Ledger wiring.** `attendance_mark.paymentVerified` is no longer a UI-only state: toggling it on a session screen writes or reuses a real session-linked `payment` row in the same transaction (advisory lock per `(session, student)`, price required, audited `payment.recorded` / `payment.voided`). Verified/unverified never diverges from the ledger. A price-unconfigured toggle is rejected with `Payment.errors.sessionPriceMissing`.
+- **Session attendance screen.** Revenue card is visible only to members with `payments:read`; the client fetches `SessionRevenueSummary` from `/api/sessions/[sessionId]/revenue` with loading and retryable-error states; amounts are formatted from `sessions.price_per_student_minor`/group default, not from ad-hoc arithmetic.
+- **Student profile.** Header quick actions deep-link to the attendance and QR tabs using `?tab=` search params (`profile-tabs`-known list); the QR tab downloads SVG and 512px PNG cards alongside Print and Re-issue.
+- **Demo seed.** The demo workspace is session-priced (four groups: 45 000 / 50 000 / 60 000 / 45 000 minor units per session). The stale monthly `fee_rule` rows were wiping the ledger (expected >> received for every student). The financial ledger is append-only **by trigger**, so resetting it uses `TRUNCATE` (row triggers do not fire) for the local-only reset; re-seeding recreates one real session-linked `payment` per eligible mark and retains the voided erroneous entry, the payment revision, and the two reasoned adjustments. `npm run db:seed:demo` was re-run idempotently afterward.
+- **Zero-attendance pricing gap closed.** Reports balance and parent portal balance both now pass `extraSessionPricedGroupIds` (groups with `default_price_per_student_minor > 0`) so a session-priced group shows zero expected revenue pre-attendance rather than accruing phantom monthly fees.
+- **Verification.** `npm run lint` (ESLint + project rules), `npm run typecheck` (Prisma generate + `tsc --noEmit`), `npm test` (374 unit / 21 UI tests passed), `npm run test:integration` (16 files / 99 tests passed) and `npm run build` all pass after the reseed.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint and the project rules |
+| `npm run typecheck` | **Passed** — `prisma generate` + `tsc --noEmit` |
+| `npm test` | **Passed** — unit 61 files / 374 tests; UI 1 file / 21 tests |
+| `npm run test:integration` | **Passed** — 16 files / 99 tests against the local PostgreSQL. Note: the suite initially failed after the machine restarted because the embedded dev database was down; it was restarted (`npm run db:dev:start`) and the full suite then passed unchanged — no test was edited to obtain the result |
+| `npm run build` | **Passed** — production build after fixing a `createPaymentTx` mock shape in `tests/unit/cross-season-attendance.test.ts` (`matches` was missing from the mock return) |
+| `npm run db:seed:demo` | **Passed** — initial Nile Academy seed, then TRUNCATE + recreate; re-run succeeds idempotently |
+| Demo ledger | **Verified by SQL** — 38 present/late non-cancelled marks; 34 session-linked payments; 4 deliberately unpaid marks (one per demo group) remain unpaid; `payment_verified` misalignment with the ledger: **0**; `fee_rule`: **0** |
+| Visual re-review of demo screens | **Not performed** — screenshots not re-captured in this session; the ledger reality is verified, the look is not |
+
+**Not claimed by this section:** a live production deployment, visual review of every demo screen, or camera capture behaviour on real hardware. `F-P2-05` remains `◐` as a result of the absent camera verification in this checkout.
+
+### 5.6 Session attendance fast mode and per-student homework question on 2026-11-10 — F-P2-05 fast scanner, F-P1-08 AC-9
+
+Part two of the session attendance work. No schema change, no new dependency, no fake behaviour.
+
+- **Merged "Start attendance" button.** One tap on a `scheduled` session starts it (existing
+  `PATCH /api/sessions/:id` action `start`) and opens the scanner immediately. Sessions already
+  `started` open the scanner the same way.
+- **Fast scan path.** `src/components/sessions/qr-scanner-panel.tsx` rewritten: the camera stream is
+  acquired once and persists across scans (the previous code re-acquired it on every submit); decode
+  frames downscaled to at most 480 px at ~15 fps; `BarcodeDetector` (hardware/OS-backed) where the
+  browser exposes it, with a `jsQR` fallback on the same downscaled frame; a per-token ~4 s
+  suppression window (`RecentTokenCache`, unit-tested) stops the camera re-POSTing a visible code;
+  the server keeps the authoritative atomic duplicate rejection (`409 CONFLICT`). Success shows the
+  student's name, a checkmark, beep, haptics, and an `aria-live=polite` banner. Manual entry remains
+  as fallback.
+- **Optimistic UI.** Mark buttons and homework yes/no flip instantly; the attendance POST returns
+  ok/conflict only and wrong answers roll back with a toast. No full-roster refetch per tap; refresh
+  happens only on structural events.
+- **Cross-season highlight.** Students eligible only through a different group are appended on first
+  mark and highlighted amber (`data-cross-season="true"`, `ui-attendance-row[data-cross-season]`,
+  RTL-safe logical properties).
+- **Per-student homework question.** When the session's group has an active homework (the latest by
+  `createdAt`), each row shows yes/no chips bound to the latest homework. One tap writes an
+  `homework_completion_mark` row (`completed` / `not_completed`) linked to the session, upserted per
+  `(homework, student)`. Absent marks render unrecorded, never as a claimed answer. The chips are
+  server-gated (`homework:write`) and render hidden without it; when there is no active homework the
+  question is hidden.
+- **Verification.** `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:integration`,
+  `npm run build` all pass.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint + project rules |
+| `npm run typecheck` | **Passed** — Prisma generate + `tsc --noEmit` |
+| `npm test` | **Passed** — unit 62 files / 379 tests; UI 1 file / 21 tests |
+| `npm run test:integration` | **Passed** — 17 files / 103 tests against the local PostgreSQL |
+| `npm run build` | **Passed** — production build |
+| Visual review of the attendance screen | **Passed** — six screens (ar/en × light/dark, desktop 1440×920; ar/en light, mobile 390×844) captured with headless Chrome via CDP on 2026-11-10 and inspected; RTL `dir=rtl` under `ar`, `dir=ltr` under `en`; no layout, contrast, overflow, or truncation defects found; demo data untouched (the screens show a `scheduled` session, which renders) |
+| `F-P2-05` | **Unchanged status `◐`** — no camera/hardware capture test on real hardware; the fast decode path is code-reviewed and unit-tested, not device-verified |
+
+**Maintenance note.** During this work the shared dev database accumulated 20 orphaned test groups
+(from three failed test runs), pushing the workspace over the free-plan `maxActiveGroups = 12` limit
+and breaking unrelated tests. The orphaned rows were deleted with direct SQL, after confirming they
+carried the test timestamps/names; append-only rows (`attendance_mark` + initial `attendance_revision`)
+were removed with their parents only as one-time local cleanup. Demo data (workspace `Nile Academy`,
+its groups/students/sessions/ledger) was untouched; afterwards the integration suite passes 103/103
+and the active-group count is back to 4.
+
+**Visual verification note.** The screenshots were taken against the local production build
+(`node scripts/start.mjs`) with `BETTER_AUTH_URL=http://localhost:3000` set in the process
+environment (`.env.local` points at an expired trycloudflare quick-tunnel URL, which the origin
+guard compares against); `.env.local` itself was not modified. No spec, code, or message changes
+resulted from the review, so the gate was not re-run.
+
+**Not claimed by this section:** the `started`-session visual state — the homework yes/no chips and
+attendance marks do render for a `scheduled` session (so they are visible in the six screens) but
+their checked/pressed state, the optimistic-toast rollback, the cross-season amber highlight, and
+the scan-success banner are interactive states that were not visually verified (capturing them would
+have required starting the demo session and marking demo rows, neither of which was acceptable); no
+camera-capture test on real hardware; no `OQ-05` resolution; no load test of QR decode throughput;
+and no deployment.
+
 ---
 
 ## 6. Implementation plan
@@ -498,8 +637,8 @@ task.
 | 2.1 | Assistants with server-enforced permissions | `F-P2-01` passes; the generated permission matrix covers every role | ◐ owner administration UI, safe invitations, granular server checks, audit history, direct-request authorization tests, and permission-filtered navigation implemented; generated matrix pending |
 | 2.2 | Parent portal with scoped access | `F-P2-02` passes; a parent can view only explicitly linked children, permitted attendance, locked grades, homework, clean resources, approved payment/balance summaries, schedule changes, and notifications, and cannot reach another child or private notes | ☑ |
 | 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; invitation tokens are hashed, single-use, email-verified, expiry-checked, and revocable; student portal shows only own upcoming sessions, permitted attendance, homework, locked grades, and shared clean materials | ☑ |
-| 2.4 | Manual payments with a ledger and no settlement claim | `F-P2-04` passes for the current EGP/monthly-fee scope; parent payment views remain disabled | ☑ |
-| 2.5 | QR attendance | `F-P2-05` passes | ☐ |
+| 2.4 | Manual payments with a ledger and no settlement claim | `F-P2-04` passes for EGP/monthly fees **and** per-session attendance-based billing (`ADR-0025`); parent payment views remain disabled | ☑ |
+| 2.5 | QR attendance | `F-P2-05` passes | ◐ student QR identity tab with SVG/PNG/print download on the student profile and a session-page QR scanner panel exist; integration and unit tests exist; camera capture was not exercised on real hardware in this checkout |
 | 2.6 | Academic progress and follow-up | Source-backed flags and staff follow-up tasks are implemented; full progress series and configurable non-attendance rules remain | Partial |
 | 2.7 | Notifications expansion | `F-P2-07` passes; the email digest is opt-in and contains no note content | ☐ |
 | 2.8 | Multi-workspace switching | `F-P2-08` passes; the current workspace is explicit in the sidebar | ☐ |
@@ -561,3 +700,4 @@ task.
 | Know what the prototype already does, and what is wrong with it | `PRODUCT_REQUIREMENTS.md` §13–§14 |
 | Know the current state and the next task | `STATUS.md` (this file) |
 | Know the rules for working in this repository | `../AGENTS.md` |
+| Know how to back up, restore, and verify the database | `OPERATIONS_RUNBOOK.md` |

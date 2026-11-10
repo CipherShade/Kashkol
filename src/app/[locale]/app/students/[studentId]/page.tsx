@@ -30,12 +30,35 @@ export async function generateMetadata({
   }
 }
 
+const STUDENT_PROFILE_TABS = [
+  "overview",
+  "attendance",
+  "assessments",
+  "homework",
+  "payments",
+  "notes",
+  "portal",
+  "qr",
+] as const;
+type StudentProfileTabId = (typeof STUDENT_PROFILE_TABS)[number];
+
+function parseTabParam(value: string | string[] | undefined): StudentProfileTabId {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return (STUDENT_PROFILE_TABS as readonly string[]).includes(raw ?? "")
+    ? (raw as StudentProfileTabId)
+    : "overview";
+}
+
 export default async function StudentProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; studentId: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
   const { locale, studentId } = await params;
+  const { tab } = await searchParams;
+  const initialTab = parseTabParam(tab);
   setRequestLocale(locale);
 
   const { scope } = await requireStaffSession();
@@ -117,6 +140,24 @@ export default async function StudentProfilePage({
                     <span>{t("whatsappParent")}</span>
                   </a>
                 )}
+
+                <Link
+                  href={`/app/students/${student.id}?tab=attendance`}
+                  className="ui-button"
+                  data-variant="secondary"
+                >
+                  <Icon name="calendar" size={16} />
+                  <span>{t("openAttendance")}</span>
+                </Link>
+
+                <Link
+                  href={`/app/students/${student.id}?tab=qr`}
+                  className="ui-button"
+                  data-variant="secondary"
+                >
+                  <Icon name="qr" size={16} />
+                  <span>{t("openQrCard")}</span>
+                </Link>
               </div>
             </div>
           </CardBody>
@@ -125,6 +166,8 @@ export default async function StudentProfilePage({
 
       {/* Tabs view: Overview, Attendance, Grades, Homework, Payments, Notes */}
       <StudentProfileTabs
+        key={initialTab}
+        initialTab={initialTab}
         student={{
           id: student.id,
           firstName: student.firstName,

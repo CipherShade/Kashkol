@@ -7,7 +7,7 @@ export async function loadPaymentDashboard(
   query: { studentId?: string; page: number; pageSize: number },
 ) {
   return withScope(scope, async (tx) => {
-    const [settings, students, groups, feeRules, enrollments, paymentRows, adjustmentRows, paymentCount, adjustmentCount, paymentTotals, adjustmentTotals] =
+    const [settings, students, groups, feeRules, enrollments, sessionRows, attendanceRows, paymentRows, adjustmentRows, paymentCount, adjustmentCount, paymentTotals, adjustmentTotals] =
       await Promise.all([
         tx.workspaceSettings.findUnique({
           where: { workspaceId: scope.workspaceId },
@@ -20,7 +20,7 @@ export async function loadPaymentDashboard(
         }),
         tx.group.findMany({
           where: { workspaceId: scope.workspaceId, archivedAt: null },
-          select: { id: true, name: true },
+          select: { id: true, name: true, defaultPricePerStudentMinor: true },
           orderBy: { name: "asc" },
         }),
         tx.feeRule.findMany({
@@ -30,6 +30,23 @@ export async function loadPaymentDashboard(
         tx.enrollment.findMany({
           where: { workspaceId: scope.workspaceId },
           select: { studentId: true, groupId: true, enrolledAt: true, leftAt: true },
+        }),
+        tx.teachingSession.findMany({
+          where: { workspaceId: scope.workspaceId, status: { not: "cancelled" } },
+          select: {
+            id: true,
+            groupId: true,
+            pricePerStudentMinor: true,
+            group: { select: { defaultPricePerStudentMinor: true } },
+          },
+        }),
+        tx.attendanceMark.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            mark: { in: ["present", "late"] },
+            session: { status: { not: "cancelled" } },
+          },
+          select: { studentId: true, sessionId: true },
         }),
         tx.payment.findMany({
           where: { workspaceId: scope.workspaceId, studentId: query.studentId },
@@ -65,6 +82,8 @@ export async function loadPaymentDashboard(
       groups,
       feeRules,
       enrollments,
+      sessionRows,
+      attendanceRows,
       paymentRows,
       adjustmentRows,
       paymentCount,
@@ -72,6 +91,50 @@ export async function loadPaymentDashboard(
       paymentTotals,
       adjustmentTotals,
     };
+  });
+}
+
+/** The session that anchors a roster payment, with its effective price. */
+export async function findSessionForPaymentTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+) {
+  return tx.teachingSession.findFirst({
+    where: { id: sessionId, workspaceId },
+    select: {
+      id: true,
+      status: true,
+      startsAt: true,
+      pricePerStudentMinor: true,
+      group: { select: { defaultPricePerStudentMinor: true } },
+    },
+  });
+}
+
+/** Every payment linked to a (session, student) pair, including voided ones. */
+export async function findSessionLinkedPaymentsTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+  studentId: string,
+) {
+  return tx.payment.findMany({
+    where: { workspaceId, sessionId, studentId },
+    select: { id: true, voidedAt: true, amountMinor: true },
+  });
+}
+
+/** Void a session-linked payment. Payments are never deleted (append-only ledger). */
+export async function voidPaymentTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  paymentId: string,
+  reason: string,
+) {
+  await tx.payment.updateMany({
+    where: { id: paymentId, workspaceId, voidedAt: null },
+    data: { voidedAt: new Date(), voidReason: reason },
   });
 }
 

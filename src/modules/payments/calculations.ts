@@ -24,12 +24,29 @@ export type AdjustmentBalanceRow = {
   balanceImpact: number;
 };
 
+/**
+ * One attended-session charge. It is created only from a real present/late
+ * attendance mark on a non-cancelled session that has a per-student price.
+ */
+export type SessionChargeRow = {
+  studentId: string;
+  amountMinor: number;
+};
+
 export type StudentBalanceInput = {
   students: Array<{ id: string }>;
   feeRules: FeeRuleRow[];
   enrollments: EnrollmentRow[];
   payments: PaymentBalanceRow[];
   adjustments: AdjustmentBalanceRow[];
+  /**
+   * Session-priced charges (price × attended students). A student enrolled in a
+   * session-priced group is billed from these charges instead of monthly rules;
+   * only groups that are not session-priced keep their monthly fee.
+   */
+  sessionCharges?: SessionChargeRow[];
+  /** Groups whose sessions are billed per attended student, not per month. */
+  sessionPricedGroupIds?: string[];
   asOfMonth: string;
   timezone: string;
 };
@@ -125,6 +142,15 @@ export function calculateStudentBalances(input: StudentBalanceInput): StudentBal
     ]),
   );
 
+  const sessionChargesByStudent = new Map<string, number>();
+  for (const charge of input.sessionCharges ?? []) {
+    sessionChargesByStudent.set(
+      charge.studentId,
+      addMinorUnits(sessionChargesByStudent.get(charge.studentId) ?? 0, charge.amountMinor),
+    );
+  }
+  const sessionPricedGroupIds = new Set(input.sessionPricedGroupIds ?? []);
+
   for (const payment of input.payments) {
     if (!payment.voidedAt) {
       const balance = balances.get(payment.studentId);
@@ -144,38 +170,57 @@ export function calculateStudentBalances(input: StudentBalanceInput): StudentBal
   for (const student of input.students) {
     const balance = balances.get(student.id);
     if (!balance) continue;
-    const directRules = input.feeRules.filter((rule) => rule.studentId === student.id);
     const groupEnrollments = input.enrollments.filter(
       (enrollment) => enrollment.studentId === student.id,
     );
     const groupIds = [...new Set(groupEnrollments.map((entry) => entry.groupId))];
+    const hasSessionPricedEnrollment = groupIds.some((groupId) =>
+      sessionPricedGroupIds.has(groupId),
+    );
+
+    // A student who is billed per attended session must not also accrue a
+    // student-level monthly fee. Group fees for groups that are not
+    // session-priced still apply.
+    const directRules = hasSessionPricedEnrollment
+      ? []
+      : input.feeRules.filter((rule) => rule.studentId === student.id);
+    const monthlyGroupIds = groupIds.filter((groupId) => !sessionPricedGroupIds.has(groupId));
     const groupRules = input.feeRules.filter(
-      (rule) => rule.groupId !== null && groupIds.includes(rule.groupId),
+      (rule) => rule.groupId !== null && monthlyGroupIds.includes(rule.groupId),
     );
     const earliestRule = [...directRules, ...groupRules]
       .sort((left, right) => left.effectiveFrom.getTime() - right.effectiveFrom.getTime())[0];
-    if (!earliestRule) continue;
 
-    for (const month of monthSequence(earliestRule.effectiveFrom.toISOString().slice(0, 7), input.asOfMonth)) {
-      const directRule = ruleForMonth(directRules, month);
-      if (directRule) {
-        balance.expectedMinor = addMinorUnits(balance.expectedMinor, directRule.amountMinor);
-        continue;
-      }
+    if (earliestRule) {
+      for (const month of monthSequence(
+        earliestRule.effectiveFrom.toISOString().slice(0, 7),
+        input.asOfMonth,
+      )) {
+        const directRule = ruleForMonth(directRules, month);
+        if (directRule) {
+          balance.expectedMinor = addMinorUnits(balance.expectedMinor, directRule.amountMinor);
+          continue;
+        }
 
-      for (const groupId of groupIds) {
-        const enrolledThisMonth = groupEnrollments.some(
-          (entry) => entry.groupId === groupId && activeForMonth(entry, month, input.timezone),
-        );
-        if (!enrolledThisMonth) continue;
-        const groupRule = ruleForMonth(
-          groupRules.filter((rule) => rule.groupId === groupId),
-          month,
-        );
-        if (groupRule) {
-          balance.expectedMinor = addMinorUnits(balance.expectedMinor, groupRule.amountMinor);
+        for (const groupId of monthlyGroupIds) {
+          const enrolledThisMonth = groupEnrollments.some(
+            (entry) => entry.groupId === groupId && activeForMonth(entry, month, input.timezone),
+          );
+          if (!enrolledThisMonth) continue;
+          const groupRule = ruleForMonth(
+            groupRules.filter((rule) => rule.groupId === groupId),
+            month,
+          );
+          if (groupRule) {
+            balance.expectedMinor = addMinorUnits(balance.expectedMinor, groupRule.amountMinor);
+          }
         }
       }
+    }
+
+    const sessionCharge = sessionChargesByStudent.get(student.id) ?? 0;
+    if (sessionCharge !== 0) {
+      balance.expectedMinor = addMinorUnits(balance.expectedMinor, sessionCharge);
     }
   }
 

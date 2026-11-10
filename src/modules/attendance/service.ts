@@ -4,7 +4,7 @@ import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
-import { authorize, type Scope } from "@/modules/tenancy/types";
+import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
 import {
   correctAttendanceMarkTx,
   createQrTokenTx,
@@ -18,10 +18,17 @@ import {
   upsertAttendanceMarkTx,
 } from "./repository";
 import {
+  createPaymentTx,
+  findSessionForPaymentTx,
+  findSessionLinkedPaymentsTx,
+  voidPaymentTx,
+} from "@/modules/payments/repository";
+import {
   verifyStudentQrTokenSignature,
   validateStudentQrAgainstRecord,
 } from "./student-qr";
 import { attendanceAuditActions } from "./audit";
+import { getSessionHomeworkContextTx } from "@/modules/homework";
 
 import { createAttendanceNotification } from "@/modules/notifications";
 import type {
@@ -63,9 +70,28 @@ export async function getSessionRoster(scope: Scope, sessionId: string) {
   const session = await getSessionWithGroup(scope, sessionId);
   if (!session) throw new AppError("NOT_FOUND");
   const roster = await getRosterForSession(scope, sessionId);
+  const homeworkContext = await withScope(scope, (tx) =>
+    getSessionHomeworkContextTx(
+      tx,
+      scope.workspaceId,
+      session.groupId,
+      roster.map((student) => student.studentId),
+    ),
+  );
   return {
     session,
-    roster,
+    roster: roster.map((student) => ({
+      ...student,
+      homeworkStatus: homeworkContext.marks.get(student.studentId) ?? null,
+    })),
+    homework: homeworkContext.homework
+      ? {
+          id: homeworkContext.homework.id,
+          title: homeworkContext.homework.title,
+          dueAt: homeworkContext.homework.dueAt,
+        }
+      : null,
+    canRecordHomework: isAllowed(scope, "homework", "write"),
   };
 }
 
@@ -637,6 +663,12 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
 /**
  * Verify or unverify payment for a student at a session.
  * Used by assistants/teachers on the attendance screen.
+ *
+ * Verifying records (or keeps) a real session-linked ledger payment at the
+ * session's per-student price; unverifying voids the non-voided session-linked
+ * payment(s) with an audited reason. Payments are append-only: nothing is
+ * deleted, and the ledger, revenue summary, balances, and this toggle always
+ * agree. If no price is configured for the session, verification is rejected.
  */
 export async function verifySessionPayment(
   scope: Scope,
@@ -644,9 +676,108 @@ export async function verifySessionPayment(
   reqCtx?: RequestContext,
 ) {
   authorize(scope, "attendance", "write");
+  if (!scope.actorUserId) throw new AppError("FORBIDDEN");
   const ctx = context(reqCtx);
 
   return withScope(scope, async (tx) => {
+    // Serialize concurrent toggles for this (session, student) pair so a
+    // double-click cannot create two ledger payments.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${scope.workspaceId}:${input.sessionId}:${input.studentId}`}, 0))`;
+
+    const session = await findSessionForPaymentTx(tx, scope.workspaceId, input.sessionId);
+    if (!session) throw new AppError("NOT_FOUND");
+    const price = session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+
+    const existingMark = await tx.attendanceMark.findFirst({
+      where: { workspaceId: scope.workspaceId, sessionId: input.sessionId, studentId: input.studentId },
+    });
+    if (!existingMark) throw new AppError("NOT_FOUND");
+
+    if (input.verified) {
+      if (price == null || price <= 0) {
+        throw new AppError("VALIDATION_FAILED", {
+          messageKey: "payments.errors.sessionPriceMissing",
+        });
+      }
+      const linked = await findSessionLinkedPaymentsTx(
+        tx,
+        scope.workspaceId,
+        input.sessionId,
+        input.studentId,
+      );
+      const hasActivePayment = linked.some((payment) => payment.voidedAt === null);
+      if (!hasActivePayment) {
+        const nowUtcDate = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
+        const saved = await createPaymentTx(tx, {
+          id: newUuidV7(),
+          workspaceId: scope.workspaceId,
+          studentId: input.studentId,
+          sessionId: input.sessionId,
+          amountMinor: price,
+          period: null,
+          purpose: "Session payment",
+          method: "other",
+          methodLabel: null,
+          paidOn: nowUtcDate,
+          referenceNumber: null,
+          note: null,
+          idempotencyKey: `session-payment:${newUuidV7()}`,
+          createdBy: scope.actorUserId,
+        });
+        if (saved && !saved.duplicate) {
+          await writeAuditEvent(tx, {
+            workspaceId: scope.workspaceId,
+            actorUserId: scope.actorUserId,
+            actorDisplayName: scope.actorDisplayName,
+            actorType: "user",
+            entityType: "payment",
+            entityId: saved.payment.id,
+            action: "payment.recorded",
+            diff: {
+              studentId: input.studentId,
+              sessionId: input.sessionId,
+              amountMinor: saved.payment.amountMinor,
+              source: "session_roster",
+            },
+            requestId: ctx.requestId,
+            ipHash: ctx.ipHash,
+          });
+        }
+      }
+    } else {
+      const linked = await findSessionLinkedPaymentsTx(
+        tx,
+        scope.workspaceId,
+        input.sessionId,
+        input.studentId,
+      );
+      for (const payment of linked) {
+        if (payment.voidedAt !== null) continue;
+        await voidPaymentTx(
+          tx,
+          scope.workspaceId,
+          payment.id,
+          "Marked as unpaid on the session roster.",
+        );
+        await writeAuditEvent(tx, {
+          workspaceId: scope.workspaceId,
+          actorUserId: scope.actorUserId,
+          actorDisplayName: scope.actorDisplayName,
+          actorType: "user",
+          entityType: "payment",
+          entityId: payment.id,
+          action: "payment.voided",
+          diff: {
+            studentId: input.studentId,
+            sessionId: input.sessionId,
+            source: "session_roster",
+          },
+          requestId: ctx.requestId,
+          ipHash: ctx.ipHash,
+        });
+      }
+    }
+
     const updated = await setPaymentVerifiedTx(
       tx,
       scope.workspaceId,

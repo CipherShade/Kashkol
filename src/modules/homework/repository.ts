@@ -198,6 +198,40 @@ export async function getHomeworkCompletionRosterTx(
   };
 }
 
+/**
+ * The per-session homework context used by the session attendance screen: the latest
+ * active homework for the group (if any) and the offline yes/no completion marks recorded
+ * against it for the given students. This is the same data `bulkRecordHomeworkCompletion`
+ * writes; it never fabricates a "done" answer — a missing mark is returned as `null`
+ * (not recorded), never as `not_completed`.
+ */
+export async function getSessionHomeworkContextTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  groupId: string | null | undefined,
+  studentIds: string[],
+): Promise<{
+  homework: { id: string; title: string; dueAt: Date } | null;
+  marks: Map<string, "completed" | "not_completed" | "not_applicable">;
+}> {
+  const empty = { homework: null, marks: new Map() };
+  if (!groupId || studentIds.length === 0) return empty;
+  const homework = await tx.homework.findFirst({
+    where: { workspaceId, groupId, status: "active" },
+    orderBy: [{ createdAt: "desc" }],
+    select: { id: true, title: true, dueAt: true },
+  });
+  if (!homework) return empty;
+  const completionMarks = await tx.homeworkCompletionMark.findMany({
+    where: { workspaceId, homeworkId: homework.id, studentId: { in: studentIds } },
+    select: { studentId: true, status: true },
+  });
+  const marks = new Map(
+    completionMarks.map((m) => [m.studentId, m.status as "completed" | "not_completed" | "not_applicable"]),
+  );
+  return { homework, marks };
+}
+
 export async function upsertHomeworkCompletionMarksTx(
   tx: Prisma.TransactionClient,
   input: {

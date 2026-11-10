@@ -6,6 +6,7 @@ import jsQR from "jsqr";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/feedback";
+import { RecentTokenCache } from "@/lib/attendance/recent-tokens";
 
 interface QrScannerPanelProps {
   sessionId: string;
@@ -22,10 +23,24 @@ interface QrScannerPanelProps {
   onClose: () => void;
 }
 
+type BarcodeDetectorLike = {
+  detect(source: CanvasImageSource): Promise<Array<{ rawValue: string }>>;
+};
+type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike;
+
+// Decode frames at ~15fps into a small canvas: jsQR cost is proportional to
+// pixels, and the camera rarely needs more resolution to read a printed QR.
+const MAX_DECODE_DIMENSION = 480;
+const FRAME_INTERVAL_MS = 66;
+
 export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerPanelProps) {
   const t = useTranslations("Sessions.attendance");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const recentTokensRef = useRef(new RecentTokenCache(4000));
+  const submittingRef = useRef(false);
+  const detectorRef = useRef<BarcodeDetectorLike | null | undefined>(undefined);
+  const detectBusyRef = useRef(false);
 
   const [hasCamera, setHasCamera] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -37,7 +52,6 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Play a short feedback beep
   const playBeep = useCallback((success: boolean) => {
     try {
       const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -56,12 +70,15 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
     }
   }, []);
 
-  // Post scanned token to backend
   const handleTokenDetected = useCallback(
     async (token: string) => {
-      if (isSubmitting) return;
-      setIsSubmitting(true);
+      // A student at a time: one scan POST is in flight at most, and the same
+      // token is not re-POSTed while it is visible to the camera.
+      if (submittingRef.current) return;
+      if (!recentTokensRef.current.accept(token)) return;
 
+      submittingRef.current = true;
+      setIsSubmitting(true);
       try {
         const response = await fetch(`/api/sessions/${sessionId}/attendance/scan`, {
           method: "POST",
@@ -73,31 +90,28 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
           }),
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
 
         if (!response.ok) {
           playBeep(false);
           const code = data?.error?.code;
           if (code === "CONFLICT") {
-            setLastScanMessage({
-              type: "warning",
-              text: t("scanDuplicate"),
-            });
+            setLastScanMessage({ type: "warning", text: t("scanDuplicate") });
           } else if (code === "NOT_FOUND") {
-            setLastScanMessage({
-              type: "error",
-              text: t("scanNotEnrolled"),
-            });
+            setLastScanMessage({ type: "error", text: t("scanNotEnrolled") });
           } else {
-            setLastScanMessage({
-              type: "error",
-              text: t("scanInvalid"),
-            });
+            setLastScanMessage({ type: "error", text: t("scanInvalid") });
           }
           return;
         }
 
         playBeep(true);
+        try {
+          navigator.vibrate?.(60);
+        } catch {
+          // Haptics not available; safe to ignore
+        }
+
         const studentName = `${data.student.firstName} ${data.student.lastName}`.trim();
         setLastScanMessage({
           type: "success",
@@ -114,22 +128,29 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
         });
       } catch {
         playBeep(false);
-        setLastScanMessage({
-          type: "error",
-          text: t("cameraError"),
-        });
+        setLastScanMessage({ type: "error", text: t("cameraError") });
       } finally {
-        setTimeout(() => setIsSubmitting(false), 1200); // 1.2s cooldown between scans
+        submittingRef.current = false;
+        setIsSubmitting(false);
       }
     },
-    [sessionId, isSubmitting, playBeep, t, onScanSuccess],
+    [sessionId, playBeep, t, onScanSuccess],
   );
 
-  // Setup camera stream and jsQR detection loop
+  // Camera stream setup. Depends only on `t`: the stream is acquired once and
+  // persists across scans. Scan submissions toggle refs, never this effect.
   useEffect(() => {
     let stream: MediaStream | null = null;
     let animationFrameId: number;
     let isCancelled = false;
+    let lastFrameAt = 0;
+
+    function supportedBarcodeDetector(): BarcodeDetectorLike | null {
+      if (detectorRef.current !== undefined) return detectorRef.current;
+      const Ctor = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
+      detectorRef.current = Ctor ? new Ctor({ formats: ["qr_code"] }) : null;
+      return detectorRef.current;
+    }
 
     async function startCamera() {
       if (!navigator?.mediaDevices?.getUserMedia) {
@@ -170,25 +191,47 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
       animationFrameId = requestAnimationFrame(scanVideoFrame);
     }
 
-    function scanVideoFrame() {
+    function scanVideoFrame(now: number) {
       if (isCancelled) return;
       const video = videoRef.current;
       const canvas = canvasRef.current;
 
-      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA && now - lastFrameAt >= FRAME_INTERVAL_MS) {
+        lastFrameAt = now;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (ctx) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          const scale = Math.min(1, MAX_DECODE_DIMENSION / Math.max(video.videoWidth, video.videoHeight));
+          canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: "dontInvert",
-          });
-
-          if (code && code.data && code.data.startsWith("kqr_v1.")) {
-            handleTokenDetected(code.data);
+          const detector = supportedBarcodeDetector();
+          if (detector) {
+            // BarcodeDetector is hardware/OS-backed where available; run it
+            // single-flight so frames are never queued behind a detection.
+            if (!detectBusyRef.current) {
+              detectBusyRef.current = true;
+              detector
+                .detect(canvas)
+                .then((results) => {
+                  const raw = results[0]?.rawValue;
+                  if (raw && raw.startsWith("kqr_v1.")) void handleTokenDetected(raw);
+                })
+                .catch(() => {
+                  // Detector failure is non-fatal; frame loop keeps running.
+                })
+                .finally(() => {
+                  detectBusyRef.current = false;
+                });
+            }
+          } else {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: "dontInvert",
+            });
+            if (code?.data?.startsWith("kqr_v1.")) {
+              void handleTokenDetected(code.data);
+            }
           }
         }
       }
@@ -210,7 +253,7 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualCode.trim()) {
-      handleTokenDetected(manualCode.trim());
+      void handleTokenDetected(manualCode.trim());
       setManualCode("");
     }
   };
@@ -244,7 +287,7 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
           {/* Targeting reticle overlay */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div
-              className={`h-48 w-48 rounded-lg border-2 border-dashed transition-colors duration-300 ${
+              className={`h-48 w-48 rounded-lg border-2 border-dashed transition-colors duration-150 ${
                 isSubmitting
                   ? "border-[var(--status-success)] bg-[var(--status-success)]/10"
                   : "border-white/70"
@@ -254,7 +297,7 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
 
           {isSubmitting && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <span className="text-sm font-medium text-white">{t("qrIssuing")}</span>
+              <span className="text-sm font-medium text-white">{t("scanRecording")}</span>
             </div>
           )}
         </div>
@@ -267,6 +310,8 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
       {/* Last Scan Status Feedback */}
       {lastScanMessage && (
         <div
+          role={lastScanMessage.type === "success" ? "status" : "alert"}
+          aria-live="polite"
           className={`rounded-md p-3 text-sm font-medium transition-all ${
             lastScanMessage.type === "success"
               ? "bg-[var(--status-success-subtle)] text-[var(--status-success)] border border-[var(--status-success)]"
@@ -276,9 +321,19 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
           }`}
         >
           {lastScanMessage.studentName && (
-            <div className="font-bold text-base mb-1">{lastScanMessage.studentName}</div>
+            <div className="mb-1 flex items-center gap-2 font-bold text-base">
+              {lastScanMessage.type === "success" ? (
+                <Icon name="checkCircle" size={20} className="shrink-0" />
+              ) : null}
+              <span>{lastScanMessage.studentName}</span>
+            </div>
           )}
-          <div>{lastScanMessage.text}</div>
+          <div className="flex items-center gap-2">
+            {!lastScanMessage.studentName && lastScanMessage.type === "success" ? (
+              <Icon name="checkCircle" size={18} className="shrink-0" />
+            ) : null}
+            <span>{lastScanMessage.text}</span>
+          </div>
         </div>
       )}
 

@@ -6,6 +6,7 @@ import {
   calculateStudentBalances,
   currentMonthInTimezone,
 } from "@/modules/payments/calculations";
+import { buildSessionCharges } from "@/modules/payments/session-revenue";
 import type { Scope } from "@/modules/tenancy/types";
 import type {
   PortalPermissions,
@@ -1015,7 +1016,7 @@ export async function loadParentChildDetail(
     } | null = null;
 
     if (permissions.showPayments) {
-      const [allEnrollments, paymentRows, adjustmentRows, feeRuleRows] = await Promise.all([
+      const [allEnrollments, paymentRows, adjustmentRows, feeRuleRows, chargeRows, sessionPricedGroups] = await Promise.all([
         tx.enrollment.findMany({
           where: { workspaceId: grant.workspaceId, studentId: student.id },
           select: {
@@ -1078,7 +1079,41 @@ export async function loadParentChildDetail(
             effectiveFrom: true,
           },
         }),
+        tx.attendanceMark.findMany({
+          where: {
+            workspaceId: grant.workspaceId,
+            studentId: student.id,
+            mark: { in: ["present", "late"] },
+            session: { status: { not: "cancelled" } },
+          },
+          select: {
+            studentId: true,
+            session: {
+              select: {
+                id: true,
+                groupId: true,
+                pricePerStudentMinor: true,
+                group: { select: { defaultPricePerStudentMinor: true } },
+              },
+            },
+          },
+        }),
+        tx.group.findMany({
+          where: {
+            workspaceId: grant.workspaceId,
+            defaultPricePerStudentMinor: { gt: 0 },
+          },
+          select: { id: true },
+        }),
       ]);
+
+      const chargeSessions = new Map<string, (typeof chargeRows)[number]["session"]>();
+      for (const row of chargeRows) chargeSessions.set(row.session.id, row.session);
+      const sessionCharges = buildSessionCharges(
+        [...chargeSessions.values()],
+        chargeRows.map((row) => ({ studentId: row.studentId, sessionId: row.session.id })),
+        sessionPricedGroups.map((g) => g.id),
+      );
 
       const asOfMonth = currentMonthInTimezone(now, timezone);
       const computed = calculateStudentBalances({
@@ -1087,6 +1122,8 @@ export async function loadParentChildDetail(
         enrollments: allEnrollments,
         payments: paymentRows,
         adjustments: adjustmentRows,
+        sessionCharges: sessionCharges.charges,
+        sessionPricedGroupIds: sessionCharges.sessionPricedGroupIds,
         asOfMonth,
         timezone,
       })[0] ?? {

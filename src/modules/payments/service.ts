@@ -16,7 +16,7 @@ import {
   getSessionRevenueDataTx,
   loadPaymentDashboard,
 } from "./repository";
-import { buildSessionRevenueSummary } from "./session-revenue";
+import { buildSessionCharges, buildSessionRevenueSummary } from "./session-revenue";
 import { egpToMinorUnits } from "./schemas";
 import type {
   CreateAdjustmentInput,
@@ -49,6 +49,14 @@ export async function getPayments(scope: Scope, query: PaymentQuery, now = new D
     throw new AppError("NOT_FOUND");
   }
 
+  const sessionCharges = buildSessionCharges(
+    data.sessionRows,
+    data.attendanceRows,
+    data.groups
+      .filter((group) => (group.defaultPricePerStudentMinor ?? 0) > 0)
+      .map((group) => group.id),
+  );
+
   const balances = calculateStudentBalances({
     students: data.students,
     feeRules: data.feeRules,
@@ -63,6 +71,8 @@ export async function getPayments(scope: Scope, query: PaymentQuery, now = new D
       amountMinor: row._sum.amountMinor ?? 0,
       balanceImpact: row.balanceImpact,
     })),
+    sessionCharges: sessionCharges.charges,
+    sessionPricedGroupIds: sessionCharges.sessionPricedGroupIds,
     asOfMonth: currentMonthInTimezone(now, data.timezone),
     timezone: data.timezone,
   });

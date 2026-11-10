@@ -4,8 +4,10 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireStaffSession } from "@/modules/identity/session";
+import { isAllowed } from "@/modules/tenancy/types";
 import { getSessionRoster } from "@/modules/attendance/service";
 import { SessionAttendanceClient, type AttendanceRosterStudent, type AttendanceSession } from "@/components/sessions/session-attendance-client";
+
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,7 @@ export default async function SessionDetailPage({
   }
 
   const t = await getTranslations("Sessions.attendance");
+  const canSeeFinancials = isAllowed(scope, "payments", "read");
 
   const session: AttendanceSession = {
     id: data.session.id,
@@ -71,7 +74,16 @@ export default async function SessionDetailPage({
     isCrossSeason: r.isCrossSeason,
     primaryGroupId: r.primaryGroupId,
     primaryGroupName: r.primaryGroupName,
+    homeworkStatus: r.homeworkStatus ?? null,
   }));
+
+  const homework = data.homework
+    ? {
+        id: data.homework.id,
+        title: data.homework.title,
+        dueAt: data.homework.dueAt ? data.homework.dueAt.toISOString() : null,
+      }
+    : null;
 
   return (
     <div className="app-page space-y-4">
@@ -80,7 +92,14 @@ export default async function SessionDetailPage({
         title={session.groupName}
         description={t("pageDescription")}
       />
-      <SessionAttendanceClient session={session} initialRoster={roster} checkinPathPrefix={`/${locale}/portal/student`} />
+      <SessionAttendanceClient
+        session={session}
+        initialRoster={roster}
+        checkinPathPrefix={`/${locale}/portal/student`}
+        canSeeFinancials={canSeeFinancials}
+        homework={homework}
+        canRecordHomework={data.canRecordHomework}
+      />
     </div>
   );
 }

@@ -63,7 +63,8 @@ export type IconName =
   | "save"
   | "externalLink"
   | "refresh"
-  | "eye";
+  | "eye"
+  | "qr";
 
 const PATHS: Record<IconName, ReactNode> = {
   grid: (
@@ -385,6 +386,17 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />
       <circle cx="12" cy="12" r="2.6" />
+    </>
+  ),
+  qr: (
+    <>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="13.5" width="3" height="3" />
+      <path d="M20.5 13.5h.1" />
+      <path d="M17 17.8h.1" />
+      <path d="M20.5 20.5h.1" />
     </>
   ),
 };

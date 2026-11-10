@@ -75,6 +75,7 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
           startTime: true,
           endTime: true,
           room: true,
+          defaultPricePerStudentMinor: true,
         },
         orderBy: { name: "asc" },
       }),

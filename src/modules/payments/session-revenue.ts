@@ -21,6 +21,61 @@ export type PaymentForRevenue = {
   voidedAt: Date | string | null;
 };
 
+/** A session row sufficient to derive the per-student session price. */
+export type PricedSession = {
+  id: string;
+  groupId: string;
+  pricePerStudentMinor: number | null;
+  group: { defaultPricePerStudentMinor: number | null } | null;
+};
+
+/** A present/late attendance mark on a non-cancelled session. */
+export type ChargedAttendanceMark = {
+  studentId: string;
+  sessionId: string;
+};
+
+export type SessionChargeResult = {
+  charges: Array<{ studentId: string; amountMinor: number }>;
+  sessionPricedGroupIds: string[];
+};
+
+/**
+ * Build per-student session charges from real attendance.
+ *
+ * A present/late mark on a session that resolves to a positive price charges
+ * that student exactly that price. A group whose `defaultPricePerStudentMinor`
+ * is set is session-priced: its monthly group fee must not also accrue.
+ *
+ * `extraSessionPricedGroupIds` lets a caller include cross-season groups that
+ * are otherwise missing from the session list.
+ */
+export function buildSessionCharges(
+  sessions: PricedSession[],
+  marks: ChargedAttendanceMark[],
+  extraSessionPricedGroupIds: Iterable<string> = [],
+): SessionChargeResult {
+  const priceBySessionId = new Map<string, number | null>();
+  const sessionPricedGroupIds = new Set<string>(extraSessionPricedGroupIds);
+  for (const session of sessions) {
+    const price =
+      session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
+    priceBySessionId.set(session.id, price);
+    if ((session.group?.defaultPricePerStudentMinor ?? 0) > 0) {
+      sessionPricedGroupIds.add(session.groupId);
+    }
+  }
+
+  const charges: Array<{ studentId: string; amountMinor: number }> = [];
+  for (const mark of marks) {
+    const price = priceBySessionId.get(mark.sessionId);
+    if (price == null || price <= 0) continue;
+    charges.push({ studentId: mark.studentId, amountMinor: price });
+  }
+
+  return { charges, sessionPricedGroupIds: [...sessionPricedGroupIds] };
+}
+
 /**
  * Calculate how much revenue a session is expected to generate.
  *

@@ -606,6 +606,8 @@
     "pageDescription": "دليل طلاب مساحة العمل مع البحث والتصفية والاستيراد والتصدير.",
     "studentProfile": "ملف الطالب",
     "backToDirectory": "العودة إلى الطلاب",
+    "openAttendance": "الحضور والغياب",
+    "openQrCard": "بطاقة QR",
     "joinedDate": "تاريخ الانضمام",
     "noGradeAssigned": "لا صف دراسي مسجّل",
     "whatsappParent": "مراسلة ولي الأمر",
@@ -857,7 +859,8 @@
     "errors": {
       "totalOutOfRange": "يتجاوز الإجمالي النطاق المدعوم للحساب الدقيق للعملة.",
       "duplicateMismatch": "استُخدم مفتاح الإرسال هذا مسبقًا لبيانات دفعة مختلفة.",
-      "feeRuleAlreadyExists": "توجد قاعدة رسوم لهذا الهدف والشهر بالفعل."
+      "feeRuleAlreadyExists": "توجد قاعدة رسوم لهذا الهدف والشهر بالفعل.",
+      "sessionPriceMissing": "لا يوجد سعر لهذه الحصة، لذا لا يمكن تسجيل دفعة تلقائيًا."
     }
   },
   "Reports": {
@@ -1416,6 +1419,9 @@
     "createFailed": "فشل إنشاء الجلسة",
     "confirm": "تأكيد",
     "actions": "إجراءات",
+    "status": "الحالة",
+    "openAttendance": "فتح الحضور",
+    "viewAttendance": "عرض الحضور",
     "sessionCreated": "تم إنشاء الجلسة",
     "sessionRescheduled": "تمت إعادة جدولة الجلسة",
     "sessionCancelled": "تم إلغاء الجلسة",
@@ -1496,7 +1502,16 @@
       "paymentNotVerified": "تم تعيين الدفع: غير مسدد",
       "paid": "مسدد",
       "unpaid": "غير مسدد",
-      "paymentToggleFailed": "فشل تحديث حالة السداد"
+      "paymentToggleFailed": "فشل تحديث حالة السداد",
+      "revenueUnavailable": "تعذر تحميل ملخص مدفوعات الحصة.",
+      "revenueRetry": "إعادة المحاولة",
+      "loadingRevenue": "جارٍ تحميل ملخص مدفوعات الحصة…",
+      "startAttendance": "ابدأ الحضور",
+      "scanRecording": "جارٍ التسجيل…",
+      "homeworkQuestion": "هل حلّ الطالب الواجب ({title})؟",
+      "homeworkYes": "نعم",
+      "homeworkNo": "لا",
+      "homeworkToggleFailed": "تعذر حفظ حالة الواجب. حاول مرة أخرى."
     }
   },
   "Portal": {

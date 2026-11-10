@@ -397,6 +397,23 @@ later in a group assignment creates their row through the homework module's publ
 file submission remains unavailable until the student-portal submission flow is implemented; the
 teacher may only record a submission manually.
 
+#### `homework_completion_mark` (offline yes/no)
+
+| Column | Type | Notes |
+|---|---|---|
+| `workspace_id` / `homework_id` | uuid | Tenant-composite FKs |
+| `student_id` | uuid | Tenant-composite FK |
+| `session_id` | uuid nullable | Link to the session attendance screen that asked; null when written in bulk without a session |
+| `status` | `homework_completion_status` enum | `completed` / `not_completed` / `not_applicable` |
+| `note` | text nullable | Staff-only |
+| `recorded_by` | text | Staff actor |
+
+`UNIQUE (homework_id, student_id)`. This is the teacher's one-tap offline answer to "did they do the
+homework". It is upserted (never appended-only), never defaulted to a claimed done answer: a missing
+mark means **not recorded** everywhere it is surfaced. The session attendance screen writes one linked
+to `session_id`; bulk assignment writes rows without one. The same helper
+`getSessionHomeworkContextTx` reads all marks linked to a roster.
+
 #### `homework_resource`
 
 `workspace_id`, `homework_id`, `file_id`; composite tenant FKs bind the assignment and file to the
@@ -843,7 +860,7 @@ migration; the deploying role must be allowed to install the extension.
 |---|---|---|
 | Business records (students, attendance, grades, payments) | Retained for the workspace lifetime; never hard-deleted | `OQ-10` (a) |
 | Workspace deletion | Soft-deleted for 30 days, then hard-deleted from the database, then objects removed within a further 30 days | `A-14` |
-| Backups | 35-day cycle | `A-14`, `F-P0-09` AC-3 |
+| Backups | 35-day cycle; the logical encrypted archive is swept at 35 days (`BACKUP_RETENTION_DAYS`), and Railway managed backups are planned on a 35-day cycle (unverified) | `A-14`, `F-P0-09` AC-3; `docs/OPERATIONS_RUNBOOK.md` |
 | Audit events | Retained for the workspace lifetime; the `OQ-18` default aggregates after 24 months for workspace-scoped views, but the underlying rows are retained | `OQ-18`, `F-P0-07` AC-6 |
 | IP addresses / device ids | 90-day retention, redacted from user-visible views | `PRODUCT_REQUIREMENTS.md` §9 |
 | Session cookies / tokens | Rotated on privilege change; never logged | §9 |

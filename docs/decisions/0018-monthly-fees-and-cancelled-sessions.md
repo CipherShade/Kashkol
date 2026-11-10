@@ -1,6 +1,6 @@
 # ADR-0018: Period-based fees and session cancellation
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR-0025](0025-per-session-attendance-billing.md) (the per-session prohibition only — see that ADR for what remains in force)
 - **Date:** 2026-10-30
 - **Deciders:** Product and Engineering
 - **Scope:** M2 manual payment tracking

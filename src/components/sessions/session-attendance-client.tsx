@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { formatReport } from "@/modules/attendance/report";
 import { useToast } from "@/components/ui/toast";
+import type { SessionRevenueSummary } from "@/modules/payments/session-revenue";
 import { QrScannerPanel } from "./qr-scanner-panel";
 
 export type AttendanceSession = {
@@ -28,6 +29,14 @@ export type AttendanceSession = {
 
 export type AttendanceMarkValue = "present" | "absent" | "late" | "excused";
 
+export type HomeworkCompletionStatus = "completed" | "not_completed" | "not_applicable";
+
+export type SessionHomework = {
+  id: string;
+  title: string;
+  dueAt: string | null;
+};
+
 export type AttendanceRosterStudent = {
   studentId: string;
   firstName: string;
@@ -39,6 +48,7 @@ export type AttendanceRosterStudent = {
   isCrossSeason?: boolean;
   primaryGroupId?: string | null;
   primaryGroupName?: string | null;
+  homeworkStatus?: HomeworkCompletionStatus | null;
 };
 
 type RosterResponse = {
@@ -52,6 +62,8 @@ type RosterResponse = {
     location: string | null;
   };
   roster: AttendanceRosterStudent[];
+  homework: SessionHomework | null;
+  canRecordHomework: boolean;
 };
 
 const MARKS: AttendanceMarkValue[] = ["present", "late", "absent", "excused"];
@@ -78,10 +90,16 @@ export function SessionAttendanceClient({
   session: initialSession,
   initialRoster,
   checkinPathPrefix,
+  canSeeFinancials,
+  homework,
+  canRecordHomework,
 }: {
   session: AttendanceSession;
   initialRoster: AttendanceRosterStudent[];
   checkinPathPrefix: string;
+  canSeeFinancials: boolean;
+  homework: SessionHomework | null;
+  canRecordHomework: boolean;
 }) {
   const t = useTranslations("Sessions.attendance");
   const tSessions = useTranslations("Sessions");
@@ -101,8 +119,56 @@ export function SessionAttendanceClient({
   const [showReport, setShowReport] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  // Per-student offline homework completion state, seeded from the roster and
+  // reconciled with the server on every refresh. Optimistic; lost only on reload.
+  const [homeworkState, setHomeworkState] = useState<Record<string, HomeworkCompletionStatus | null>>(
+    () => Object.fromEntries(initialRoster.map((r) => [r.studentId, r.homeworkStatus ?? null])),
+  );
+  const [revenue, setRevenue] = useState<SessionRevenueSummary | null>(null);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+  const [revenueError, setRevenueError] = useState(false);
 
   const isOpen = session.status === "scheduled" || session.status === "started";
+
+  const fetchRevenue = useCallback(async () => {
+    if (!canSeeFinancials) {
+      setRevenue(null);
+      setRevenueLoading(false);
+      setRevenueError(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/revenue`, { cache: "no-store" });
+      if (!res.ok) throw new Error();
+      setRevenue((await res.json()) as SessionRevenueSummary);
+      setRevenueError(false);
+    } catch {
+      setRevenueError(true);
+    } finally {
+      setRevenueLoading(false);
+    }
+  }, [canSeeFinancials, session.id]);
+
+  useEffect(() => {
+    // Defer so no synchronous cascading render happens on mount.
+    const task = () => void fetchRevenue();
+    void task();
+  }, [fetchRevenue]);
+
+  const refresh = useCallback(async () => {
+    const res = await fetch(`/api/sessions/${session.id}/attendance`, { cache: "no-store" });
+    if (!res.ok) {
+      push({ title: tRoot(await errorMessageKey(res, "errors.unknown")), tone: "danger" });
+      return;
+    }
+    const data = (await res.json()) as RosterResponse;
+    setRoster(data.roster);
+    setSession((prev) => ({ ...prev, status: data.session.status as AttendanceSession["status"] }));
+    setHomeworkState(
+      Object.fromEntries(data.roster.map((r) => [r.studentId, r.homeworkStatus ?? null])),
+    );
+    await fetchRevenue();
+  }, [session.id, push, tRoot, fetchRevenue]);
 
   const summary = useMemo(() => {
     const counts = { present: 0, late: 0, absent: 0, excused: 0, unrecorded: 0, total: roster.length };
@@ -113,24 +179,7 @@ export function SessionAttendanceClient({
     return counts;
   }, [roster]);
 
-  const revenueSummary = useMemo(() => {
-    if (session.pricePerStudentMinor == null) return null;
-    const eligibleCount = summary.present + summary.late;
-    const expectedMinor = session.pricePerStudentMinor * eligibleCount;
-    const paidCount = roster.filter(
-      (s) => s.paymentVerified && (s.mark === "present" || s.mark === "late"),
-    ).length;
-    const collectedMinor = session.pricePerStudentMinor * paidCount;
-    const outstandingMinor = expectedMinor - collectedMinor;
-    return {
-      pricePerStudent: (session.pricePerStudentMinor / 100).toFixed(2),
-      expectedEgp: (expectedMinor / 100).toFixed(2),
-      collectedEgp: (collectedMinor / 100).toFixed(2),
-      outstandingEgp: (outstandingMinor / 100).toFixed(2),
-      paidCount,
-      eligibleCount,
-    };
-  }, [session.pricePerStudentMinor, summary.present, summary.late, roster]);
+  const payTogglesEnabled = canSeeFinancials && !!revenue && revenue.pricePerStudentMinor != null;
 
   const togglePayment = useCallback(
     async (student: AttendanceRosterStudent) => {
@@ -149,14 +198,39 @@ export function SessionAttendanceClient({
           title: newVerified ? t("paymentVerified") : t("paymentNotVerified"),
           tone: "success",
         });
+        await fetchRevenue();
       } catch {
         setRoster((prev) =>
           prev.map((s) => (s.studentId === student.studentId ? { ...s, paymentVerified: !newVerified } : s)),
         );
         push({ title: t("paymentToggleFailed"), tone: "danger" });
+        await fetchRevenue();
       }
     },
-    [session.id, push, t],
+    [session.id, push, t, fetchRevenue],
+  );
+
+  const toggleHomework = useCallback(
+    async (student: AttendanceRosterStudent, status: "completed" | "not_completed") => {
+      // One-tap yes/no against the latest active homework for this group,
+      // stored as a single offline `homework_completion_mark` row linked to
+      // this session. Optimistic like the payment and attendance toggles.
+      if (!homework || !canRecordHomework || busy) return;
+      const previous = homeworkState[student.studentId] ?? null;
+      setHomeworkState((prev) => ({ ...prev, [student.studentId]: status }));
+      try {
+        const response = await fetch(`/api/sessions/${session.id}/homework/${homework.id}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ marks: [{ studentId: student.studentId, status }] }),
+        });
+        if (!response.ok) throw new Error("homework_toggle_failed");
+      } catch {
+        setHomeworkState((prev) => ({ ...prev, [student.studentId]: previous }));
+        push({ title: t("homeworkToggleFailed"), tone: "danger" });
+      }
+    },
+    [homework, canRecordHomework, busy, homeworkState, session.id, push, t],
   );
 
   const handleScanSuccess = useCallback(
@@ -211,17 +285,6 @@ export function SessionAttendanceClient({
     ].join(" · ");
   }
 
-  const refresh = useCallback(async () => {
-    const res = await fetch(`/api/sessions/${session.id}/attendance`, { cache: "no-store" });
-    if (!res.ok) {
-      push({ title: tRoot(await errorMessageKey(res, "errors.unknown")), tone: "danger" });
-      return;
-    }
-    const data = (await res.json()) as RosterResponse;
-    setRoster(data.roster);
-    setSession((prev) => ({ ...prev, status: data.session.status as AttendanceSession["status"] }));
-  }, [session.id, push, tRoot]);
-
   const post = useCallback(
     async (body: Record<string, unknown>): Promise<{ ok: boolean; data?: Record<string, unknown> }> => {
       const res = await fetch(`/api/sessions/${session.id}/attendance`, {
@@ -240,16 +303,32 @@ export function SessionAttendanceClient({
 
   const saveMark = useCallback(
     async (student: AttendanceRosterStudent, mark: AttendanceMarkValue) => {
-      const { ok } = await post({
-        action: "mark",
-        studentId: student.studentId,
-        mark,
-      });
-      if (ok) {
-        await refresh();
+      // Optimistic: flip the roster row immediately so taps feel instant. The
+      // server returns ok/conflict only; on conflict the row rolls back to its
+      // prior state and a toast reports it. A full refetch per tap would push a
+      // round trip back to the network's current latency budget.
+      const recordedAtIso = new Date().toISOString();
+      setRoster((prev) =>
+        prev.map((s) =>
+          s.studentId === student.studentId
+            ? { ...s, mark, source: "manual", recordedAt: recordedAtIso }
+            : s,
+        ),
+      );
+      const { ok } = await post({ action: "mark", studentId: student.studentId, mark });
+      if (!ok) {
+        setRoster((prev) =>
+          prev.map((s) =>
+            s.studentId === student.studentId
+              ? { ...s, mark: null, source: null, recordedAt: null }
+              : s,
+          ),
+        );
+        return;
       }
+      void fetchRevenue();
     },
-    [post, refresh],
+    [post, fetchRevenue],
   );
 
   const markAllPresent = useCallback(async () => {
@@ -265,7 +344,10 @@ export function SessionAttendanceClient({
     }
   }, [post, push, t, refresh]);
 
-  const startSession = useCallback(async () => {
+  const startAttendance = useCallback(async () => {
+    // One-tap "Start attendance": start the session and jump straight into
+    // the scan flow. The scanner is already open by then, so the assistant
+    // can register students immediately.
     setBusy(true);
     try {
       const res = await fetch(`/api/sessions/${session.id}`, {
@@ -274,8 +356,9 @@ export function SessionAttendanceClient({
         body: JSON.stringify({ action: "start" }),
       });
       if (res.ok) {
-        push({ title: tSessions("sessionStarted") });
+        push({ title: tSessions("sessionStarted"), tone: "success" });
         await refresh();
+        setShowScanner(true);
       } else {
         push({ title: tRoot(await errorMessageKey(res, "errors.unknown")), tone: "danger" });
       }
@@ -387,8 +470,9 @@ export function SessionAttendanceClient({
                   </Button>
                 )}
                 {session.status === "scheduled" && (
-                  <Button size="sm" onClick={() => void startSession()} disabled={busy}>
-                    {tSessions("startSession")}
+                  <Button size="sm" onClick={() => void startAttendance()} disabled={busy}>
+                    <Icon name="qr" size={16} />
+                    {t("startAttendance")}
                   </Button>
                 )}
                 {isOpen && (
@@ -415,29 +499,42 @@ export function SessionAttendanceClient({
                 </div>
               )}
 
-              {revenueSummary && (
+              {canSeeFinancials && revenueLoading && (
+                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {t("loadingRevenue")}
+                </div>
+              )}
+              {canSeeFinancials && !revenueLoading && revenueError && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
+                  <span>{t("revenueUnavailable")}</span>
+                  <Button size="sm" variant="outline" onClick={() => void fetchRevenue()}>
+                    {t("revenueRetry")}
+                  </Button>
+                </div>
+              )}
+              {canSeeFinancials && !revenueLoading && !revenueError && revenue && revenue.pricePerStudentMinor != null && (
                 <div className="rounded-lg border bg-muted/40 p-3 space-y-2 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 font-medium">
                     <span className="flex items-center gap-1.5">
-                      <Icon name="wallet" size={16} />
-                      {t("sessionPrice")}: {revenueSummary.pricePerStudent} {t("priceUnit")}
+                      <Icon name="creditCard" size={16} />
+                      {t("sessionPrice")}: {(revenue.pricePerStudentMinor / 100).toFixed(2)} {t("priceUnit")}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {revenueSummary.paidCount} / {revenueSummary.eligibleCount} {t("paidStudentsCount")}
+                      {roster.filter((s) => s.paymentVerified && (s.mark === "present" || s.mark === "late")).length} / {revenue.eligibleAttendanceCount} {t("paidStudentsCount")}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="rounded bg-background p-2 border">
                       <div className="text-muted-foreground">{t("expectedRevenue")}</div>
-                      <div className="font-semibold text-sm">{revenueSummary.expectedEgp} {t("priceUnit")}</div>
+                      <div className="font-semibold text-sm">{((revenue.expectedRevenueMinor ?? 0) / 100).toFixed(2)} {t("priceUnit")}</div>
                     </div>
                     <div className="rounded bg-background p-2 border">
                       <div className="text-muted-foreground">{t("collectedRevenue")}</div>
-                      <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">{revenueSummary.collectedEgp} {t("priceUnit")}</div>
+                      <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">{(revenue.collectedRevenueMinor / 100).toFixed(2)} {t("priceUnit")}</div>
                     </div>
                     <div className="rounded bg-background p-2 border">
                       <div className="text-muted-foreground">{t("outstandingRevenue")}</div>
-                      <div className="font-semibold text-sm text-amber-600 dark:text-amber-400">{revenueSummary.outstandingEgp} {t("priceUnit")}</div>
+                      <div className="font-semibold text-sm text-amber-600 dark:text-amber-400">{((revenue.outstandingRevenueMinor ?? 0) / 100).toFixed(2)} {t("priceUnit")}</div>
                     </div>
                   </div>
                 </div>
@@ -448,7 +545,11 @@ export function SessionAttendanceClient({
               ) : (
                 <ul className="ui-attendance-list">
                   {roster.map((student) => (
-                    <li key={student.studentId} className="ui-attendance-row">
+                    <li
+                      key={student.studentId}
+                      className="ui-attendance-row"
+                      data-cross-season={student.isCrossSeason ? "true" : undefined}
+                    >
                       <div className="min-w-40 flex-1">
                         <div className="flex items-center gap-2 font-medium text-sm">
                           <span>{student.firstName} {student.lastName}</span>
@@ -476,7 +577,7 @@ export function SessionAttendanceClient({
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {session.pricePerStudentMinor != null && (
+                        {payTogglesEnabled && (
                           <button
                             type="button"
                             disabled={!isOpen || busy}
@@ -489,7 +590,7 @@ export function SessionAttendanceClient({
                             }
                             title={student.paymentVerified ? t("paymentVerified") : t("paymentNotVerified")}
                           >
-                            <Icon name={student.paymentVerified ? "checkCircle" : "circle"} size={14} />
+                            <Icon name={student.paymentVerified ? "checkCircle" : "creditCard"} size={14} />
                             <span>{student.paymentVerified ? t("paid") : t("unpaid")}</span>
                           </button>
                         )}
@@ -516,6 +617,35 @@ export function SessionAttendanceClient({
                             </button>
                           ))}
                         </div>
+                        {homework && canRecordHomework && isOpen && (
+                          <div
+                            className="ui-attendance-hw"
+                            role="group"
+                            aria-label={homework.title}
+                            title={t("homeworkQuestion", { title: homework.title })}
+                          >
+                            <button
+                              type="button"
+                              className="ui-attendance-hw-button"
+                              data-state={homeworkState[student.studentId] === "completed" ? "completed" : undefined}
+                              aria-pressed={homeworkState[student.studentId] === "completed"}
+                              disabled={busy}
+                              onClick={() => void toggleHomework(student, "completed")}
+                            >
+                              ✓ {t("homeworkYes")}
+                            </button>
+                            <button
+                              type="button"
+                              className="ui-attendance-hw-button"
+                              data-state={homeworkState[student.studentId] === "not_completed" ? "not_completed" : undefined}
+                              aria-pressed={homeworkState[student.studentId] === "not_completed"}
+                              disabled={busy}
+                              onClick={() => void toggleHomework(student, "not_completed")}
+                            >
+                              ✕ {t("homeworkNo")}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </li>
                   ))}

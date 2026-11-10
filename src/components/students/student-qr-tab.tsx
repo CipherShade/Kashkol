@@ -82,6 +82,55 @@ export function StudentQrTab({ studentId, studentName, grade, locale }: StudentQ
     window.print();
   };
 
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const buildSizedSvg = () =>
+    svgTag.replace("<svg ", '<svg width="512" height="512" ');
+
+  const handleDownloadSvg = () => {
+    if (!svgTag) return;
+    const sized = buildSizedSvg();
+    triggerDownload(
+      new Blob([sized], { type: "image/svg+xml;charset=utf-8" }),
+      `kashkol-qr-${studentId.slice(0, 8)}.svg`,
+    );
+  };
+
+  const handleDownloadPng = () => {
+    if (!svgTag) return;
+    const sized = buildSizedSvg();
+    const svgBlob = new Blob([sized], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(svgUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 512, 512);
+      ctx.drawImage(img, 0, 0, 512, 512);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          triggerDownload(blob, `kashkol-qr-${studentId.slice(0, 8)}.png`);
+        }
+      }, "image/png");
+    };
+    img.onerror = () => URL.revokeObjectURL(svgUrl);
+    img.src = svgUrl;
+  };
+
   // Generate SVG string using qrcode-generator
   let svgTag = "";
   if (token) {
@@ -145,10 +194,18 @@ export function StudentQrTab({ studentId, studentName, grade, locale }: StudentQ
           </p>
 
           {/* Action buttons (hidden when printing) */}
-          <div className="flex gap-3 pt-4 border-t border-[var(--border-subtle)] w-full justify-center print:hidden">
+          <div className="flex gap-3 pt-4 border-t border-[var(--border-subtle)] w-full justify-center flex-wrap print:hidden">
             <Button onClick={handlePrint} variant="primary" size="sm" className="gap-2">
               <Icon name="download" className="h-4 w-4" />
               {isAr ? "طباعة البطاقة" : "Print Card"}
+            </Button>
+            <Button onClick={handleDownloadSvg} variant="secondary" size="sm" className="gap-2">
+              <Icon name="download" className="h-4 w-4" />
+              {isAr ? "تحميل SVG" : "Download SVG"}
+            </Button>
+            <Button onClick={handleDownloadPng} variant="secondary" size="sm" className="gap-2">
+              <Icon name="download" className="h-4 w-4" />
+              {isAr ? "تحميل PNG" : "Download PNG"}
             </Button>
             <Button
               onClick={() => setShowRotateDialog(true)}
@@ -156,7 +213,7 @@ export function StudentQrTab({ studentId, studentName, grade, locale }: StudentQ
               size="sm"
               className="gap-2 text-[var(--status-danger)] hover:bg-[var(--status-danger-subtle)]"
             >
-              <Icon name="history" className="h-4 w-4" />
+              <Icon name="refresh" className="h-4 w-4" />
               {isAr ? "إعادة إصدار الرمز" : "Re-issue Code"}
             </Button>
           </div>

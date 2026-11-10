@@ -1590,6 +1590,53 @@
   color: var(--primary-strong);
 }
 
+.ui-attendance-row[data-cross-season="true"] {
+  background: var(--warn-tint);
+  border-radius: var(--radius-sm);
+  border-block-end-color: transparent;
+  padding-inline: 0.5rem;
+  margin-inline: -0.5rem;
+}
+
+.ui-attendance-hw {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.ui-attendance-hw-button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  min-inline-size: 2.25rem;
+  padding-block: 0.3rem;
+  padding-inline: 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ui-attendance-hw-button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.ui-attendance-hw-button:disabled {
+  opacity: 0.55;
+}
+
+.ui-attendance-hw-button[data-state="completed"] {
+  border-color: transparent;
+  color: var(--success-ink);
+  background: var(--success-tint);
+}
+
+.ui-attendance-hw-button[data-state="not_completed"] {
+  border-color: transparent;
+  color: var(--danger-ink);
+  background: var(--danger-tint);
+}
+
 .ui-summary-chips {
   display: flex;
   flex-wrap: wrap;

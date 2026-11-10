@@ -85,6 +85,16 @@ type PaymentData = {
 
 type StudentNoteData = { id: string; body: string; createdAt: string };
 
+type StudentProfileTabId =
+  | "overview"
+  | "attendance"
+  | "assessments"
+  | "homework"
+  | "payments"
+  | "notes"
+  | "portal"
+  | "qr";
+
 export function StudentProfileTabs({
   student,
   attendanceRate,
@@ -98,6 +108,7 @@ export function StudentProfileTabs({
   canViewPayments,
   notes: initialNotes,
   locale,
+  initialTab = "overview",
 }: {
   student: StudentData;
   attendanceRate: number | null;
@@ -111,10 +122,9 @@ export function StudentProfileTabs({
   canViewPayments: boolean;
   notes: StudentNoteData[];
   locale: string;
+  initialTab?: StudentProfileTabId;
 }) {
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "attendance" | "assessments" | "homework" | "payments" | "notes" | "portal" | "qr"
-  >("overview");
+  const [activeTab, setActiveTab] = useState<StudentProfileTabId>(initialTab);
 
   const [notes, setNotes] = useState(initialNotes);
   const [newNote, setNewNote] = useState("");

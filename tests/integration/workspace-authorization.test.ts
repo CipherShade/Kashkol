@@ -923,62 +923,73 @@ describe("audit infrastructure", () => {
     const groupId = randomUUID();
     const sessionId = randomUUID();
 
-    // The revision row is intentionally not deleted: the application role has
-    // no DELETE privilege on the chain, which is the property under test.
-    await withScope({ workspaceId: NILE }, async (tx) => {
-      await tx.group.create({
-        data: {
-          id: groupId,
-          workspaceId: NILE,
-          name: "Revision Group",
-          weekday: 0,
-          startTime: new Date("1970-01-01T10:00:00.000Z"),
-          color: "indigo",
-        },
+    try {
+      await withScope({ workspaceId: NILE }, async (tx) => {
+        await tx.group.create({
+          data: {
+            id: groupId,
+            workspaceId: NILE,
+            name: "Revision Group",
+            weekday: 0,
+            startTime: new Date("1970-01-01T10:00:00.000Z"),
+            color: "indigo",
+          },
+        });
+        await tx.teachingSession.create({
+          data: {
+            id: sessionId,
+            workspaceId: NILE,
+            groupId,
+            startsAt: new Date("2026-11-03T10:00:00.000Z"),
+          },
+        });
+        await tx.attendanceMark.create({
+          data: {
+            id: markId,
+            workspaceId: NILE,
+            sessionId,
+            studentId,
+            mark: "absent",
+            recordedBy: NILE_OWNER,
+          },
+        });
+        await tx.attendanceRevision.create({
+          data: {
+            id: revisionId,
+            workspaceId: NILE,
+            sessionId,
+            studentId,
+            attendanceMarkId: markId,
+            newMark: "present",
+            actorId: NILE_OWNER,
+          },
+        });
       });
-      await tx.teachingSession.create({
-        data: {
-          id: sessionId,
-          workspaceId: NILE,
-          groupId,
-          startsAt: new Date("2026-11-03T10:00:00.000Z"),
-        },
-      });
-      await tx.attendanceMark.create({
-        data: {
-          id: markId,
-          workspaceId: NILE,
-          sessionId,
-          studentId,
-          mark: "absent",
-          recordedBy: NILE_OWNER,
-        },
-      });
-      await tx.attendanceRevision.create({
-        data: {
-          id: revisionId,
-          workspaceId: NILE,
-          sessionId,
-          studentId,
-          attendanceMarkId: markId,
-          newMark: "present",
-          actorId: NILE_OWNER,
-        },
-      });
-    });
 
-    await expect(
-      withScope({ workspaceId: NILE }, (tx) =>
-        tx.attendanceRevision.update({
-          where: { id: revisionId },
-          data: { reason: "changed" },
-        }),
-      ),
-    ).rejects.toThrow();
-    await expect(
-      withScope({ workspaceId: NILE }, (tx) =>
-        tx.attendanceRevision.delete({ where: { id: revisionId } }),
-      ),
-    ).rejects.toThrow();
+      await expect(
+        withScope({ workspaceId: NILE }, (tx) =>
+          tx.attendanceRevision.update({
+            where: { id: revisionId },
+            data: { reason: "changed" },
+          }),
+        ),
+      ).rejects.toThrow();
+      await expect(
+        withScope({ workspaceId: NILE }, (tx) =>
+          tx.attendanceRevision.delete({ where: { id: revisionId } }),
+        ),
+      ).rejects.toThrow();
+    } finally {
+      // Clean up the owned group so the shared NILE fixture never leaks an
+      // active group into subsequent runs. The revisions themselves stay
+      // append-only — the property under test — and are intentionally left
+      // alone to demonstrate the no-DELETE constraint.
+      await withScope({ workspaceId: NILE }, async (tx) => {
+        await tx.group.update({
+          where: { id: groupId, workspaceId: NILE, archivedAt: null },
+          data: { archivedAt: new Date() },
+        });
+      });
+    }
   });
 });

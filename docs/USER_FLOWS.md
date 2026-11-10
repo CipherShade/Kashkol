@@ -741,6 +741,12 @@ parent has a phone number
 8. Monthly/group fees accrue by enrolled period, not by attendance. Cancelling a session does not
    reduce a monthly fee; a make-up session does not add a fee. The teacher must record a reasoned
    adjustment for an agreed exception.
+9. Per-session billing, when the teacher has priced sessions or a group with a `default_price_per_student_minor`,
+   is charged as price × (present + late marks) per non-cancelled session, replacing the monthly fee
+   rule for that group's enrolled students. The balance card and the payments list share the same
+   computation (`ADR-0025`). The per-student "paid" toggle in a session's attendance view writes or
+   voids a real session-linked `payment` row in the same transaction; toggles are disabled when
+   no price is configured for the session.
 
 **Error / edge cases**
 
@@ -751,8 +757,11 @@ parent has a phone number
 | Partial payment | Allowed; the remainder stays outstanding. |
 | Overpayment | Allowed and shown as a credit, not clamped. |
 | Payment for a future period | Allowed with a note. |
-| Cancelled session | Does not change a period-based monthly/group fee or create a transaction. |
+| Cancelled session | Does not change a period-based monthly/group fee or create a transaction. Session-priced groups accrue 0 from a cancelled session. |
 | Make-up session | Does not create an additional fee or transaction. |
+| Session-priced group, no fee rule configured | Expected revenue = price × (present+late) marks; collected = real session-linked payments; outstanding = expected − collected. |
+| No session price configured | The "paid" toggle is disabled; marking attendance is still possible; no session charge is accrued. |
+| Toggle paid for a student with no price on the session | Rejected with `Payment.errors.sessionPriceMissing`. |
 | Agreed fee exception | Requires a separately audited adjustment with a reason. |
 | Duplicate submission | Same idempotency key and payload returns the existing record; a different payload is rejected. |
 | Parent requests a balance or receipt | Denied; parent payment projections are not enabled in this release. |
@@ -766,24 +775,38 @@ parent has a phone number
 
 **Actor:** Teacher · **Tier:** P2 · **Preconditions:** a session exists; the device has a camera
 
-1. Teacher opens the session's attendance screen and taps **"QR attendance"**.
-2. **[WRITE]** The server issues a session-scoped token: random, stored **hashed**, with an expiry
-   (default 30 min, max 4 h). Audit: `attendance.qr_token_issued`.
-3. The QR code is displayed large, next to the group name, session date/time, and a live countdown of
-   the token's remaining validity.
-4. The student opens the portal link (or the teacher's device scans the student's code — the capture
-   direction is `OQ-05`) and is identified.
-5. **[BOUNDARY]** The server validates, in this order:
-   - the token exists and is not expired;
-   - the token is not superseded by a rotation;
-   - the token's session matches the requested session;
-   - the student is enrolled in that session's group;
-   - the student is not already marked present for that session.
-6. On success: **[WRITE]** an attendance mark is written with `source = qr`, `device_id`, and
-   `scanned_at`. Audit: `attendance.marked` with `source = qr`.
-7. The teacher sees a running list of scanned students on their device, updating live.
-8. A rejected scan shows a clear on-screen reason ("This code has expired" / "This student is not in
-   this group") and is logged for teacher review. Audit: `attendance.qr_rejected`.
+1. Teacher opens the session's attendance screen and taps **"Start attendance"**. If the session is
+   `scheduled`, the single tap starts the session **and** opens the scanner; the rest of the flow is
+   identical to a session that is already `started`.
+2. **[WRITE]** The server applies the session transition (`PATCH /api/sessions/:id` with
+   action `start`) and returns the roster; the client refreshes once and opens the scanner
+   immediately. Audit: `session.started`.
+3. The attendance action now offers two modes on the same screen:
+   the **QR scanner** (primary, opens immediately in "Start attendance" mode) and the **three manual
+   mark buttons plus Late** (attended / absent / absent-with-excuse), which stay available at all
+   times in both modes.
+4. **[READ]** The roster renders the session's group first. A student scanned or marked only through
+   another group appends into the roster **highlighted amber** (`isCrossSeason = true`) and remains
+   visible with a cross-season badge.
+5. **[PERF]** The decode path is fast: the camera stream is acquired once and kept open across scans;
+   frames are downscaled to at most 480 px and decoded at ~15 fps; `BarcodeDetector` (hardware/OS)
+   is used where the browser exposes it, with `jsQR` as the fallback on the same downscaled frame;
+   repeated reads of the same code are suppressed client-side for ~4 s, while the server keeps the
+   authoritative atomic duplicate rejection (`409 CONFLICT`). A rejection does not re-open or
+   re-acquire the stream.
+6. **[WRITE]** On success an attendance mark is written with `source = qr`, the device id, and the
+   session/student binding. Audit: `attendance.marked` with `source = qr`.
+7. The assistant sees, instantly and per student:
+   - a checkmark with the student's name (aria-live banner),
+   - a light success beep and, where the device supports it, haptic feedback (~60 ms),
+   - a per-row yes / no control for **"did they do the homework"**, bound to the **latest active
+     homework of the session's group**. The answer is stored as a `homework_completion_mark` row
+     (`completed` / `not_completed`) linked to this session, upserted per (homework, student) in the
+     same transaction as its audit event. Unrecorded state renders as unrecorded — never as a
+     claimed answer. If the group has no active homework, the question is hidden.
+8. A rejected scan shows a clear on-screen reason ("This code has expired" / "This student has no
+   active enrolment" / "Already recorded") and is logged for teacher review. Audit:
+   `attendance.qr_rejected`. Cross-season attendance remains visible and highlighted, never hidden.
 
 **Error / edge cases**
 

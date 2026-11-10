@@ -680,6 +680,15 @@ know who is keeping up.
    record a submission — this is the gap this feature closes.
 8. A student/parent sees only their own submission status (P2 portal) and only for homework assigned
    to a group they are enrolled in.
+9. The session attendance screen shows the **latest active homework** for the session's group and,
+   per student, a one-tap **yes / no** answer to "did they do the homework". The answer is stored as
+   a `homework_completion_mark` row (`completed` / `not_completed`) linked to that session, upserted
+   per (homework, student). It is written in the same transaction as its audit event. An absent mark
+   means **not recorded** — the UI shows the answer only after the teacher taps; it never defaults to
+   a claimed answer. When the group has no active homework, the whole question is hidden; the
+   attendance screen never fabricates a homework context. The chips render only for members with
+   `homework:write` (same server-side gate the payment toggle uses); other members do not see them,
+   and the gate is enforced server-side, not by the client.
 
 ---
 
@@ -972,9 +981,16 @@ that I know who to follow up with.
 7. Kashkol never contacts a bank, never reconciles with a gateway, and never claims a payment is
    "settled" — only that the teacher recorded it.
 8. EGP is the only supported currency for this stage; every amount is explicitly labelled EGP.
-9. Attendance does not create charges. Monthly/group fees are period-based and are unaffected by
-   cancelled or make-up sessions; an exception requires a separately reasoned adjustment. Per-session
-   billing is not supported in this stage.
+9. Attendance does not reduce monthly fees by itself. Monthly/group fees are period-based and are
+   unaffected by cancelled or make-up sessions; an exception requires a separately reasoned adjustment.
+   **Per-session billing is supported as an explicit, implemented policy** (`ADR-0025`,
+   superseding in part `ADR-0018`): a group with `default_price_per_student_minor > 0` (or a session
+   with `price_per_student_minor` set) accrues expected charges equal to price × (present + late marks)
+   for every non-cancelled session; groups priced at session level do not accrue monthly `fee_rule`
+   rows for their enrolled students; the teacher's per-student "paid" toggle writes or reuses a real
+   session-linked `payment` row in the same transaction (and audits it); voided payments never count as
+   collected revenue. Nothing about this policy weakens the append-only invariant for `fee_rule`,
+   `payment`, or `payment_adjustment`.
 10. The payment ledger report covers collected transactions and adjustments. A separate student
     balances report computes expected, received, adjustment, and outstanding/credit amounts as of a
     required date. Both honor group/student filters; the ledger honors its date range and the balance
@@ -1000,8 +1016,11 @@ that I am not calling the register one by one.
    student-facing page — the exact capture flow is an open question (`OQ-05`); either way the check
    is **server-side** and the same check applies regardless of client.
 4. A scan is accepted only if: the token is unexpired, not already rotated, belongs to the session,
-   the student is enrolled in that session's group, and the student has not already been marked
-   present for that session.
+   the student has at least one **active enrolment in the workspace**, and the student has not already
+   been marked present for that session. A student eligible only through a different group is marked
+   cross-season (`isCrossSeason = true`), appended to the attendance roster on first mark, and
+   highlighted amber on the screen. A student with no active enrolment anywhere in the workspace is
+   rejected.
 5. Every accepted scan writes the same attendance record shape as a manual mark, with
    `source = qr` and the device id.
 6. A QR scan that would mark a student absent is **not possible** — a scan can only mark present or
@@ -1012,6 +1031,13 @@ that I am not calling the register one by one.
 9. Token rotation, generation, and every rejected scan are audited.
 10. QR attendance is never simulated in a demo build; a build that lacks a real camera/scanner path
     does not expose the feature.
+11. The scanner is built for speed: the camera stream is acquired **once** and persists across scans;
+    decode frames are downscaled to at most 480 px and sampled at ~15 fps; `BarcodeDetector` is used
+    where the browser exposes it (hardware/OS-backed) with a `jsQR` fallback on the same downscaled
+    frame; a per-token ~4 s suppression window stops the camera from POSTing the same code on every
+    frame, while the server keeps the authoritative atomic duplicate-scan rejection (`409 CONFLICT`).
+    A successful scan shows the student's name and a checkmark immediately (optimistic UI), a success
+    sound/haptic, and an `aria-live` banner.
 
 ---
 

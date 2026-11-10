@@ -5,6 +5,7 @@ import {
   currentDateInTimezone,
   currentMonthInTimezone,
 } from "@/modules/payments/calculations";
+import { buildSessionCharges } from "@/modules/payments/session-revenue";
 import { calculateFollowUpFlags } from "@/modules/followups/calculations";
 import { scorePercentage } from "@/modules/assessments/calculations";
 import { fetchDashboardRawData } from "./repository";
@@ -141,6 +142,24 @@ export async function getDashboardData(
   // -------------------------------------------------------------------------
   // 3. Balance Calculations
   // -------------------------------------------------------------------------
+  // Per-session billing (ADR-0025): a present/late mark on a non-cancelled
+  // session that has a price charges that student exactly that price.
+  const sessionChargesResult = buildSessionCharges(
+    raw.sessions.filter((session) => session.status !== "cancelled"),
+    raw.attendanceMarks
+      .filter(
+        (mark) =>
+          (mark.mark === "present" || mark.mark === "late") &&
+          mark.session.status !== "cancelled",
+      )
+      .map((mark) => ({ studentId: mark.studentId, sessionId: mark.sessionId })),
+    raw.groups
+      .filter((group) => (group.defaultPricePerStudentMinor ?? 0) > 0)
+      .map((group) => group.id),
+  );
+  const sessionCharges = sessionChargesResult.charges;
+  const sessionPricedGroupIds = new Set(sessionChargesResult.sessionPricedGroupIds);
+
   const studentBalances = calculateStudentBalances({
     students: raw.allStudents.map((s) => ({ id: s.id })),
     enrollments: raw.enrollments.map((e) => ({
@@ -166,6 +185,8 @@ export async function getDashboardData(
       amountMinor: a.amountMinor,
       balanceImpact: a.balanceImpact,
     })),
+    sessionCharges,
+    sessionPricedGroupIds: [...sessionPricedGroupIds],
     asOfMonth: currentMonthInTimezone(now, timezone),
     timezone,
   });
@@ -174,31 +195,19 @@ export async function getDashboardData(
 
   let totalOutstandingMinor = 0;
   let totalExpectedMinor = 0;
-  const hasFeeRules = raw.feeRules.length > 0;
+  let totalReceivedMinor = 0;
+  const hasPricing =
+    raw.feeRules.length > 0 || sessionPricedGroupIds.size > 0 || sessionCharges.length > 0;
 
   for (const b of studentBalances) {
     if (b.balanceMinor > 0) {
       totalOutstandingMinor += b.balanceMinor;
     }
     totalExpectedMinor += b.expectedMinor;
+    totalReceivedMinor += b.receivedMinor;
   }
 
-  let sessionExpectedMinor = 0;
-  for (const session of raw.sessions) {
-    const price = session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor;
-    if (price && price > 0 && session.status !== "cancelled") {
-      const attendingCount = raw.attendanceMarks.filter(
-        (m) => m.sessionId === session.id && (m.mark === "present" || m.mark === "late"),
-      ).length;
-      sessionExpectedMinor += price * attendingCount;
-    }
-  }
-
-  const effectiveExpectedMinor = hasFeeRules
-    ? totalExpectedMinor + sessionExpectedMinor
-    : sessionExpectedMinor > 0
-      ? sessionExpectedMinor
-      : null;
+  const effectiveExpectedMinor = hasPricing ? totalExpectedMinor : null;
 
   // -------------------------------------------------------------------------
   // 4. Section 1: Global Overview Metrics
@@ -554,7 +563,7 @@ export async function getDashboardData(
 
     const collectionRate =
       effectiveExpectedMinor && effectiveExpectedMinor > 0
-        ? Math.min(100, Math.round((periodCollectedMinor / effectiveExpectedMinor) * 100))
+        ? Math.min(100, Math.round((totalReceivedMinor / effectiveExpectedMinor) * 100))
         : null;
 
     financialOverview = {
@@ -780,7 +789,7 @@ export async function getDashboardData(
       revenue: {
         collectedMinor: periodCollectedMinor,
         outstandingMinor: totalOutstandingMinor,
-        expectedMinor: hasFeeRules ? totalExpectedMinor : null,
+        expectedMinor: effectiveExpectedMinor,
         currency,
         priorPeriodChangePercent: revenueChangePercent,
       },
