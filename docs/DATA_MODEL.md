@@ -883,7 +883,7 @@ exist before any data is written.
 same migration** (`ARCHITECTURE.md` §19 rule 5). Migration 14 exists for tables whose policies
 depend on later tables only as a safety net; it must be empty if rule 5 was followed.
 
-**Implemented migrations (through 2026-10-29).** The repository currently applies the sequence in a
+**Implemented migrations (through 2026-11-10).** The repository currently applies the sequence in a
 consolidated form rather than one directory per row above:
 
 | Migration | Contents |
@@ -893,6 +893,7 @@ consolidated form rather than one directory per row above:
 | `20261024120000_auth_tenancy_portals` | `rate_limit`, `student`, `portal_grant`, RLS, and the portal-link composite foreign key |
 | `20261024130000_core_domain` | Enums, `session_activity`, `auth_event`, the core domain tables, Arabic search functions and triggers, GIN indexes, checks, RLS, the safe `current_workspace_id()` helper, and append-only revision grants |
 | `20261024131000_rate_limit_text_id` | Changes `rate_limit.id` from UUID to TEXT because Better Auth generates an opaque id |
+| `20261025100000_student_notes_and_group_capacity` | Adds teacher-only `student_note` rows (with RLS and foreign keys) and the `group.capacity` column |
 | `20261025110000_session_revision` | Audited session correction history |
 | `20261028000000_attendance_tokens` | Tenant-scoped attendance tokens and forced RLS |
 | `20261028100000_messaging_notifications` | Tenant-scoped messaging, notification, and outbox records |
@@ -902,7 +903,7 @@ consolidated form rather than one directory per row above:
 | `20261029160000_report_exports` | Asynchronous tenant-scoped export jobs and queue |
 | `20261030120000_team_invitations` | Team invitations, workspace-settings conventions, and forced RLS |
 | `20261031120000_parent_student_portals_pwa` | Parent and student portal grants (`guardian_id`, `permissions`), verified `portal_invitation` tokens, `portal_push_subscription` Web Push records, and forced RLS |
-| `20261101100000_p3_learning_media_and_online_exams` | Recorded video lessons (`video_lesson`, `video_lesson_group`, `video_lesson_student`, `video_playback_grant`), online exams (`online_exam`, `online_exam_student`, `online_exam_question`, `online_exam_attempt`, `online_exam_response`), and forced RLS |
+| `20261101120000_p3_videos_and_online_exams` | Recorded video lessons (`video_lesson`, `video_lesson_group`, `video_lesson_student`, `video_playback_grant`), online exams (`online_exam`, `online_exam_student`, `online_exam_question`, `online_exam_attempt`, `online_exam_response`), and forced RLS (`F-P3-01`, `F-P3-02`) |
 | `20261101140000_p3_platform_admin_and_plans` | Centralized workspace plan/status columns (`plan_tier`, `plan_status`, `plan_limit_overrides`, `status_reason`), global `platform_admin` and append-only `platform_audit_event` tables, tenant-scoped `break_glass_grant` with forced RLS, and platform-admin workspace read policy |
 | `20261104120000_forms_foundation` | Form definitions, sections, questions, options, conditional logic, submissions, answers, and answer-file joins, with forced RLS (`F-P3-09`) |
 | `20261106120000_forms_public_lifecycle` | Public form read policy keyed by `app.public_form_id`, `form_upload` provenance, and submission idempotency columns (`F-P3-12`) |
@@ -916,8 +917,9 @@ consolidated form rather than one directory per row above:
 | `20261108000002_cross_season_attendance` | Adds `is_cross_season` boolean and `primary_group_id` foreign key to `attendance_mark` |
 | `20261108000003_student_qr_identity` | Adds `qr_token_hash` persistent identity token hash to `student` |
 | `20261108000004_homework_completion_marks` | Adds `homework_completion_status` enum and `homework_completion_mark` table with forced RLS and tenant indexes |
+| `20261110000000_worker_workspace_enumeration` | Adds `list_active_workspace_ids_for_worker()` (`SECURITY DEFINER`, `STABLE`) returning the ids of active non-deleted workspaces only, never any other tenant field; `GRANT EXECUTE` to `kashkol_app` only (`ADR-0024`) |
 
-The current local development database tracks all twenty-nine migrations above. `student` and
+The current local development database tracks all thirty migrations above (`prisma migrate status`). `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

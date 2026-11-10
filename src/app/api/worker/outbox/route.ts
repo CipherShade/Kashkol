@@ -6,7 +6,7 @@ import { hasValidWorkerBearerToken } from "@/lib/http/worker-auth";
 import { getServerEnv } from "@/lib/config/env";
 import { requireStaffSession } from "@/modules/identity/session";
 import { processOutboxBatch } from "@/modules/messaging";
-import type { Scope } from "@/modules/tenancy/types";
+import { createMessagingWorkerScope } from "@/lib/worker/system-actor";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +35,7 @@ export async function POST(req: NextRequest) {
     const parsedWorkspaceId = workspaceIdSchema.safeParse(workspaceId);
 
     if (hasValidWorkerBearerToken(req.headers.get("authorization"), token) && parsedWorkspaceId.success) {
-      const workerScope: Scope = {
-        workspaceId: parsedWorkspaceId.data,
-        actorUserId: "system:messaging-worker",
-        actorDisplayName: "Messaging worker",
-        role: "owner",
-        permissions: new Set(),
-      };
+      const workerScope = createMessagingWorkerScope(parsedWorkspaceId.data);
       const results = await processOutboxBatch(workerScope, limit);
       return NextResponse.json(
         { data: results },

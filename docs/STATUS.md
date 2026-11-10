@@ -7,7 +7,7 @@
 ## 1. Where the project stands
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
-now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and twenty-nine
+now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and thirty
 migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
@@ -25,7 +25,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (22 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (23 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -112,9 +112,12 @@ health/readiness probes, the route registry, and the project-rule checks.
   unimplemented. Workspace switching is also not implemented, so invitation acceptance rejects an
   account that already has an active membership in another workspace.
 - Online homework file uploads remain unimplemented; students can mark assigned homework as submitted and take assigned online exams from the student portal, and teachers can record/grade submissions.
-- CI, staging deployment, a scheduler/worker process, provisioned production object storage, and
-  observability integrations. Authenticated worker endpoints exist for the outbox and report exports,
-  but no process invokes them on a schedule. The S3 adapter is implemented but needs configured
+- CI, staging deployment, provisioned production object storage, and observability integrations. A
+  long-running worker process exists (`npm run worker`, an in-image loop, see `docs/STATUS.md`
+  §6 "Background worker"): it drains the message outbox per workspace and queued report exports
+  across all workspaces with claim-then-complete (`FOR UPDATE SKIP LOCKED`), an atomic SECURITY
+  DEFINER enumeration (`ADR-0024`), bounded retries with visible report-export failures, and
+  SIGTERM/SIGINT graceful shutdown. The S3 adapter is implemented but needs configured
   private storage to serve durable production files.
 - A public breached-password list integration. A local denylist and identity checks are implemented
   and documented as such; there is no live breach check.
@@ -317,7 +320,7 @@ The public submit path (`submitFormResponsePublic` in `src/modules/forms/service
 | `npm run test:unit` | **Passed** — 53 files / 309 tests |
 | `npm run test:ui` | **Passed** — 1 file / 19 tests |
 | `npm run build` | **Passed** — production build |
-| `npm run db:deploy` | **Passed** — 24 migrations applied; live schema confirms forced RLS, tenant foreign keys, form-scoped idempotency indexes, TEXT `dedupe_key`, no `file.form_uploads`, `file_scope` includes `form_upload`, the application role has write access to `form_upload`, and `teaching_session` has all scheduling columns plus the `started` status |
+| `npm run db:deploy` | **Passed** — 24 migrations applied at the time; the tracked set is now 30, including the reconciliation and the worker workspace enumeration migrations. Live schema confirms forced RLS, the worker enumeration function (`20261110000000_worker_workspace_enumeration`), tenant foreign keys, form-scoped idempotency indexes, TEXT `dedupe_key`, no `file.form_uploads`, `file_scope` includes `form_upload`, the application role has write access to `form_upload`, and `teaching_session` has all scheduling columns plus the `started` status |
 | Targeted integration (`forms-public`) | **Passed** — 9/9 |
 | Full integration suite | **Passed** — 15 files / 91 tests, no failures |
 
@@ -379,6 +382,59 @@ quality gate can pass; screens beyond the dashboard and students resolve through
 
 ---
 
+### 5.3 The background worker on 2026-11-10 (ADR-0008, ADR-0024)
+
+A long-running worker process now exists. It is the same repository and build as the web application, started
+with `npm run worker` (`railway.worker.json` runs it as a separate Railway service). It drains the message outbox
+per workspace and queued report exports across all workspaces, with no new queue system — the claim protocols
+already present in the code are the ones used (`FOR UPDATE SKIP LOCKED`), so jobs do not execute twice.
+
+- **Entry point.** `src/worker/index.ts` is a thin composition ending in `process.exit(code)`. It fails fast
+  and loudly on (a) an invalid configuration, (b) the newest applied migration differing from
+  `REQUIRED_MIGRATION_NAME` (`REQUIRE_MIGRATIONS`, default true) — the same invariant `/readyz` enforces for the
+  web tier, so an un-migrated deployment never launches a green-looking worker — and (c) `SIGTERM`/`SIGINT`.
+- **Poll cadence.** `WORKER_POLL_INTERVAL_SECONDS` (default 30, range 1–300) controls the pass cadence. An idle
+  pass sleeps `intervalMs` and costs nothing.
+- **Fan-out.** Workspaces are enumerated via the `SECURITY DEFINER` function
+  `list_active_workspace_ids_for_worker()` (`ADR-0024`): at most the uuid of every active, non-deleted workspace,
+  never any other tenant field, never writable from anyone but `kashkol_app`. Drains happen only under a
+  workspace-scoped transaction (`withScope`), respecting RLS.
+- **Shutdown.** `SIGTERM`/`SIGINT` set the same shutdown flag: the in-flight bounded batch finishes, pooled
+  Prisma connections drain via `disconnectDb()`, and the process exits 0 (or 1 on a fatal configuration/migration
+  error) so `restartPolicyType: ON_FAILURE` restarts it honestly instead of leaving a silently dead deploy.
+- **Health.** The worker has no HTTP listener (it is a process, not a service). Railway supervises it through
+  `restartPolicyType=ON_FAILURE` plus restart-limited logs; every pass prints exactly one `[worker] cycle ok` line
+  and every terminal state prints an actionable error — never a message body, never a guardian phone number, never
+  a workspace name, never a job id. `/healthz` and `/readyz` remain the web tier's probes.
+- **Logging rules.** Only one-line counts go out: processed / succeeded / failedOrDeferred / workspaces /
+  elapsed_ms. Empty cycles repeat. OI-3 (the structured logger SDK) remains open; until then, lines are redacted
+  at the call site.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint and the project rules (the migration-state expected-migration constant was updated) |
+| `npm run typecheck` | **Passed** — `prisma generate` + `tsc --noEmit` |
+| `npm test` | **Passed** — 61 unit files / 370 tests and 1 UI file / 21 tests |
+| `npm run test:integration` | **Passed** — 16 files / 99 tests against the local PostgreSQL (added `worker-endpoints.test.ts`) |
+| `npm run build` | **Passed** — Prisma generate + production build |
+| New unit tests | **16** — `worker-drain.test.ts`, `worker-runner.test.ts`, `worker-main.test.ts` (claim exit code → `process.exit` coverage, fan-out merging, failing-workspace batch continuation, SIGTERM mid-run exit, redacted cycle line, start-up gates) |
+| Report export failure path | unchanged — visible failure, never silent retry |
+| Worker HTTP routes | deduped onto `hasValidWorkerBearerToken` (`src/lib/worker/system-actor.ts` owns `createMessagingWorkerScope`; outbox and reports routes share the same token check and the system actor) |
+| Integration coverage | **Added** — `worker-endpoints.test.ts`: 401 for missing/wrong token, 401 for the wrong token per worker job type, 401 for an invalid workspace uuid even with the correct messaging token, 200 with an empty report queue (report token) and an empty outbox (messaging token) |
+| Railway configuration | `railway.worker.json` — worker declares no `preDeployCommand`; the web service's pre-deploy owns `prisma migrate deploy`; the worker service polls with a 30 s default and `ON_FAILURE × 10` restarts |
+| ADR created | `ADR-0024` — the migration now matches a recorded decision (previously a code comment referenced a nonexistent ADR) |
+
+**Itemization of the pre-existing integration debt (resolved 2026-11-10):** before this work the suite had six failing tests, all rooted in two environment issues, now repaired:
+
+- `tests/integration/setup.ts` pins `BETTER_AUTH_URL=http://localhost:3000` for the integration harness, so a developer's public tunnel URL in the git-ignored `.env.local` can no longer break the trusted-origin check. `.github/workflows/ci.yml` provides no `BETTER_AUTH_URL`, so the harness pin is what makes the four auth/portal tests deterministic.
+- The local dev database had granted `kashkol_app` `UPDATE`/`DELETE` on every append-only table. The migrations declare those privileges revoked, but the grant-drift came from `scripts/grant-permissions.ts` granting `ALL PRIVILEGES ON ALL TABLES` (and default `GRANT ALL` on future tables). The script is now fixed to re-apply the same migration REVOKEs for the append-only tables (`audit_event`, `platform_audit_event`, `attendance_revision`, `payment_revision`, `session_revision`, `student_note`, `payment`, `payment_adjustment`, `fee_rule`), and the live dev database was brought back in line (verified via `has_table_privilege`). The two append-only tests now pass without being disabled, weakened, or skipped; no production grants were touched.
+
+**Not claimed in this section:** production Railway deploy has not been re-verified in this checkout; the
+observability SDK choice (OI-3) remains open; per-workspace report export claiming still runs inside a
+non-request process, so a multi-instance worker deployment has not been load-tested here.
+
+---
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work
@@ -411,7 +467,7 @@ task.
 | 0.17 | Implement i18n: locale routing, the bilingual catalogue, RTL layout, theming | `F-P0-03` and `F-P0-04` pass; a missing translation fails the build | ◐ routing, RTL shell, tokens, and parity check exist; full catalogue pending |
 | 0.18 | Build the design system primitives on Radix | `F-P0-05` passes; keyboard and screen-reader checks pass on every primitive | ☑ |
 | 0.19 | Implement the privacy groundwork: data minimisation, redaction, retention configuration, the export schema | `F-P0-08` AC-1 (minimisation) and AC-6 (no PII in logs) pass; AC-2 (export) and AC-3 (deletion) are scheduled for M1/M2 | ☐ |
-| 0.20 | Deploy to Railway: web, worker, database, secrets, health checks, staging and preview environments | A staging deploy passes the health check and the production-config guard | ◐ `railway.json` and standalone start exist; no staging deploy |
+| 0.20 | Deploy to Railway: web, worker, database, secrets, health checks, staging and preview environments | A staging deploy passes the health check and the production-config guard | ◐ `railway.json` (web) and `railway.worker.json` (worker), `npm run worker` with claim-then-complete drains, a migration gate, and Railway restart policy exist; no staging deploy has been run yet |
 | 0.21 | Run the M0 release gate (§3 of `RELEASE_PLAN.md`) | Every gate item is checked with evidence | ☐ |
 
 ### M1 — Core product (P1)

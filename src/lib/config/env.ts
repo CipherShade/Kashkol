@@ -49,6 +49,7 @@ const serverEnvSchema = z
     WEB_PUSH_VAPID_SUBJECT: z.string().min(5).optional(),
     WEB_PUSH_VAPID_PUBLIC_KEY: z.string().min(16).optional(),
     WEB_PUSH_VAPID_PRIVATE_KEY: z.string().min(16).optional(),
+    WORKER_POLL_INTERVAL_SECONDS: z.coerce.number().int().min(1).max(300).default(30),
     VIDEO_PROVIDER_DRIVER: z.enum(["none", "cloudflare_stream", "fake"]).default("none"),
     VIDEO_PROVIDER_ACCOUNT_ID: z.string().min(4).optional(),
     VIDEO_PROVIDER_API_TOKEN: z.string().min(16).optional(),
@@ -236,6 +237,7 @@ export type ServerEnv = {
   WEB_PUSH_VAPID_SUBJECT?: string;
   WEB_PUSH_VAPID_PUBLIC_KEY?: string;
   WEB_PUSH_VAPID_PRIVATE_KEY?: string;
+  WORKER_POLL_INTERVAL_SECONDS: number;
   VIDEO_PROVIDER_DRIVER: "none" | "cloudflare_stream" | "fake";
   VIDEO_PROVIDER_ACCOUNT_ID?: string;
   VIDEO_PROVIDER_API_TOKEN?: string;

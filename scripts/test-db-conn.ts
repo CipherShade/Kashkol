@@ -1,4 +1,4 @@
-import { getDb } from "../src/lib/db/client";
+import { disconnectDb, getDb } from "../src/lib/db/client";
 
 async function main(): Promise<void> {
   const db = getDb();

@@ -43,5 +43,12 @@ Production must use `cloudflare_stream` with a valid account ID, API token, sign
 | `WEB_PUSH_VAPID_PRIVATE_KEY` | web push | URL-safe Base64 P-256 private key (server-only) | — |
 | `REPORT_EXPORT_WORKER_TOKEN` | non-local | Bearer token for `POST /api/worker/reports` (min 32 chars) | — |
 | `MESSAGING_WORKER_TOKEN` | non-local | Bearer token for `POST /api/worker/outbox` (min 32 chars) | — |
+| `WORKER_POLL_INTERVAL_SECONDS` | always | Worker loop poll cadence, in seconds (range `1`–`300`) | `30` |
+
+`npm run worker` drains the message outbox per workspace and queued report exports across all
+workspaces. `REQUIRE_MIGRATIONS` (default `true`) refuses to drain until the latest migration matches
+`REQUIRED_MIGRATION_NAME`, mirroring what `/readyz` reports for the web tier. The dedicated tokens are
+constant-time compared; the messaging route also accepts a staff session (`POST /api/worker/outbox`),
+the reports route does not — both tokens are independent and neither appears in the client bundle.
 
 Production startup validates `MESSAGING_WORKER_TOKEN` independently from `REPORT_EXPORT_WORKER_TOKEN`: the outbox worker must never reuse the report-export credential. Webhook verification returns `503` when `WHATSAPP_APP_SECRET` is unset, `401` for an invalid signature, and `400` for a malformed body. Verified webhook events are acknowledged but **not** processed until inbound event handling is implemented.

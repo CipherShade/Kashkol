@@ -1,0 +1,69 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: kashkol_dev
+          POSTGRES_USER: kashkol
+          POSTGRES_PASSWORD: kashkol_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      APP_ENV: local
+      DATABASE_URL: postgresql://kashkol_app:kashkol_dev_app@localhost:5432/kashkol_dev
+      DIRECT_DATABASE_URL: postgresql://kashkol:kashkol_dev@localhost:5432/kashkol_dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Database Roles
+        run: |
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "CREATE ROLE kashkol_app WITH LOGIN PASSWORD 'kashkol_dev_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "GRANT CONNECT ON DATABASE kashkol_dev TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "GRANT USAGE ON SCHEMA public TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO kashkol_app;"
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit Tests
+        run: npm run test:unit
+
+      - name: Run Migrations
+        run: npm run db:deploy
+
+      - name: Integration Tests
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build

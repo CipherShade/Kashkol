@@ -2728,7 +2728,7 @@ async function seedPortalsInvitationsReportsAndAudit(): Promise<void> {
           page: 1,
           pageSize: 25,
         } as Prisma.InputJsonValue,
-        status: "queued",
+        status: "queued" as const,
         requestedBy: OWNER_USER_ID,
         filename: `kashkol-attendance-${reportId}.csv`,
         storageKey: null,

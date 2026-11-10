@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { getDb } from "@/lib/db/client";
 import { withInvitationScope, withScope } from "@/lib/db/scope";
 import type { PermissionAction, PermissionResource, Scope } from "./types";
 
@@ -332,6 +333,28 @@ export async function findMembershipForUser(
     where: { workspaceId, userId },
     select: { id: true, role: true, status: true },
   });
+}
+
+/**
+ * Enumerate active, non-deleted workspace identifiers for the worker process.
+ *
+ * Unlike every other function in this module, this read is intentionally not
+ * scoped to one caller: the background worker must drain an outbox row for
+ * every workspace. It never returns names, memberships, students, or any
+ * other tenant field — identifiers only — and it never writes. The read runs
+ * through the SECURITY DEFINER function `list_active_workspace_ids_for_worker`
+ * (ADR-0024); no tenant table is read directly because tenant tables are
+ * row-security filtered (ADR-0006).
+ *
+ * Callers may only use the returned identifiers as `workspaceId` inputs to
+ * scoped transactions; the returned ids must not be serialised into a
+ * response body.
+ */
+export async function listActiveWorkspaceIdsForWorker(): Promise<string[]> {
+  const rows = await getDb().$queryRaw<Array<{ list_active_workspace_ids_for_worker: string }>>`
+    SELECT "list_active_workspace_ids_for_worker"()
+  `;
+  return rows.map((row) => row.list_active_workspace_ids_for_worker);
 }
 
 export async function listInvitations(scope: Scope) {

@@ -18,6 +18,12 @@ async function main(): Promise<void> {
   await db.$executeRawUnsafe(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO kashkol_app;`);
   await db.$executeRawUnsafe(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO kashkol_app;`);
   await db.$executeRawUnsafe(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO kashkol_app;`);
+  // Mirror the migrations' hard REVOKE of DML on tables that must stay append-only
+  // (audit_event, platform_audit_event, attendance_revision, payment_revision,
+  // session_revision, student_note, payment, payment_adjustment, fee_rule). Without this
+  // `grant-permissions` reintroduces the drift the integration suite checks against.
+  await db.$executeRawUnsafe(`REVOKE UPDATE, DELETE ON TABLE "audit_event", "platform_audit_event" FROM kashkol_app;`);
+  await db.$executeRawUnsafe(`REVOKE UPDATE, DELETE ON TABLE "attendance_revision", "payment_revision", "session_revision", "student_note", "payment", "payment_adjustment", "fee_rule" FROM kashkol_app;`);
   console.log("Permissions granted successfully.");
 
   await disconnectDb();

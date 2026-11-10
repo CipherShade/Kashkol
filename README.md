@@ -15,7 +15,7 @@ flow, release, and architecture specifications live in [`docs/`](docs/). Read
 | ------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Next.js 16 App Router, TypeScript, Tailwind v4                | Working                                                            |
 | Arabic/English locale routing, RTL, theme tokens              | Working across the shell, auth, workspace, and business screens    |
-| Prisma 7 schema, migrations, PostgreSQL RLS                   | Working; twenty-four committed migrations                          |
+| Prisma 7 schema, migrations, PostgreSQL RLS                   | Working; thirty committed migrations                            |
 | Scoped tenancy helper and tenant isolation tests              | Working against a real database                                    |
 | Better Auth sign-up/sign-in/sign-out, verification, recovery  | Working locally; console email, or SMTP when configured            |
 | Workspace creation, ownership, profile, settings              | Working                                                            |
@@ -127,6 +127,7 @@ workspace.
 | `npm run dev`                          | Generate Prisma and run Next.js in development             |
 | `npm run build`                        | Generate Prisma and build the standalone production server |
 | `npm run start`                        | Copy static assets and run `.next/standalone/server.js`    |
+| `npm run worker`                       | Run the background worker loop (claim-then-complete)     |
 | `npm run lint`                         | ESLint plus the cross-file project rules                   |
 | `npm run typecheck`                    | Generate Prisma and run `tsc --noEmit`                     |
 | `npm test`                             | Unit tests (no database or network)                        |
@@ -171,6 +172,7 @@ src/lib/
   health/                    readiness checks
   http/                      request ids, CSRF/origin check, error envelope
   routes/registry.ts         every route handler, declared once
+src/worker/                      background worker loop and entry point (drains, never HTTP)
 src/modules/<module>/        service / repository / schemas / audit slices
   audit/                     redaction and the append-only audit writer
   identity/                  session resolution, lockout, email transport, portal auth
@@ -232,8 +234,30 @@ and indexed with `pg_trgm` GIN indexes. The stored name remains exactly as enter
 
 ## Deployment (Railway)
 
-The app is a Node 24 process with Next.js standalone output. `railway.json` sets the build,
-migration, start, and readiness commands. Configure these service variables:
+The application is a set of two Node 24 processes, built once from this repository and started
+with different commands:
+
+1. **Web** — `npm run build` then `npm run start` (Next.js standalone). `/healthz` liveness and
+   `/readyz` readiness are served by this process. A Railway pre-deploy command runs
+   `npm run db:deploy` before the new image serves traffic. Health check is `/readyz`.
+2. **Worker** — `npm run worker` (`railway.worker.json`). A long-running claim-then-complete loop
+   that drains the message outbox per workspace and queued report exports across all workspaces.
+   *Do not* give this service a `preDeployCommand` — the web service owns migrations, and a crash
+   of the worker before the migration lands is a visible, restarted failure, not silent corruption.
+
+Create two services from the same repository at the same commit:
+
+| Service   | Config file           | Start command    | Health check |
+| --------- | --------------------- | ---------------- | ------------ |
+| `web`     | `railway.json`        | `npm run start`  | `/readyz`    |
+| `worker`  | `railway.worker.json` | `npm run worker` | none (process) |
+
+Deploy order: the `web` service deploys first. Its pre-deploy applies migrations, after which the
+worker boots — the worker itself validates that applied migrations match what this build expects;
+if the web pre-deploy has not finished, the worker exits non-zero immediately and Railway restarts
+it (`restartPolicyType: ON_FAILURE`, max 10 retries) until the migration lands.
+
+Configure both services with the same variables:
 
 | Variable                 | Value                                                             |
 | ------------------------ | ----------------------------------------------------------------- |
@@ -242,24 +266,57 @@ migration, start, and readiness commands. Configure these service variables:
 | `DIRECT_DATABASE_URL`    | Railway direct PostgreSQL URL (migrations)                        |
 | `BETTER_AUTH_SECRET`     | A random secret of at least 32 characters from the secret manager |
 | `BETTER_AUTH_URL`        | The public HTTPS origin                                           |
-| `REQUIRE_MIGRATIONS`     | `true`                                                            |
+| `REQUIRE_MIGRATIONS`     | `true` (the worker and `/readyz` both refuse a behind schema)     |
 | `EMAIL_TRANSPORT`        | `smtp` in staging/production; `console` is local-only             |
 | `EMAIL_FROM`             | The sender address the SMTP provider will use                     |
 | `SMTP_HOST` / `SMTP_PORT`| SMTP server and port                                              |
 | `SMTP_USER` / `SMTP_PASS`| SMTP credentials from the secret manager                          |
 | `SMTP_SECURE`            | `true` for implicit TLS (usually port 465), otherwise `false`     |
 | `AUTH_RATE_LIMIT_ENABLED`| Defaults to `true` outside local development                      |
+| `MESSAGING_WORKER_TOKEN` | ≥ 32 chars; used by `POST /api/worker/outbox` (dedicated token)   |
+| `REPORT_EXPORT_WORKER_TOKEN` | ≥ 32 chars; used by `POST /api/worker/reports` (dedicated token) |
+| `WORKER_POLL_INTERVAL_SECONDS` | Poll cadence (default `30`, range `1`–`300`)                 |
 
-The pre-deploy command runs `npm run db:deploy` before the new image serves traffic. The readiness
-probe is `/readyz`; liveness is `/healthz`. Never run `npm run db:seed` outside a loopback
-development database — the guard refuses, but the rule is not to try.
+The pre-deploy command runs `npm run db:deploy` on the **web** service only, before the new image serves
+traffic. The readiness probe is `/readyz`; liveness is `/healthz`. Never run `npm run db:seed` outside a
+loopback development database — the guard refuses, but the rule is not to try.
 
-The worker process, object storage, and observability SDKs are later milestones. The application
-exposes authenticated worker endpoints (`/api/worker/outbox` and `/api/worker/reports`) but does not
-ship a scheduler that calls them; a deployment must trigger them. The SMTP transport is implemented;
-a live provider and its deliverability setup (SPF, DKIM, DMARC) still need to be configured and
-verified. The foundation does not claim they exist. Until SMTP is configured, production refuses to
-start rather than falsely appearing to send mail.
+The web service also exposes authenticated worker endpoints (`/api/worker/outbox` and
+`/api/worker/reports`) for one-off drains; both require their dedicated bearer tokens, and neither
+bypasses the staff-session path used by operators. The worker process never reuses one for the other,
+and no credential ever reaches a client bundle.
+
+The SMTP transport is implemented; a live provider and its deliverability setup (SPF, DKIM, DMARC) still
+need to be configured and verified. Until SMTP is configured, production refuses to start rather than
+falsely appearing to send mail. Observability is a later milestone (OI-3); until an SDK is chosen,
+worker passes print one redacted `[worker] cycle ok` line per cycle with counts only — no job ids,
+no bodies, no names.
+
+## Background worker
+
+```powershell
+npm run worker
+```
+
+One process per workspace drainage pass, executed on `WORKER_POLL_INTERVAL_SECONDS` (default `30`).
+It exits non-zero on an invalid environment or behind migrations so Railway restarts it visibly
+rather than transparently; `SIGTERM`/`SIGINT` (deploys, scale-down, crash) drain cleanly: the
+in-flight bounded batch completes, Prisma connections are closed, and the exit code reflects
+success. The loop does not run inside an HTTP request, never performs an outbound network call from
+inside a database transaction, and never claims a job it cannot honour.
+
+To run a local production-mode worker against the local database:
+
+```powershell
+npm run db:deploy   # apply migrations
+npm run worker
+```
+
+Check the worker by watching its logs — every cycle prints exactly one line:
+
+```
+[worker] cycle ok report=processed=0 succeeded=0 failed_deferred=0 outbox=processed=0 succeeded=0 failed_deferred=0 workspaces=0 elapsed_ms=1
+```
 
 The proxy must set `X-Real-IP` for Better Auth's IP-based rate limiting and session metadata; the
 leftmost `X-Forwarded-For` value is not trusted.

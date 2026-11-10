@@ -11,6 +11,7 @@
     "dev": "npm run db:generate && next dev -p 3000 -H 0.0.0.0",
     "build": "npm run db:generate && next build",
     "start": "node scripts/start.mjs",
+    "worker": "tsx src/worker/index.ts",
     "lint": "npm run lint:eslint && npm run lint:rules",
     "lint:eslint": "eslint .",
     "lint:rules": "node scripts/check-project-rules.mjs",
