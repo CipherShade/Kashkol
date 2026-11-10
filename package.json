@@ -32,6 +32,8 @@
     "db:seed:demo": "tsx scripts/seed-demo.ts",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
+    "db:backup": "node scripts/backup-db.mjs",
+    "db:restore:drill": "node scripts/restore-drill.mjs",
     "db:dev:start": "node scripts/dev-db.mjs start",
     "db:dev:stop": "node scripts/dev-db.mjs stop",
     "platform-admin": "tsx scripts/platform-admin.ts",

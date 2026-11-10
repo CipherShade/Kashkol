@@ -296,13 +296,13 @@ names (DEF-17).
 | Auth-flow review | Every release |
 | Tenant-scoping review of every new query path | Every PR that adds a query |
 | External penetration test | Before public beta (M2) and before GA (M3) |
-| Restore drill | Monthly |
+| Restore drill | Monthly (`scripts/restore-drill.mjs`, `npm run db:restore:drill`; see `docs/OPERATIONS_RUNBOOK.md`) |
 
 ### 6.4 Data and operations
 
 | Activity | Frequency |
 |---|---|
-| Backup verification (restore, not just "the job ran") | Monthly |
+| Backup verification (restore, not just "the job ran") | Monthly (`scripts/backup-db.mjs`, `npm run db:backup`, then restore via `npm run db:restore:drill`; see `docs/OPERATIONS_RUNBOOK.md`) |
 | Seeded-data integrity check (counts match expectations) | Daily |
 | Audit-log growth and retention review | Quarterly |
 | Storage lifecycle and orphan-object reconciliation | Monthly |

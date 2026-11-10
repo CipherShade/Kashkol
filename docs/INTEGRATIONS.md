@@ -123,7 +123,7 @@ branches on "are we in tests?".
 | Tenant isolation | PostgreSQL RLS with `FORCE ROW LEVEL SECURITY`; the tenant role is not the table owner |
 | Extensions | `pgcrypto` for `gen_random_uuid()`; `pg_trgm` if a name-search feature is added |
 | Search | PostgreSQL full-text search (`tsvector`) for the workspace-scoped search of students and groups (`F-P1-13`, scope per `OQ-07` default (b)); an external search engine is not adopted |
-| Backups | Platform-managed daily backups, 35-day retention (`F-P0-09` AC-3) plus a monthly restore drill |
+| Backups | `F-P0-09` AC-3 — logical encrypted archive via `scripts/backup-db.mjs` (`npm run db:backup`, daily, 35-day retention) plus a monthly restore drill (`scripts/restore-drill.mjs`, `npm run db:restore:drill`) exercised against an isolated scratch DB on synthetic data (2026-11-10). Railway managed daily backups, PITR, and file-storage backups are **not verified** in this checkout — see `docs/OPERATIONS_RUNBOOK.md` |
 | Connection health | `/api/health` reports the database status; a failed check marks the deployment unhealthy |
 
 **Tenant scoping.** Every request that touches tenant data runs inside a transaction that first

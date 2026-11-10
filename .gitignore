@@ -32,6 +32,11 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Backup artifacts (defense in depth — .data/ already excludes .data/backups/;
+# BACKUP_DIR overrides or explicit out-paths would put files elsewhere)
+*.ksbk
+*.ksbk.manifest.json
+
 # Editor / OS
 .DS_Store
 Thumbs.db
