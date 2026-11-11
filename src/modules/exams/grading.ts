@@ -31,18 +31,32 @@ export type EvaluatedQuestionResponse = {
 };
 
 /**
- * Normalize Arabic and Latin short-answer strings for deterministic comparison:
+ * Normalize Arabic and Latin short-answer strings for deterministic comparison.
+ *
+ * Mirrors the documented `normalize_arabic` fold (`docs/DATA_MODEL.md` §8 and the
+ * `normalize_arabic` SQL function) so student answers match teacher-entered accepted
+ * answers:
  * - trims and collapses internal whitespace
  * - strips Arabic diacritics (tashkeel) and tatweel
- * - normalizes Arabic alef variants (أ إ آ -> ا) and teh marbuta/heh if needed
- * - lowercases unless caseSensitive is true
+ * - folds Arabic-Indic digits (٠-٩, U+0660–U+0669) and Eastern Arabic-Indic digits
+ *   (۰-۹, U+06F0–U+06F9) to ASCII 0-9
+ * - folds Arabic letter variants: أ إ آ ٱ -> ا, ى -> ي, ة -> ه, ؤ -> و, ئ -> ي
+ * - lowercases unless caseSensitive is true (caseSensitive only controls Latin case folding)
  */
 export function normalizeShortAnswer(input: string, caseSensitive = false): string {
   const cleaned = input
     .trim()
     .replace(/\s+/g, " ")
     .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
-    .replace(/[أإآ]/g, "ا");
+    .replace(/[\u0660-\u0669\u06f0-\u06f9]/g, (d) => {
+      const cp = d.codePointAt(0)!;
+      return cp <= 0x0669 ? String(cp - 0x0660) : String(cp - 0x06f0);
+    })
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي");
   return caseSensitive ? cleaned : cleaned.toLowerCase();
 }
 
@@ -174,11 +188,11 @@ export function canStudentSeeExamResults(input: {
   resultVisibility: "after_manual_publish" | "immediate_after_submit" | "after_window_close";
   resultsPublishedAt: Date | null;
   availableUntil: Date;
-  attemptStatus: "in_progress" | "submitted" | "manual_pending" | "graded";
+  attemptStatus: "in_progress" | "submitted" | "manual_pending" | "graded" | "expired";
   now?: Date;
 }): boolean {
   const now = input.now ?? new Date();
-  if (input.attemptStatus === "in_progress") {
+  if (input.attemptStatus === "in_progress" || input.attemptStatus === "expired") {
     return false;
   }
   if (input.resultsPublishedAt !== null) {

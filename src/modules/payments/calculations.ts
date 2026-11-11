@@ -174,16 +174,9 @@ export function calculateStudentBalances(input: StudentBalanceInput): StudentBal
       (enrollment) => enrollment.studentId === student.id,
     );
     const groupIds = [...new Set(groupEnrollments.map((entry) => entry.groupId))];
-    const hasSessionPricedEnrollment = groupIds.some((groupId) =>
-      sessionPricedGroupIds.has(groupId),
-    );
 
-    // A student who is billed per attended session must not also accrue a
-    // student-level monthly fee. Group fees for groups that are not
-    // session-priced still apply.
-    const directRules = hasSessionPricedEnrollment
-      ? []
-      : input.feeRules.filter((rule) => rule.studentId === student.id);
+    // Direct student fee rules always apply regardless of session-priced enrollment.
+    const directRules = input.feeRules.filter((rule) => rule.studentId === student.id);
     const monthlyGroupIds = groupIds.filter((groupId) => !sessionPricedGroupIds.has(groupId));
     const groupRules = input.feeRules.filter(
       (rule) => rule.groupId !== null && monthlyGroupIds.includes(rule.groupId),

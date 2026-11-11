@@ -61,7 +61,7 @@ export function buildSessionCharges(
     const price =
       session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
     priceBySessionId.set(session.id, price);
-    if ((session.group?.defaultPricePerStudentMinor ?? 0) > 0) {
+    if (price != null && price > 0) {
       sessionPricedGroupIds.add(session.groupId);
     }
   }

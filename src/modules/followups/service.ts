@@ -231,7 +231,11 @@ export async function resolveFollowUp(
       where: { id: followUpId, workspaceId: scope.workspaceId },
     });
     if (!existing) throw new AppError("NOT_FOUND");
-    if (existing.status === "resolved" && existing.outcome === input.outcome) return existing;
+    const wasCorrection = existing.status === "resolved";
+    if (wasCorrection && existing.outcome === input.outcome) {
+      // Identical retry after resolution is intentionally idempotent and records nothing.
+      return existing;
+    }
     const now = new Date();
     const updated = await tx.studentFollowUp.update({
       where: { id: followUpId, workspaceId: scope.workspaceId },
@@ -244,7 +248,7 @@ export async function resolveFollowUp(
         followUpId,
         actorUserId: scope.actorUserId,
         actorDisplayName: scope.actorDisplayName,
-        action: "resolved",
+        action: wasCorrection ? "outcome_corrected" : "resolved",
         outcome: input.outcome,
       },
     });
@@ -255,8 +259,12 @@ export async function resolveFollowUp(
       actorType: "user",
       entityType: "student_follow_up",
       entityId: followUpId,
-      action: "student_follow_up.resolved",
-      diff: { outcome: input.outcome },
+      action: wasCorrection
+        ? "student_follow_up.outcome_corrected"
+        : "student_follow_up.resolved",
+      diff: wasCorrection
+        ? { previousOutcome: existing.outcome ?? null, outcome: input.outcome }
+        : { outcome: input.outcome },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
     });

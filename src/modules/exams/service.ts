@@ -522,9 +522,11 @@ async function syncScoreToLinkedAssessmentTx(
     score: number;
     actorUserId: string;
     note?: string | null;
+    allowDowngrade?: boolean;
   },
 ) {
   if (!input.assessmentId) return;
+  const allowDowngrade = input.allowDowngrade ?? true;
   const existing = await tx.assessmentScore.findUnique({
     where: {
       assessmentId_studentId: {
@@ -532,20 +534,32 @@ async function syncScoreToLinkedAssessmentTx(
         studentId: input.studentId,
       },
     },
-    select: { id: true, score: true },
+    select: { id: true, score: true, note: true },
   });
 
   if (existing) {
-    // Keep highest or latest graded attempt score
-    await tx.assessmentScore.update({
-      where: { id: existing.id },
-      data: {
-        score: input.score,
-        status: "graded",
-        note: input.note ?? null,
-        updatedBy: input.actorUserId,
-      },
-    });
+    const existingScore = existing.score !== null ? Number(existing.score) : null;
+    const newScore = input.score;
+    const shouldUpdateScore =
+      existingScore === null || allowDowngrade || newScore >= existingScore;
+
+    const data: Parameters<typeof tx.assessmentScore.update>[0]["data"] = {
+      status: "graded",
+      updatedBy: input.actorUserId,
+    };
+    if (shouldUpdateScore) {
+      data.score = newScore;
+    }
+    if (input.note !== undefined) {
+      data.note = input.note;
+    }
+    // Only perform update if there is something to change
+    if (shouldUpdateScore || input.note !== undefined) {
+      await tx.assessmentScore.update({
+        where: { id: existing.id },
+        data,
+      });
+    }
   } else {
     await tx.assessmentScore.create({
       data: {
@@ -687,7 +701,7 @@ export async function gradeOnlineExamAttempt(
       studentId: attempt.studentId,
       score: roundedTotal,
       actorUserId: scope.actorUserId,
-      note: input.gradingNote ?? null,
+      note: input.gradingNote,
     });
 
     await writeAuditEvent(tx, {
@@ -865,6 +879,18 @@ export async function startStudentOnlineExamAttempt(
     ) {
       throw new AppError("CONFLICT", { messageKey: "errors.examWindowClosed" });
     }
+
+    // Mark any expired in-progress attempts as expired so they no longer remain stuck
+    await tx.onlineExamAttempt.updateMany({
+      where: {
+        workspaceId: grant.workspaceId,
+        examId: exam.id,
+        studentId: grant.studentId,
+        status: "in_progress",
+        deadlineAt: { lt: now },
+      },
+      data: { status: "expired" },
+    });
 
     const studentAttempts = exam.attempts
       .filter((a) => a.studentId === grant.studentId)
@@ -1057,9 +1083,61 @@ export async function submitStudentOnlineExamAttempt(
     });
     if (!attempt) throw new AppError("NOT_FOUND");
 
+    // Expire attempt if deadline passed
+    if (attempt.status === "in_progress" && now.getTime() > attempt.deadlineAt.getTime()) {
+      await tx.onlineExamAttempt.update({
+        where: { id: attempt.id },
+        data: { status: "expired" },
+      });
+      // Return as already submitted / expired, do not allow changes
+      const resultsReleased = canStudentSeeExamResults({
+        resultVisibility: exam.resultVisibility,
+        resultsPublishedAt: exam.resultsPublishedAt,
+        availableUntil: exam.availableUntil,
+        attemptStatus: "expired",
+        now,
+      });
+      return {
+        alreadySubmitted: true,
+        attempt: {
+          id: attempt.id,
+          status: "expired",
+          submittedAt: attempt.submittedAt?.toISOString() ?? now.toISOString(),
+          resultsReleased,
+          autoScore: null,
+          totalScore: null,
+        },
+      };
+    }
+
     // Idempotent duplicate final submission guard:
     // If already submitted / manual_pending / graded, return the existing submission safely without re-writing
     if (attempt.status !== "in_progress") {
+      const resultsReleased = canStudentSeeExamResults({
+        resultVisibility: exam.resultVisibility,
+        resultsPublishedAt: exam.resultsPublishedAt,
+        availableUntil: exam.availableUntil,
+        attemptStatus: attempt.status,
+        now,
+      });
+      return {
+        alreadySubmitted: true,
+        attempt: {
+          id: attempt.id,
+          status: attempt.status,
+          submittedAt: attempt.submittedAt?.toISOString() ?? now.toISOString(),
+          resultsReleased,
+          autoScore: resultsReleased ? Number(attempt.autoScore) : null,
+          totalScore:
+            resultsReleased && attempt.totalScore !== null
+              ? Number(attempt.totalScore)
+              : null,
+        },
+      };
+    }
+
+    // Idempotency key guard: if the same idempotency key was already processed, return existing result
+    if (input.idempotencyKey && attempt.submissionIdempotencyKey === input.idempotencyKey) {
       const resultsReleased = canStudentSeeExamResults({
         resultVisibility: exam.resultVisibility,
         resultsPublishedAt: exam.resultsPublishedAt,
@@ -1117,6 +1195,47 @@ export async function submitStudentOnlineExamAttempt(
       answerMap,
     );
 
+    const nextStatus = evaluation.hasManualPending ? "manual_pending" : "graded";
+    const updateResult = await tx.onlineExamAttempt.updateMany({
+      where: { id: attempt.id, status: "in_progress" },
+      data: {
+        status: nextStatus,
+        submittedAt: now,
+        submissionIdempotencyKey: input.idempotencyKey ?? null,
+        autoScore: evaluation.autoScore,
+        totalScore: evaluation.totalScore,
+        gradedAt: nextStatus === "graded" ? now : null,
+      },
+    });
+
+    if (updateResult.count === 0) {
+      // Another concurrent request won the race – fetch fresh attempt and return already submitted
+      const freshAttempt = await tx.onlineExamAttempt.findUnique({
+        where: { id: attempt.id },
+        select: { id: true, status: true, submittedAt: true, autoScore: true, totalScore: true },
+      });
+      if (!freshAttempt) throw new AppError("NOT_FOUND");
+      const resultsReleased = canStudentSeeExamResults({
+        resultVisibility: exam.resultVisibility,
+        resultsPublishedAt: exam.resultsPublishedAt,
+        availableUntil: exam.availableUntil,
+        attemptStatus: freshAttempt.status,
+        now,
+      });
+      return {
+        alreadySubmitted: true,
+        attempt: {
+          id: freshAttempt.id,
+          status: freshAttempt.status,
+          submittedAt: freshAttempt.submittedAt?.toISOString() ?? now.toISOString(),
+          resultsReleased,
+          autoScore: resultsReleased ? Number(freshAttempt.autoScore) : null,
+          totalScore: resultsReleased && freshAttempt.totalScore !== null ? Number(freshAttempt.totalScore) : null,
+        },
+      };
+    }
+
+    // Only the winning request upserts exam responses
     for (const questionEval of evaluation.perQuestion) {
       const answerJson = (answerMap.get(questionEval.questionId) ?? {}) as object;
       await tx.onlineExamResponse.upsert({
@@ -1145,17 +1264,8 @@ export async function submitStudentOnlineExamAttempt(
       });
     }
 
-    const nextStatus = evaluation.hasManualPending ? "manual_pending" : "graded";
-    const updatedAttempt = await tx.onlineExamAttempt.update({
+    const updatedAttempt = await tx.onlineExamAttempt.findUnique({
       where: { id: attempt.id },
-      data: {
-        status: nextStatus,
-        submittedAt: now,
-        submissionIdempotencyKey: input.idempotencyKey ?? null,
-        autoScore: evaluation.autoScore,
-        totalScore: evaluation.totalScore,
-        gradedAt: nextStatus === "graded" ? now : null,
-      },
       select: {
         id: true,
         status: true,
@@ -1165,6 +1275,10 @@ export async function submitStudentOnlineExamAttempt(
       },
     });
 
+    if (!updatedAttempt) {
+      throw new AppError("NOT_FOUND", { messageKey: "errors.notFound" });
+    }
+
     if (nextStatus === "graded" && evaluation.totalScore !== null) {
       await syncScoreToLinkedAssessmentTx(tx, {
         workspaceId: grant.workspaceId,
@@ -1172,6 +1286,7 @@ export async function submitStudentOnlineExamAttempt(
         studentId: grant.studentId,
         score: evaluation.totalScore,
         actorUserId: portal.userId,
+        allowDowngrade: false,
       });
     }
 

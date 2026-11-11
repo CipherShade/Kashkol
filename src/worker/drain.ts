@@ -18,9 +18,21 @@ export type DrainReport = {
   readonly failedOrDeferred: number;
 };
 
-function merge(count: DrainReport, other: DrainReport): DrainReport {
+/**
+ * Fold two same-type drain reports into one. The merged report carries the shared
+ * job; reports of different jobs are refused rather than silently summed into one
+ * job's bucket.
+ *
+ * Exported for unit tests only — `drainMessageOutboxes` is the only production caller.
+ */
+export function merge(count: DrainReport, other: DrainReport): DrainReport {
+  if (count.job !== other.job) {
+    throw new Error(
+      `cannot merge drain reports for different jobs: ${count.job} vs ${other.job}`,
+    );
+  }
   return {
-    job: "message_outbox",
+    job: count.job,
     processed: count.processed + other.processed,
     succeeded: count.succeeded + other.succeeded,
     failedOrDeferred: count.failedOrDeferred + other.failedOrDeferred,

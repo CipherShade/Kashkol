@@ -351,6 +351,7 @@ enum OnlineExamAttemptStatus {
   submitted
   manual_pending
   graded
+  expired
 
   @@map("online_exam_attempt_status")
 }

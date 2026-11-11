@@ -68,7 +68,7 @@ type MockAttemptRecord = {
   examId: string;
   studentId: string;
   attemptNumber: number;
-  status: "in_progress" | "submitted" | "manual_pending" | "graded";
+  status: "in_progress" | "submitted" | "manual_pending" | "graded" | "expired";
   startedAt: Date;
   deadlineAt: Date;
   submittedAt: Date | null;
@@ -120,7 +120,14 @@ const state = vi.hoisted(() => ({
   }>,
   assessmentScores: new Map<
     string,
-    { id: string; assessmentId: string; studentId: string; score: number; status: string }
+    {
+      id: string;
+      assessmentId: string;
+      studentId: string;
+      score: number | null;
+      status: string;
+      note: string | null;
+    }
   >(),
   lockedAssessments: new Set<string>(),
 }));
@@ -363,7 +370,14 @@ const mockTx = {
       async ({
         data,
       }: {
-        data: { id: string; assessmentId: string; studentId: string; score: number; status: string };
+        data: {
+          id: string;
+          assessmentId: string;
+          studentId: string;
+          score: number;
+          status: string;
+          note?: string | null;
+        };
       }) => {
         const key = `${data.assessmentId}:${data.studentId}`;
         const rec = {
@@ -372,6 +386,7 @@ const mockTx = {
           studentId: data.studentId,
           score: Number(data.score),
           status: data.status,
+          note: data.note ?? null,
         };
         state.assessmentScores.set(key, rec);
         return rec;
@@ -383,11 +398,16 @@ const mockTx = {
         data,
       }: {
         where: { id: string };
-        data: { score: number; status: string };
+        data: { score?: number; status?: string; note?: string | null; updatedBy?: string };
       }) => {
         for (const [k, v] of state.assessmentScores.entries()) {
           if (v.id === where.id) {
-            const updated = { ...v, score: Number(data.score), status: data.status };
+            const updated = {
+              ...v,
+              ...(data.score !== undefined ? { score: Number(data.score) } : {}),
+              ...(data.status !== undefined ? { status: data.status } : {}),
+              ...(data.note !== undefined ? { note: data.note } : {}),
+            };
             state.assessmentScores.set(k, updated);
             return updated;
           }
@@ -493,6 +513,13 @@ const mockTx = {
         };
       },
     ),
+    findUnique: vi.fn(
+      async ({ where }: { where: { id: string } }) => {
+        const attempt = state.attempts.get(where.id);
+        if (!attempt) return null;
+        return { ...attempt };
+      },
+    ),
     create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
       const attempt: MockAttemptRecord = {
         id: String(data.id),
@@ -538,6 +565,40 @@ const mockTx = {
         if (data.gradingNote !== undefined)
           attempt.gradingNote = (data.gradingNote as string | null) ?? null;
         return attempt;
+      },
+    ),
+    updateMany: vi.fn(
+      async ({
+        where,
+        data,
+      }: {
+        where: {
+          id?: string;
+          workspaceId?: string;
+          examId?: string;
+          studentId?: string;
+          status?: string;
+          deadlineAt?: { lt?: Date };
+        };
+        data: Record<string, unknown>;
+      }) => {
+        let count = 0;
+        for (const attempt of state.attempts.values()) {
+          if (where.id && attempt.id !== where.id) continue;
+          if (where.workspaceId && attempt.workspaceId !== where.workspaceId) continue;
+          if (where.examId && attempt.examId !== where.examId) continue;
+          if (where.studentId && attempt.studentId !== where.studentId) continue;
+          if (where.status && attempt.status !== where.status) continue;
+          if (where.deadlineAt?.lt && attempt.deadlineAt >= where.deadlineAt.lt) continue;
+          if (data.status !== undefined) attempt.status = data.status as MockAttemptRecord["status"];
+          if (data.submittedAt !== undefined) attempt.submittedAt = (data.submittedAt as Date | null) ?? null;
+          if (data.submissionIdempotencyKey !== undefined) attempt.submissionIdempotencyKey = (data.submissionIdempotencyKey as string | null) ?? null;
+          if (data.autoScore !== undefined) attempt.autoScore = Number(data.autoScore);
+          if (data.totalScore !== undefined) attempt.totalScore = data.totalScore !== null ? Number(data.totalScore) : null;
+          if (data.gradedAt !== undefined) attempt.gradedAt = (data.gradedAt as Date | null) ?? null;
+          count++;
+        }
+        return { count };
       },
     ),
   },
@@ -1186,7 +1247,7 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
   });
 
   it("normalizes Arabic and English short answers deterministically and evaluates all question types", () => {
-    expect(normalizeShortAnswer("  الإجابةُ الصَّحيحة  ", false)).toBe("الاجابة الصحيحة");
+    expect(normalizeShortAnswer("  الإجابةُ الصَّحيحة  ", false)).toBe("الاجابه الصحيحه");
     expect(normalizeShortAnswer("  Newton's   Law ", false)).toBe("newton's law");
 
     const mcq = evaluateSingleQuestion(
@@ -1545,5 +1606,384 @@ describe("P3 Online Exams & Quizzes (F-P3-01)", () => {
     );
     expect(studentViewAfterPublish[0]!.attempts[0]!.resultsReleased).toBe(true);
     expect(studentViewAfterPublish[0]!.attempts[0]!.totalScore).toBe(20);
+  });
+
+  it("grading sync preserves an existing teacher note unless gradingNote is explicitly provided", async () => {
+    // Essay-only exam: submission lands in manual_pending and never creates the linked score,
+    // so we can seed a pre-existing AssessmentScore that carries a teacher note.
+    const exam = await createOnlineExam(ownerScope, {
+      groupId: GROUP_1,
+      title: "Note Preservation Quiz",
+      assignmentScope: "group",
+      studentIds: [],
+      availableFrom: windowStart,
+      availableUntil: windowEnd,
+      durationMinutes: 45,
+      maxAttempts: 1,
+      resultVisibility: "after_manual_publish",
+      questions: [
+        {
+          questionType: "essay",
+          prompt: "Explain why inertia occurs.",
+          points: 10,
+          options: [],
+          acceptedAnswers: [],
+          caseSensitive: false,
+          autoGradable: false,
+          explanation: null,
+        },
+      ],
+    });
+
+    await updateOnlineExamLifecycle(
+      ownerScope,
+      exam.id,
+      { action: "publish" },
+      undefined,
+      duringWindow,
+    );
+
+    const preview = await previewOnlineExamForTeacher(ownerScope, exam.id);
+    const qIds = preview.exam.questions.map((q) => q.id);
+
+    const started = await startStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+
+    const submitted = await submitStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      started.attempt.id,
+      {
+        responses: [
+          { questionId: qIds[0]!, answer: { text: "An object resists changes to its motion." } },
+        ],
+      },
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+    expect(submitted.attempt.status).toBe("manual_pending");
+
+    // A pre-existing linked AssessmentScore carries a teacher note (e.g. from manual scoring).
+    const assessmentId = String(exam.assessmentId);
+    state.assessmentScores.set(`${assessmentId}:${ENROLLED_STUDENT}`, {
+      id: "score-note-preservation",
+      assessmentId,
+      studentId: ENROLLED_STUDENT,
+      score: 6,
+      status: "graded",
+      note: "Teacher: strong participation in labs",
+    });
+
+    // 1. Grading without gradingNote preserves the existing teacher note
+    const graded = await gradeOnlineExamAttempt(
+      ownerScope,
+      exam.id,
+      started.attempt.id,
+      { decisions: [{ questionId: qIds[0]!, awardedPoints: 8 }] },
+      undefined,
+      afterWindow,
+    );
+    expect(graded.totalScore).toBe(8);
+    expect(state.assessmentScores.get(`${assessmentId}:${ENROLLED_STUDENT}`)?.score).toBe(8);
+    expect(state.assessmentScores.get(`${assessmentId}:${ENROLLED_STUDENT}`)?.note).toBe(
+      "Teacher: strong participation in labs",
+    );
+
+    // 2. Grading correction with a gradingNote updates the linked note
+    const corrected = await gradeOnlineExamAttempt(
+      ownerScope,
+      exam.id,
+      started.attempt.id,
+      {
+        decisions: [{ questionId: qIds[0]!, awardedPoints: 9 }],
+        reason: "Re-reviewed essay and awarded additional credit",
+        gradingNote: "Strong improvement after review",
+      },
+      undefined,
+      afterWindow,
+    );
+    expect(corrected.totalScore).toBe(9);
+    expect(state.assessmentScores.get(`${assessmentId}:${ENROLLED_STUDENT}`)?.note).toBe(
+      "Strong improvement after review",
+    );
+
+    // 3. Grading correction without gradingNote still preserves the updated note
+    const correctedAgain = await gradeOnlineExamAttempt(
+      ownerScope,
+      exam.id,
+      started.attempt.id,
+      {
+        decisions: [{ questionId: qIds[0]!, awardedPoints: 10 }],
+        reason: "Awarded full credit after department review",
+      },
+      undefined,
+      afterWindow,
+    );
+    expect(correctedAgain.totalScore).toBe(10);
+    expect(state.assessmentScores.get(`${assessmentId}:${ENROLLED_STUDENT}`)?.score).toBe(10);
+    expect(state.assessmentScores.get(`${assessmentId}:${ENROLLED_STUDENT}`)?.note).toBe(
+      "Strong improvement after review",
+    );
+  });
+
+  it("concurrent submissions with different answers keep only winner responses", async () => {
+    // Create a simple exam with two MCQ questions
+    const exam = await createOnlineExam(ownerScope, {
+      groupId: GROUP_1,
+      title: "Race Condition Test",
+      assignmentScope: "group",
+      studentIds: [],
+      availableFrom: "2026-10-31T08:00:00.000Z",
+      availableUntil: "2026-10-31T20:00:00.000Z",
+      durationMinutes: 30,
+      maxAttempts: 1,
+      resultVisibility: "immediate_after_submit",
+      questions: [
+        {
+          questionType: "mcq_single",
+          prompt: "Q1",
+          points: 5,
+          autoGradable: true,
+          options: [{ id: "a", text: "Option A" }, { id: "b", text: "Option B" }],
+          correctOptionId: "a",
+          acceptedAnswers: [],
+          caseSensitive: false,
+          explanation: null,
+        },
+        {
+          questionType: "mcq_single",
+          prompt: "Q2",
+          points: 5,
+          autoGradable: true,
+          options: [{ id: "a", text: "Option A" }, { id: "b", text: "Option B" }],
+          correctOptionId: "a",
+          acceptedAnswers: [],
+          caseSensitive: false,
+          explanation: null,
+        },
+      ],
+    });
+
+    await updateOnlineExamLifecycle(ownerScope, exam.id, { action: "publish" }, undefined, duringWindow);
+
+    const preview = await previewOnlineExamForTeacher(ownerScope, exam.id);
+    const qIds = preview.exam.questions.map((q) => q.id);
+    const started = await startStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+    expect(started.attempt.status).toBe("in_progress");
+
+    // First submission: both questions answered correctly
+    const first = await submitStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      started.attempt.id,
+      {
+        responses: [
+          { questionId: qIds[0]!, answer: { optionId: "a" } },
+          { questionId: qIds[1]!, answer: { optionId: "a" } },
+        ],
+      },
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+    expect(first.alreadySubmitted).toBe(false);
+    expect(first.attempt.status).toBe("graded");
+
+    // Second submission with different answers should be rejected as already submitted
+    const second = await submitStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      started.attempt.id,
+      {
+        responses: [
+          { questionId: qIds[0]!, answer: { optionId: "b" } },
+          { questionId: qIds[1]!, answer: { optionId: "b" } },
+        ],
+      },
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+    expect(second.alreadySubmitted).toBe(true);
+
+    // Verify saved responses belong entirely to the first (winning) submission
+    const savedResponses = [...state.responses.values()].filter((r) => r.attemptId === started.attempt.id);
+    expect(savedResponses).toHaveLength(2);
+    const q0 = savedResponses.find((r) => r.questionId === qIds[0])!;
+    const q1 = savedResponses.find((r) => r.questionId === qIds[1])!;
+    expect((q0.answerJson as { optionId: string }).optionId).toBe("a");
+    expect((q1.answerJson as { optionId: string }).optionId).toBe("a");
+  });
+
+  it("expired in-progress attempts are marked expired on next access", async () => {
+    const exam = await createOnlineExam(ownerScope, {
+      groupId: GROUP_1,
+      title: "Expiry Test Exam",
+      assignmentScope: "group",
+      studentIds: [],
+      availableFrom: "2026-10-31T08:00:00.000Z",
+      availableUntil: "2026-10-31T20:00:00.000Z",
+      durationMinutes: 2,
+      maxAttempts: 2,
+      resultVisibility: "immediate_after_submit",
+      questions: [
+        {
+          questionType: "mcq_single",
+          prompt: "Q1",
+          points: 5,
+          autoGradable: true,
+          options: [{ id: "a", text: "Option A" }, { id: "b", text: "Option B" }],
+          correctOptionId: "a",
+          acceptedAnswers: [],
+          caseSensitive: false,
+          explanation: null,
+        },
+      ],
+    });
+
+    await updateOnlineExamLifecycle(ownerScope, exam.id, { action: "publish" }, undefined, duringWindow);
+
+    const preview = await previewOnlineExamForTeacher(ownerScope, exam.id);
+    const qIds = preview.exam.questions.map((q) => q.id);
+
+    // Start first attempt - it will have deadline ~2 minutes from duringWindow
+    const first = await startStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+    expect(first.attempt.status).toBe("in_progress");
+
+    // Simulate time passing past the first attempt's deadline
+    const expiredAttempt = state.attempts.get(first.attempt.id);
+    expiredAttempt!.deadlineAt = new Date("2026-10-31T09:59:00.000Z");
+    state.attempts.set(first.attempt.id, expiredAttempt!);
+
+    // Call startStudentOnlineExamAttempt again — it should mark the expired attempt as expired and create attempt #2
+    const result = await startStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+
+    // The old expired attempt should now be marked expired
+    const updatedAttempt = state.attempts.get(first.attempt.id)!;
+    expect(updatedAttempt.status).toBe("expired");
+
+    // New attempt should have been created (attempt #2)
+    expect(result.resumed).toBe(false);
+    expect(result.attempt.attemptNumber).toBe(2);
+
+    // Submit the new attempt to change its status from in_progress, freeing up the count
+    // The submit function will evaluate MCQ and mark it submitted/graded
+    const submitted = await submitStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      result.attempt.id,
+      {
+        responses: [
+          { questionId: qIds[0]!, answer: { optionId: "a" } },
+        ],
+      },
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+    expect(submitted.alreadySubmitted).toBe(false);
+    expect(submitted.attempt.status).toBe("graded");
+
+    // Now the attempts are: #1 expired, #2 submitted/graded. Total attempts = 2.
+    // Third start attempt should fail with maxAttemptsReached
+    await expect(
+      startStudentOnlineExamAttempt(
+        enrolledStudentContext,
+        exam.id,
+        ENROLLED_STUDENT,
+        undefined,
+        duringWindow,
+      ),
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      messageKey: "errors.examMaxAttemptsReached",
+    });
+  });
+
+  it("expired attempt cannot be submitted", async () => {
+    const exam = await createOnlineExam(ownerScope, {
+      groupId: GROUP_1,
+      title: "Submit Expiry Test",
+      assignmentScope: "group",
+      studentIds: [],
+      availableFrom: "2026-10-31T08:00:00.000Z",
+      availableUntil: "2026-10-31T20:00:00.000Z",
+      durationMinutes: 5,
+      maxAttempts: 1,
+      resultVisibility: "immediate_after_submit",
+      questions: [
+        {
+          questionType: "mcq_single",
+          prompt: "Q1",
+          points: 5,
+          autoGradable: true,
+          options: [{ id: "a", text: "Option A" }, { id: "b", text: "Option B" }],
+          correctOptionId: "a",
+          acceptedAnswers: [],
+          caseSensitive: false,
+          explanation: null,
+        },
+      ],
+    });
+
+    await updateOnlineExamLifecycle(ownerScope, exam.id, { action: "publish" }, undefined, duringWindow);
+
+    const preview = await previewOnlineExamForTeacher(ownerScope, exam.id);
+    const qIds = preview.exam.questions.map((q) => q.id);
+
+    const started = await startStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      ENROLLED_STUDENT,
+      undefined,
+      duringWindow,
+    );
+
+    // Simulate deadline passing
+    const expiredAttempt = state.attempts.get(started.attempt.id);
+    expiredAttempt!.deadlineAt = new Date(Date.now() - 60_000);
+    state.attempts.set(started.attempt.id, expiredAttempt!);
+
+    // Submitting an expired attempt should return alreadySubmitted=true
+    const result = await submitStudentOnlineExamAttempt(
+      enrolledStudentContext,
+      exam.id,
+      started.attempt.id,
+      {
+        responses: [
+          { questionId: qIds[0]!, answer: { optionId: "a" } },
+        ],
+      },
+      ENROLLED_STUDENT,
+      undefined,
+      new Date(Date.now() + 120_000),
+    );
+
+    expect(result.alreadySubmitted).toBe(true);
+    expect(result.attempt.status).toBe("expired");
   });
 });

@@ -16,6 +16,7 @@ import {
   REPORT_BATCH_SIZE,
   drainMessageOutboxes,
   drainReportExports,
+  merge,
 } from "@/worker/drain";
 import { createMessagingWorkerScope } from "@/lib/worker/system-actor";
 
@@ -26,6 +27,35 @@ beforeEach(() => {
   processReportExportBatch.mockReset();
   processOutboxBatch.mockReset();
   listActiveWorkspaceIdsForWorker.mockReset();
+});
+
+describe("merge", () => {
+  it("preserves job type report_export when merging two report_export reports", () => {
+    expect(
+      merge(
+        { job: "report_export", processed: 2, succeeded: 1, failedOrDeferred: 1 },
+        { job: "report_export", processed: 3, succeeded: 2, failedOrDeferred: 1 },
+      ),
+    ).toEqual({ job: "report_export", processed: 5, succeeded: 3, failedOrDeferred: 2 });
+  });
+
+  it("preserves job type message_outbox when merging two message_outbox reports", () => {
+    expect(
+      merge(
+        { job: "message_outbox", processed: 4, succeeded: 3, failedOrDeferred: 1 },
+        { job: "message_outbox", processed: 2, succeeded: 1, failedOrDeferred: 1 },
+      ),
+    ).toEqual({ job: "message_outbox", processed: 6, succeeded: 4, failedOrDeferred: 2 });
+  });
+
+  it("rejects merging reports of different job types", () => {
+    expect(() =>
+      merge(
+        { job: "report_export", processed: 1, succeeded: 1, failedOrDeferred: 0 },
+        { job: "message_outbox", processed: 1, succeeded: 1, failedOrDeferred: 0 },
+      ),
+    ).toThrow("cannot merge drain reports for different jobs: report_export vs message_outbox");
+  });
 });
 
 describe("drainReportExports", () => {

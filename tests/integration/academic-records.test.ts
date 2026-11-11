@@ -11,7 +11,7 @@ import {
 import { assessmentQuerySchema } from "@/modules/assessments/schemas";
 import { enrollStudentInGroup } from "@/modules/groups/service";
 import { createHomework, listHomework } from "@/modules/homework/service";
-import { createFollowUp, getFollowUpDashboard } from "@/modules/followups/service";
+import { createFollowUp, getFollowUpDashboard, resolveFollowUp } from "@/modules/followups/service";
 import { createStudent } from "@/modules/students/service";
 import { homeworkQuerySchema } from "@/modules/homework/schemas";
 import { DELTA, NILE, ownerScope } from "./helpers";
@@ -219,6 +219,98 @@ describe("tenant-scoped homework and assessment records", () => {
     followUpIds.push(followUp.id);
     const foreignDashboard = await getFollowUpDashboard({ ...scope, workspaceId: DELTA });
     expect(foreignDashboard.followUps).toEqual([]);
+  });
+
+  it("audits the first resolution, stays idempotent on identical retry, and audits outcome corrections", async () => {
+    const { scope, student } = await createFixture();
+    const auditRunId = randomUUID();
+    const followUp = await createFollowUp(scope, {
+      studentId: student.id,
+      title: "Call family",
+      note: null,
+      dueAt: null,
+    });
+    followUpIds.push(followUp.id);
+
+    await resolveFollowUp(
+      scope,
+      followUp.id,
+      { outcome: "contacted" },
+      { requestId: `${auditRunId}-first` },
+    );
+    await resolveFollowUp(
+      scope,
+      followUp.id,
+      { outcome: "contacted" },
+      { requestId: `${auditRunId}-identical-retry` },
+    );
+    await resolveFollowUp(
+      scope,
+      followUp.id,
+      { outcome: "no_action" },
+      { requestId: `${auditRunId}-correction` },
+    );
+
+    const auditEvents = await withScope({ workspaceId: NILE }, (tx) =>
+      tx.auditEvent.findMany({
+        where: {
+          workspaceId: NILE,
+          entityType: "student_follow_up",
+          entityId: followUp.id,
+          requestId: {
+            in: [
+              `${auditRunId}-first`,
+              `${auditRunId}-identical-retry`,
+              `${auditRunId}-correction`,
+            ],
+          },
+        },
+        select: { action: true, requestId: true, diff: true },
+      }),
+    );
+    // The identical retry must write nothing; first resolution and the correction are recorded.
+    expect(auditEvents).toHaveLength(2);
+    expect(auditEvents.map(({ requestId }) => requestId).sort()).toEqual(
+      [`${auditRunId}-correction`, `${auditRunId}-first`].sort(),
+    );
+    const first = auditEvents.find(({ requestId }) => requestId === `${auditRunId}-first`);
+    const correction = auditEvents.find(({ requestId }) => requestId === `${auditRunId}-correction`);
+    expect(first?.action).toBe("student_follow_up.resolved");
+    expect(first?.diff).toEqual({ outcome: "contacted" });
+    expect(correction?.action).toBe("student_follow_up.outcome_corrected");
+    expect(correction?.diff).toEqual({
+      previousOutcome: "contacted",
+      outcome: "no_action",
+    });
+
+    // The task history preserves the same sequence with distinct actions.
+    const taskEvents = await withScope({ workspaceId: NILE }, (tx) =>
+      tx.studentFollowUpEvent.findMany({
+        where: { workspaceId: NILE, followUpId: followUp.id },
+        orderBy: { createdAt: "asc" },
+        select: { action: true, outcome: true },
+      }),
+    );
+    expect(taskEvents).toEqual([
+      { action: "created", outcome: null },
+      { action: "resolved", outcome: "contacted" },
+      { action: "outcome_corrected", outcome: "no_action" },
+    ]);
+
+    // A same-outcome resolve issued twice in a row leaves the sequence unchanged.
+    const beforeEvents = taskEvents.length;
+    await resolveFollowUp(
+      scope,
+      followUp.id,
+      { outcome: "no_action" },
+      { requestId: `${auditRunId}-identical-correction-retry` },
+    );
+    const afterEvents = await withScope({ workspaceId: NILE }, (tx) =>
+      tx.studentFollowUpEvent.count({
+        where: { workspaceId: NILE, followUpId: followUp.id },
+      }),
+    );
+    expect(afterEvents).toBe(beforeEvents);
   });
 
   it("creates an individual homework record when a student joins an assigned group later", async () => {

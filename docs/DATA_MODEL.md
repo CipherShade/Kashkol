@@ -654,7 +654,7 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 |---|---|
 | `video_lesson`, `video_group_access`, `video_student_access` | **Implemented (`F-P3-02`)** — Provider (`cloudflare_stream` / `fake`), `external_asset_id`, title, description, subject/topic, `publication_status` (`draft` / `published` / `archived`), `asset_status` (`pending_upload` / `processing` / `ready` / `failed`), `duration_seconds`, `size_bytes`, `playback_count`, `estimated_bandwidth_bytes`, and composite tenant-scoped group/student access joins under forced RLS |
 | `online_exam`, `online_exam_student_assignment`, `online_exam_question` | **Implemented (`F-P3-01`)** — Online exam & quiz authoring (`draft` → `published` → `closed` → `archived`), availability window (`available_from`, `available_until`, `duration_minutes`), `max_attempts`, `result_visibility` (`after_manual_publish` / `immediate_after_submit` / `after_window_close`), linked `assessment_id` for gradebook synchronization, and structured questions (`mcq_single`, `true_false`, `short_answer`, `essay`) under forced RLS |
-| `online_exam_attempt`, `online_exam_response` | **Implemented (`F-P3-01`)** — Authenticated student attempts (`in_progress` → `submitted` → `graded`), `auto_score`, `manual_score`, `total_score`, per-question answers, deterministic evaluation, and teacher feedback under forced RLS |
+| `online_exam_attempt`, `online_exam_response` | **Implemented (`F-P3-01`)** — Authenticated student attempts (`in_progress` → `submitted` → `graded`, or `in_progress` → `expired` when the deadline passes without submission; expired attempts still count toward `max_attempts`), `auto_score`, `manual_score`, `total_score`, per-question answers, deterministic evaluation, and teacher feedback under forced RLS |
 | `break_glass_grant` | Reserved — Ticket reference, reason, actor, expiry (default 1 h) |
 | `platform_admin`, `platform_audit_event` | Reserved — Platform operators and their own log |
 | `subscription` | Reserved — Plan, state, provider ids — webhook-driven |
@@ -935,8 +935,9 @@ consolidated form rather than one directory per row above:
 | `20261108000003_student_qr_identity` | Adds `qr_token_hash` persistent identity token hash to `student` |
 | `20261108000004_homework_completion_marks` | Adds `homework_completion_status` enum and `homework_completion_mark` table with forced RLS and tenant indexes |
 | `20261110000000_worker_workspace_enumeration` | Adds `list_active_workspace_ids_for_worker()` (`SECURITY DEFINER`, `STABLE`) returning the ids of active non-deleted workspaces only, never any other tenant field; `GRANT EXECUTE` to `kashkol_app` only (`ADR-0024`) |
+| `20261111000000_expired_online_exam_attempt_status` | Adds `expired` to the `online_exam_attempt_status` enum (`F-P3-01`) |
 
-The current local development database tracks all thirty migrations above (`prisma migrate status`). `student` and
+The current local development database tracks all thirty-one migrations above (`prisma migrate status`). `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

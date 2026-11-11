@@ -1282,7 +1282,8 @@
       "resolvedOutcome": "Outcome: {outcome}",
       "historyActions": {
         "created": "Task created",
-        "resolved": "Task resolved"
+        "resolved": "Task resolved",
+        "outcome_corrected": "Outcome restated"
       },
       "error": "The change could not be saved. Check your access and try again."
     }

@@ -89,6 +89,7 @@ health/readiness probes, the route registry, and the project-rule checks.
   - Question sets (`mcq_single`, `true_false`, `short_answer`, `essay`), group or selected-student assignment, server-enforced availability window (`availableFrom`, `availableUntil`, `durationMinutes`), `maxAttempts`, and teacher preview (`GET /api/exams/[examId]`).
   - Authenticated student portal entry only (`requireStudentPortalContext` on `/api/portal/student/exams*`) — never via unprotected name/phone lookup.
   - Deterministic auto-grading (`mcq_single`, `true_false`, normalized Arabic/English `short_answer`), safe draft response saving (`PUT`), idempotent duplicate final submission protection (`POST`), publish-gated result visibility (`after_manual_publish` | `immediate_after_submit` | `after_window_close`), and audited manual grading / grade corrections (`exam.manually_graded` and `exam.grade_corrected` requiring a correction reason) synced to `Assessment` / `AssessmentScore`.
+  - Expired in-progress attempts are marked `expired` (new `online_exam_attempt_status` value) and still count toward `maxAttempts`; an expired attempt cannot be submitted.
   - Conservative integrity notice explicitly stating that browser-based quizzes enforce server-side deadlines and attempt limits and do not provide lockdown-grade anti-cheat protection in a web browser.
 - Platform Administration & Centralized Workspace Plans (`F-P3-03` & `F-P3-04`) (`src/modules/platform-admin/`, `scripts/platform-admin.ts`, `docs/SUPPORT_RUNBOOK.md`):
   - Non-public CLI provisioning (`npm run platform-admin -- grant|revoke|list`) requiring verified email and audit reason — never auto-promoting the first user or hardcoded emails.
@@ -571,6 +572,206 @@ the scan-success banner are interactive states that were not visually verified (
 have required starting the demo session and marking demo rows, neither of which was acceptable); no
 camera-capture test on real hardware; no `OQ-05` resolution; no load test of QR decode throughput;
 and no deployment.
+
+### 5.7 Online exam attempt expiry, submission atomicity, and grade-safety corrections on 2026-11-10 — `F-P3-01`
+
+Three business-logic corrections in the online-exam module, none of which changes the API contract or erases teacher-entered data.
+
+- **Automatic grade sync never downgrades an existing score.** `syncScoreToLinkedAssessmentTx` now updates the linked `AssessmentScore` only when no score exists, when the caller explicitly allows a downgrade (manual correction), or when the new score is at least the stored score; a teacher note supplied as `undefined` is no longer used to overwrite an existing note.
+- **Submission is atomic at the database layer.** `submitStudentOnlineExamAttempt` transitions the attempt with `updateMany` gated on `status = in_progress`; idempotency keys are enforced, only the winning request upserts `online_exam_response` rows, and duplicate audit/grade-sync events are prevented.
+- **Expired in-progress attempts are closed, not resumed.** `startStudentOnlineExamAttempt` marks any expired `in_progress` attempts as `expired` (new `online_exam_attempt_status` enum value, migration `20261111000000_expired_online_exam_attempt_status`), and `submitStudentOnlineExamAttempt` rejects expired attempts with `alreadySubmitted`. Expired attempts still count toward `maxAttempts`.
+- The readiness gate (`REQUIRED_MIGRATION_NAME`) now expects the newest migration, keeping the machine check and CI honest.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint + project rules |
+| `npm run typecheck` | **Passed** — Prisma generate + `tsc --noEmit` |
+| `npm test` | **Passed** — unit 63 files / 389 tests; UI 1 file / 21 tests |
+| `npm run test:integration` | **Passed** — 17 files / 103 tests against the local PostgreSQL (the tenant-isolation readiness assertion failed before `REQUIRED_MIGRATION_NAME` was updated to the new migration; after updating, the full suite passes) |
+| `npm run db:deploy` | **Passed** — migration `20261111000000_expired_online_exam_attempt_status` applied to the local dev database |
+| `npm run build` | **Passed** — production build completes after the migration-state update |
+
+**Not claimed by this section:** exam cancellation/extension UI, a student-facing explanation of why an in-progress attempt is rejected after deadline, and any anti-cheat hardening.
+
+### 5.8 Arabic short-answer normalization completed for online exams on 2026-11-10 — `F-P3-01`
+
+`normalizeShortAnswer` (`src/modules/exams/grading.ts`) now applies the same deterministic fold documented in `docs/DATA_MODEL.md` §8 and implemented by the `normalize_arabic` SQL function (used by the derived search-key triggers). No other grading behavior changed; teacher free text remains stored exactly as entered.
+
+- **Case sensitivity** is unaffected: lower-casing still happens only when `caseSensitive` is `false`; for `caseSensitive: true` the Arabic fold still runs (it has no case concept).
+- **Letter folds applied:** `أ إ آ ٱ → ا`, `ى → ي`, `ة → ه`, `ؤ → و`, `ئ → ي` (previously only `أإآ → ا` was applied).
+- **Digit folds applied:** Arabic-Indic digits `٠-٩` (U+0660–U+0669) and Eastern Arabic-Indic digits `۰-۹` (U+06F0–U+06F9) map to ASCII `0-9` (previously not applied at all).
+- Idempotency: the fold is idempotent (`normalizeShortAnswer(normalizeShortAnswer(x)) === normalizeShortAnswer(x)`) and matches the SQL fold for these characters.
+- One existing test assertion in `tests/unit/p3-videos-and-exams.test.ts` was updated to expect the new documented `ة → ه` fold (`الاجابة الصحيحة` → `الاجابه الصحيحه`); the documented rule already required it, and no value, score, or accepted-answer data was weakened.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** — ESLint + project rules |
+| `npm run typecheck` | **Passed** — Prisma generate + `tsc --noEmit` |
+| `npm test` | **Passed** — unit 64 files / 403 tests (14 new normalization regression tests); UI 1 file / 21 tests |
+| `npm run build` | **Passed** — production build completes after the short-answer normalization change |
+
+**Not claimed by this section:** changes to paper assessments, search behavior, or any other callers beyond the short-answer normalizer used by online exams; no change to how Latin custom transliterations are transliterated.
+
+### 5.9 Known environmental integration failures awaiting test-fixture cleanup on 2026-11-10
+
+The integration suite shows 101 passing / 3 failing out of 104. These are all the same, pre-existing cause, unrelated to any of the online-exam or payment changes:
+
+| Failing test | Cause |
+|---|---|
+| `tests/integration/search.test.ts > matches normalized student and group names` | `CONFLICT` / `planGroupLimitReached` on `createGroup` |
+| `tests/integration/search.test.ts > includes only the resource types the member may read` | same |
+| `tests/integration/students-groups.test.ts > creates records and makes concurrent enrollment idempotent` | same |
+
+Root cause: the seeded local development database (NILE workspace) holds more than the pilot plan's 12-active-groups limit — 4 seeded demo groups plus **12 leaked test fixtures** (`Roster <uuid>` / `Other <uuid>` pairs created by `tests/integration/session-attendance-homework.test.ts`). That file's best-effort `afterEach` cleanup cannot delete groups referenced by append-only attendance-mark revisions (rows must be kept by design), so fixture groups accumulate on every gate run until the limit is reached; once reached, every workflow that creates a group in NILE throws. The enforcement behavior is correct and has not been changed, the tests have not been weakened, and no database rows have been deleted to make the suite green.
+
+**Not acceptable to fix by:** resetting the local database or raising NILE's `planLimitOverrides` — both were declined. The intended remedy is a test-fixture strategy for `session-attendance-homework.test.ts` (e.g., isolating fixtures into a disposable workspace per run, or bounding growth under the pilot cap), done as a dedicated change.
+
+### 5.10 Focused financial regression tests and the session-priced billing rules on 2026-11-11 — `F-P2-04`, `ADR-0025`
+
+Companion to the ADR-0025 work, with two financial source changes approved on 2026-11-11 (this section and §5.11 were corrected on the same date; earlier wording claiming no financial code was changed was incorrect and is superseded). The focused tests in `tests/unit/payments.test.ts` encode the confirmed session-priced billing rules:
+
+- charges exactly the present/late marks passed to it (absent/excused filtering is upstream in the session callers, encoded as a contract test in `tests/unit/payments.test.ts` and verified via existing call sites)
+- a single present mark charges exactly the session price; the group is marked session-priced even with no group default price
+- direct student-level fee rules continue to accrue; session-priced groups receive no monthly group fee; mixing session charges with a monthly group enrollment yields both
+- a group with a monthly rule, no enrollment, and no configured price yields zero expected (zero activity)
+- a session's own price works even when the group has no default price — `buildSessionCharges` now marks the group session-priced
+
+**Financial source changes approved on 2026-11-11 (documented truthfully here):**
+
+- `src/modules/payments/session-revenue.ts` — a group is marked session-priced when either the session's own `pricePerStudentMinor` **or** the group's `defaultPricePerStudentMinor` is a positive number. Previously only a positive group default marked the group session-priced, so a session-level price override could not suppress the group's monthly fee.
+- `src/modules/payments/calculations.ts` — direct student-level fee rules now always accrue for a student, including one enrolled in a session-priced group; the `hasSessionPricedEnrollment` suppression that silently dropped them was removed. Group-level monthly rules remain filtered to the non-session-priced enrolled group ids (`monthlyGroupIds`), so a session-priced group's monthly fee is still suppressed.
+
+These implement the established session-priced billing rules (`ADR-0025`): direct student fees apply alongside session-priced billing, and a session-level price override makes a group session-priced. They are **not** a resolution of `OQ-20` (whether a direct student-level fee fully replaces, or stacks with, a group-level monthly fee for that month); `OQ-20` remains open with the M2 scope-freeze deadline, and the direct-fee vs group-monthly interaction — including for non-session-priced groups — is unchanged by this work. See `docs/OPEN_QUESTIONS_AND_ASSUMPTIONS.md` §4.3 and the traceability index.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** |
+| `npm test` | **Passed** — unit 64 files / 412 tests (4 focused financial regression tests; the earlier 417 total included 5 simulated grading tests that no longer exist); UI 1 file / 21 tests |
+| `npm run build` | **Passed** |
+
+**Not claimed by this section:** that `OQ-20` is resolved; replacement or stacking semantics for the direct-fee vs group-monthly interaction; any change to the per-session attendance charging path or to its call sites; any change to mixing session charges with monthly enrollment in another group.
+
+### 5.11 Issue #6 — direct student-level fee rules alongside session-priced group enrollment, fixed on 2026-11-11 — `F-P2-04`, `ADR-0025`
+
+**Original issue:** Student-level fee rules were believed to be dropped whenever a student had a session-priced enrollment. Only group monthly fee rules should be suppressed for session-priced groups; the audit required that direct student-level fee rules must still apply.
+
+**Finding: the audit was correct.** `calculateStudentBalances` previously dropped a student's direct fee rules entirely whenever any enrolled group was session-priced (`hasSessionPricedEnrollment ? [] : …`). An earlier version of this section recorded the belief that the existing logic already handled this — that no fix was needed and no financial logic had changed — that reading was wrong and is superseded by this correction.
+
+**Fix (approved 2026-11-11, `src/modules/payments/calculations.ts`):** direct student-level rules are filtered only by `studentId`; the `hasSessionPricedEnrollment` suppression of direct rules was removed. Group-level monthly rules remain filtered to the non-session-priced enrolled group ids (`monthlyGroupIds`), so group monthly fees for session-priced groups stay suppressed; mixing session charges with a monthly enrollment in another group keeps both.
+
+**Companion fix (approved 2026-11-11, `src/modules/payments/session-revenue.ts`):** `buildSessionCharges` marks a group session-priced when the session's own `pricePerStudentMinor` is a positive number, even if the group's `defaultPricePerStudentMinor` is null or zero. This prevents monthly group fees alongside session-priced billing driven by per-session prices.
+
+**Regression tests (verified to fail pre-fix on 2026-11-11 via stash/re-run):**
+
+- `tests/unit/payments.test.ts > manual payment currency and balances > keeps direct student fee rules alongside session-priced group enrollment` — direct fee (5,000 × 3 months = 15,000) + session charge (6,000) = expected balance **21,000**; group monthly fee suppressed.
+- `respects session price even when group default price is not configured` — `buildSessionCharges` returns the session's own price and marks the group session-priced with no group default price.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** |
+| `npm test` | **Passed** — unit 64 files / 412 tests (including the regression tests above); UI 1 file / 21 tests |
+| `npm run build` | **Passed** |
+
+**OQ-20 remains open.** Whether the direct fee rule fully replaces, or stacks with, a group-level monthly fee for that month is an open product decision, not a resolved business rule. The changes above implement only the confirmed session-priced billing behaviour — direct fees accrue alongside session-priced billing, and group monthly fees are suppressed for session-priced groups. They do not decide the direct-fee vs group-monthly interaction, including for non-session-priced groups; that is exactly `OQ-20`'s question. See `docs/OPEN_QUESTIONS_AND_ASSUMPTIONS.md` §4.3; deadline is M2 scope freeze (`F-P2-04`).
+
+**Not claimed by this section:** that `OQ-20` is closed; stacking or per-rule precedence support; that the direct-fee vs group-monthly interaction is a decided rule.
+
+### 5.12 Issue #7 — follow-up resolution audit history, fixed on 2026-11-11 — `F-P2-06`, `DM-4`, `D-10`
+
+**Original issue:** re-resolving an already-resolved follow-up overwrote the recorded outcome while the audit trail stayed indistinguishable from the original resolution: `student_follow_up.resolved` was audited identically every time and the diff held only the new outcome. Two things were lost — the fact that a resolution was a correction, and the previously recorded outcome.
+
+**Fix (minimal, no schema/route/component changes):** in `src/modules/followups/service.ts` `resolveFollowUp`:
+
+- `existing.status === "resolved"` with the **same** outcome returns `existing` unchanged — idempotent retry, writes nothing.
+- First resolution (`existing.status === "open"`) audits `student_follow_up.resolved` with `diff: { outcome }` and appends `student_follow_up_event` `action: "resolved"` — unchanged behaviour.
+- Different-outcome re-resolution (a correction) audits `student_follow_up.outcome_corrected` with `diff: { previousOutcome, outcome }` and appends `student_follow_up_event` `action: "outcome_corrected"`. The previous outcome is read from the pre-update row before the update in the same scoped transaction.
+- Message catalogue (`messages/en.json` / `messages/ar.json`) gained `Academics.followups.historyActions.outcome_corrected` so the existing history list can render the correction entry. **No page, component, route, or schema change.**
+
+**Regression test:** `tests/integration/academic-records.test.ts > "audits the first resolution, stays idempotent on identical retry, and audits outcome corrections"` — first resolution audits `resolved` with `{ outcome: "contacted" }`; identical retry writes nothing; different-outcome re-resolution audits `outcome_corrected` with `{ previousOutcome: "contacted", outcome: "no_action" }`; the task event sequence reads `created → resolved → outcome_corrected`; a final identical retry leaves the event count unchanged.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** (tsc exit 0) |
+| `npm test` | **Passed** — unit 64 files / 407 tests; UI 1 file / 21 tests (no unit tests changed; the new regression test is integration-level, matching house style for DB-backed correction audits) |
+| `npm run build` | **Passed** (exit 0) |
+| `npx vitest run --config vitest.integration.config.ts tests/integration/academic-records.test.ts` | **Passed** — 3/3 tests |
+
+**Not claimed by this section:** whether a re-resolution with a different outcome should be *allowed at all* (current permissive behaviour is retained; tightening it requires a product decision); any reopening flow (not added); any change to the parent-portal treatment of follow-ups (none planned).
+
+### 5.13 Issue #8 — worker drain merge mislabels job type on 2026-11-11 — `ADR-0008`, `ADR-0024`
+
+**Original issue:** `merge()` in `src/worker/drain.ts` folded two reports and always returned `{ job: "message_outbox" }`, regardless of which job's counts were being merged — so a `report_export` total would ship mislabelled as outbox work and any observability built on `DrainReport.job` would see the wrong type. The reported counts were real; only the tag was invented.
+
+**Fix (minimal, one function, no behavior to draining):**
+
+- Removed the hardcoded `job: "message_outbox"` literal.
+- Returned `count.job` so the merged report carries the shared job.
+- Refused to merge reports of different jobs (`count.job !== other.job`), throwing `cannot merge drain reports for different jobs: <a> vs <b>` instead of silently summing them into one bucket. This turns a latent lie into an explicit programming error.
+- Exported `merge` for unit testing only; `drainMessageOutboxes` is still its sole production caller and its output (`job: "message_outbox"`) is unchanged, so multi-workspace outbox behaviour is untouched. No schema, route, page, database, or migration changes.
+
+**Regression test:** `tests/unit/worker-drain.test.ts > "merge"` — three cases: (1) merging two `report_export` reports yields a `report_export` report with summed counts; (2) merging two `message_outbox` reports yields a `message_outbox` report; (3) mixing types throws with the exact invariant message. Existing outbox multi-workspace tests keep passing unchanged (requirement 5) as the unchanged behaviour check.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** (tsc exit 0) |
+| `npm test` | **Passed** — unit 64 files / 410 tests (3 new; the existing outbox suite plus runner unaffected) |
+| `npm run build` | **Passed** (exit 0) |
+
+**Not claimed by this section:** any observable drain visibility change to logs/metrics for report exports beyond corrected labeling; refactoring of `runner.ts`; changes to the worker entrypoint or startup gate.
+
+### 5.14 Issue #9 — exam manual grading wipes an existing teacher note on the linked AssessmentScore, fixed on 2026-11-11 — `F-P3-01`
+
+**Original issue:** "Exam auto-sync note `input.note ?? null` wipes existing teacher notes if note is undefined."
+
+**Root cause (narrower than the report's phrasing after Issue #1):** `syncScoreToLinkedAssessmentTx` was already fixed to honour `undefined` as "leave the note alone" (Issue #1). The manual-grading caller `gradeOnlineExamAttempt` still pre-converted `undefined` to `null` (`note: input.gradingNote ?? null`), so the `!== undefined` guard inside the sync function could not tell "teacher omitted the note" apart from "teacher explicitly cleared it" — every grading action without `gradingNote` (including `exam.grade_corrected` entries) silently overwrote the linked `AssessmentScore`'s teacher note with `null`.
+
+**Fix (one line, `src/modules/exams/service.ts`):** `note: input.gradingNote`. The pass-through now matches the function contract exactly:
+
+- `undefined` (note omitted, e.g. a plain grading or a correction without a note) → the existing linked note is preserved.
+- a `string` → the linked note is updated.
+- explicit `null` → the linked note is cleared.
+
+`syncScoreToLinkedAssessmentTx` is unchanged; the submit-path sync call is unchanged (passes no note and `allowDowngrade: false`); `setAssessmentResult` is unchanged (it is the explicit manual-scoring tool, where `input.note ?? null` is intentional); no schema, route, UI, or migration changes.
+
+**Test harness:** the in-memory `assessmentScore` mock in `tests/unit/p3-videos-and-exams.test.ts` now persists and returns `note` (create stores `note ?? null`; update writes `score` / `status` / `note` only when supplied), so note preservation is observable to the suite.
+
+**Regression test:** `tests/unit/p3-videos-and-exams.test.ts > "grading sync preserves an existing teacher note unless gradingNote is explicitly provided"` — a pre-existing linked `AssessmentScore` seeded with a teacher note survives: (1) first grading **without** `gradingNote` (score syncs 6 → 8, note preserved); (2) grading correction **with** `gradingNote` (note replaced); (3) grading correction **without** `gradingNote` (score syncs 9 → 10, updated note preserved).
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** (prisma generate + tsc exit 0) |
+| `npm test` | **Passed** — unit 64 files / 411 tests (+1 regression test); UI 1 file / 21 tests |
+| `npm run build` | **Passed** (exit 0) |
+
+**Not claimed by this section:** that the exams grading flow is barred from ever writing the linked note — explicit `null` deliberately clears it; any change to `setAssessmentResult` (manual scoring tool) semantics; any new UI surface for `gradingNote`; any change to the integration-suite environmental failures recorded in §5.9.
+
+### 5.15 Issue #10 — dashboard attendance streak ignores the selected period and is not session-chronological, fixed on 2026-11-11 — `F-P1-01`, `F-P1-06`
+
+**Original issue:** "Dashboard attendance streak uses all history, not the selected dashboard period; also marks not chronologically sorted."
+
+**Root cause:** `getDashboardData` grouped `raw.attendanceMarks` per student in the order returned by the repository — `recordedAt desc` — with no `[start, end]` filter. The consecutive-absence walk then counted the trailing run of absent marks in *recording order*, so (a) absences outside the selected window (`today` / `this_week` / `this_month` / `all`) inflated the streak and the `at_risk` / `inactive` classification, and (b) a student whose marks were entered out of session order (late-entered backfills, corrections appended after newer sessions) saw a streak computed against the wrong "trailing" marks.
+
+**Fix (`src/modules/dashboard/service.ts` only):**
+
+- Before grouping, marks are filtered to `mark.session.startsAt ∈ [start, end]` exactly as the attendance-rate KPI is scoped.
+- The filtered marks are sorted by `session.startsAt` **descending** before the per-student map is built, so the trailing run is the current streak anchored on the most recent session.
+- The existing skip-cancelled-sessions rule and the `atRiskAfter` / `inactiveAfter` thresholds are unchanged; `calculateFollowUpFlags` and the rest of the dashboard are unchanged; no schema, repository, route, or UI changes.
+
+**Regression test:** `tests/unit/dashboard-streak.test.ts` — mocked repository, real `getDashboardData` calculation. Six cases: (1) absences outside `this_month` do not affect the streak; (2) `all` period still considers historical attendance; (3) late-entered marks evaluate by session date, not `recordedAt` (fails pre-fix); (4) cancelled sessions are skipped; (5) a present mark breaks the streak; (6) no in-period attendance yields a streak of zero. Cases (1) and (3) were verified to fail against the pre-fix implementation via a stash/re-run.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** (prisma generate + tsc exit 0) |
+| `npm test` | **Passed** — unit 65 files / 417 tests (+6 new); UI 1 file / 21 tests |
+| `npm run build` | **Passed** (exit 0) |
+
+**Not claimed by this section:** any change to the attendance-rate KPI, payments, grades, homework, or attention-center follow-up rules (they were already period-scoped or intentionally full-history); any change to what teachers can record or to historical attendance data; any change to the student-profile derivation (`students/repository.ts` already orders by session startsAt desc); period-renaming or threshold business rules.
 
 ---
 

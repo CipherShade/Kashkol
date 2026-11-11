@@ -93,9 +93,19 @@ export async function getDashboardData(
   // -------------------------------------------------------------------------
   // 2. Student Status & Attention Analysis
   // -------------------------------------------------------------------------
-  // Build attendance streaks per student
+  // Build attendance streaks per student. Marks are limited to the selected
+  // dashboard period (by session start date, not by when the mark was
+  // recorded) and processed most-recent-session first, so the trailing run of
+  // consecutive absences reflects the selected window rather than all history
+  // in arbitrary insertion order.
+  const periodMarks = raw.attendanceMarks
+    .filter(
+      (mark) =>
+        mark.session.startsAt >= start && mark.session.startsAt <= end,
+    )
+    .sort((a, b) => b.session.startsAt.getTime() - a.session.startsAt.getTime());
   const attendanceByStudent = new Map<string, typeof raw.attendanceMarks>();
-  for (const mark of raw.attendanceMarks) {
+  for (const mark of periodMarks) {
     const list = attendanceByStudent.get(mark.studentId) ?? [];
     list.push(mark);
     attendanceByStudent.set(mark.studentId, list);
