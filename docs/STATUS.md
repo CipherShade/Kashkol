@@ -932,6 +932,43 @@ testing; the `attendanceQrCopyFor` strings live outside the message catalogue (m
 pre-existing `StudentAttendanceQr` component contract — both locales are present); `OQ-05`
 remains open (the implemented flow is (b)-style staff scanning, recorded as `OQ-22` default (b)).
 
+**Local production-build smoke (2026-11-12, same day).** Driven over HTTP against the standalone
+production build (`npm run build` → `npm run start`) and the local embedded dev database, for the
+DELTA Seeded workspace (`demo.owner2@kashkol.local`). The NILE workspace is at its manual-pilot
+group cap (`assertWorkspaceWriteAllowedTx` → `errors.planGroupLimitReached`, the environmental
+cause of the three §5.9 integration failures), so the smoke ran against DELTA, which was empty:
+
+| Step | Result |
+|---|---|
+| owner sign-in (`POST /api/auth/sign-in/email`) | passed |
+| group → student → classmate creation (credential one-time reveal, `portal_access` gated; QR auto-created in the student transaction) | passed |
+| one-off session create → start | passed |
+| `GET /api/students/[id]/qr` → scan (`POST /api/sessions/[sessionId]/attendance/scan`) | `mark=present source=qr` |
+| duplicate scan | `409 CONFLICT` |
+| roster shows the QR-sourced mark | passed |
+| student portal sign-in (phone + permanent password) → portal overview | passed; contains own record |
+| classmate record access | `403`, no name leak |
+| wrong password | `401` (generic, logged as `auth.portal_sign_in_failed`) |
+
+**15/15 smoke steps passed.** This exercised the scan endpoint and token round-trip end to end; it
+did **not** and cannot exercise the camera decoder in `qr-scanner-panel.tsx` — verifying a printed
+QR on physical hardware remains open. The DELTA smoke data (one group, two students, one session,
+one attendance row) was left in the dev database; NILE was not touched.
+
+**Security review outcome (2026-11-12, same change).** One finding, fixed in `633727a`: QR
+signature and hash comparisons used plain string equality; they now use
+`crypto.timingSafeEqual` via a `safeEqual` helper (`src/modules/attendance/student-qr.ts`).
+Reviewed and judged sound: CSRNG-backed password/token generation, 40-bit password alphabet with
+per-phone lockout (5 failures / 15 min, hashed identifiers), session invalidation inside the
+regeneration transaction, `attendance:write` + IP rate limit on the scan route, CSRF origin checks
+on mutations, service-identical audit events for credential and QR operations.
+
+**Staging deploy is blocked, not done.** No Railway credentials exist in this environment
+(`RAILWAY_TOKEN`/`RAILWAY_API_TOKEN`/`RAILWAY_SERVICE_TOKEN` unset; `railway whoami` →
+`Unauthorized`), and `.github/workflows/ci.yml` is test-and-build only with no deploy job. Item
+`0.20` in the plan below stays `◐`; a deploy must not be marked done until a health check passes
+on a real staging URL.
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work
