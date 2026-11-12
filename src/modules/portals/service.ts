@@ -1,24 +1,39 @@
 import { AppError } from "@/lib/http/errors";
 import { newRequestId } from "@/lib/http/request-id";
-import { withScope } from "@/lib/db/scope";
+import { newUuidV7 } from "@/lib/id";
+import { withScope, type DbTransactionClient } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import {
   deleteSessionsForUserTx,
   findActiveMemberships,
+  findActivePortalGrants,
   findUser,
 } from "@/modules/identity/repository";
+import {
+  isPortalPhoneLocked,
+  recordPortalSignInFailure,
+} from "@/modules/identity/lockout";
 import {
   resolvePortalStudent,
   type PortalContext,
 } from "@/modules/identity/session";
-import { authorize, type Scope } from "@/modules/tenancy/types";
+import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
 import { getWebPushPublicConfig } from "./push";
+import {
+  generatePortalPassword,
+  normalizePortalPhone,
+  portalUsernameEmail,
+} from "./credentials";
 import {
   acceptPortalInvitationTx,
   createOrRotatePortalInvitationTx,
   deletePortalPushSubscriptionForUser,
+  findAutoPortalGrantForStudentTx,
+  findPortalLoginCandidates,
   findPortalInvitationByTokenHash,
   findStudentForPortalAccess,
+  insertPortalLoginTx,
   listPortalNotificationsForGrants,
   listPortalPushSubscriptionsForUser,
   loadParentChildDetail,
@@ -31,6 +46,9 @@ import {
   updatePortalGrantPermissionsTx,
   updatePortalPushPreferenceForUser,
   upsertPortalPushSubscriptionForUser,
+  updatePortalLoginPasswordTx,
+  setPortalLoginStatusTx,
+  updatePortalLoginPhoneTx,
 } from "./repository";
 import {
   acceptPortalInvitationSchema,
@@ -68,6 +86,526 @@ function resolveContext(request?: RequestContext) {
     locale: request?.locale === "en" ? "en" : "ar",
     userAgent: request?.userAgent ?? null,
   };
+}
+
+type CredentialResult = { username: string; password: string };
+type CredentialAuditContext = { requestId: string; ipHash: string | null };
+type CredentialStudent = { id: string; phoneE164: string | null };
+
+/**
+ * Create the Better Auth credential identity and the portal grant for a
+ * student, inside the caller's transaction. Returns null when the student has
+ * no usable phone number — there is no safe way to provision a credential
+ * without one, and the caller decides how to report that.
+ */
+async function createPortalCredentialTx(
+  tx: DbTransactionClient,
+  scope: Scope,
+  student: CredentialStudent,
+  ctx: CredentialAuditContext,
+  action: "portal.credential.provisioned" | "portal.credential.regenerated",
+  now: Date,
+): Promise<CredentialResult | null> {
+  const phone = student.phoneE164 ? normalizePortalPhone(student.phoneE164) : null;
+  if (!phone) return null;
+
+  const password = generatePortalPassword();
+  const passwordHash = await hashPassword(password);
+  const userId = newUuidV7();
+
+  await tx.user.create({
+    data: {
+      id: userId,
+      name: phone,
+      email: portalUsernameEmail(userId),
+      emailVerified: true,
+    },
+  });
+
+  await tx.account.create({
+    data: {
+      id: newUuidV7(),
+      providerId: "credential",
+      accountId: userId,
+      userId,
+      password: passwordHash,
+    },
+  });
+
+  await insertPortalLoginTx(tx, {
+    id: newUuidV7(),
+    portalUserId: userId,
+    usernamePhone: phone,
+    passwordSetAt: now,
+  });
+
+  await tx.portalGrant.create({
+    data: {
+      id: newUuidV7(),
+      workspaceId: scope.workspaceId,
+      portalUserId: userId,
+      studentId: student.id,
+      guardianId: null,
+      kind: "student",
+      permissions: {},
+      issuedBy: scope.actorUserId,
+      issuedAt: now,
+    },
+  });
+
+  await writeAuditEvent(tx, {
+    workspaceId: scope.workspaceId,
+    actorUserId: scope.actorUserId,
+    actorDisplayName: scope.actorDisplayName,
+    actorType: "user",
+    entityType: "portal_credential",
+    entityId: userId,
+    action,
+    diff: { studentId: student.id },
+    requestId: ctx.requestId,
+    ipHash: ctx.ipHash,
+  });
+
+  return { username: phone, password };
+}
+
+/** Rotate the password on the existing credential and kill every session. */
+async function rotatePortalCredentialTx(
+  tx: DbTransactionClient,
+  scope: Scope,
+  existing: NonNullable<Awaited<ReturnType<typeof findAutoPortalGrantForStudentTx>>>,
+  ctx: CredentialAuditContext & { studentId: string },
+  action: "portal.credential.provisioned" | "portal.credential.regenerated",
+  now: Date,
+): Promise<CredentialResult> {
+  const password = generatePortalPassword();
+  const passwordHash = await hashPassword(password);
+
+  const updated = await updatePortalLoginPasswordTx(tx, {
+    portalUserId: existing.login.portalUserId,
+    passwordHash,
+    now,
+    status: "active",
+  });
+
+  if (!updated) {
+    throw new AppError("NOT_FOUND");
+  }
+
+  await deleteSessionsForUserTx(tx, existing.login.portalUserId);
+
+  await writeAuditEvent(tx, {
+    workspaceId: scope.workspaceId,
+    actorUserId: scope.actorUserId,
+    actorDisplayName: scope.actorDisplayName,
+    actorType: "user",
+    entityType: "portal_credential",
+    entityId: existing.login.portalUserId,
+    action,
+    diff: { studentId: ctx.studentId },
+    requestId: ctx.requestId,
+    ipHash: ctx.ipHash,
+  });
+
+  return { username: existing.login.usernamePhone, password };
+}
+
+/**
+ * Shared provisioning flow. When an unrevoked auto credential exists:
+ * `onExisting: "throw"` rejects with credentialAlreadyExists (the explicit
+ * create path), while `onExisting: "skip"` silently keeps it (the student
+ * creation path, where the plaintext password must not be revealed twice).
+ */
+async function provisionCredentialTx(
+  tx: DbTransactionClient,
+  scope: Scope,
+  student: CredentialStudent,
+  ctx: CredentialAuditContext,
+  now: Date,
+  onExisting: "throw" | "skip",
+): Promise<CredentialResult | null> {
+  const phone = student.phoneE164 ? normalizePortalPhone(student.phoneE164) : null;
+  if (!phone) return null;
+
+  const existing = await findAutoPortalGrantForStudentTx(tx, {
+    workspaceId: scope.workspaceId,
+    studentId: student.id,
+  });
+
+  if (existing && existing.grant.revokedAt === null) {
+    if (onExisting === "skip") {
+      return null;
+    }
+    throw new AppError("CONFLICT", {
+      messageKey: "errors.credentialAlreadyExists",
+    });
+  }
+
+  return createPortalCredentialTx(
+    tx,
+    scope,
+    student,
+    ctx,
+    "portal.credential.provisioned",
+    now,
+  );
+}
+
+/** Create the teacher-provisioned credential for one student on demand. */
+export async function provisionStudentPortalAccess(
+  scope: Scope,
+  studentId: string,
+  request?: RequestContext,
+  now: Date = new Date(),
+) {
+  authorize(scope, "portal_access", "write");
+  const ctx = resolveContext(request);
+
+  return withScope(scope, async (tx) => {
+    const student = await tx.student.findFirst({
+      where: { id: studentId, workspaceId: scope.workspaceId, archivedAt: null },
+      select: { id: true, phoneE164: true },
+    });
+    if (!student) {
+      throw new AppError("NOT_FOUND");
+    }
+
+    const result = await provisionCredentialTx(
+      tx,
+      scope,
+      student,
+      ctx,
+      now,
+      "throw",
+    );
+    if (!result) {
+      throw new AppError("VALIDATION_FAILED", {
+        messageKey: "students.portalCredentialPhoneRequired",
+      });
+    }
+    return result;
+  });
+}
+
+/** Create the credential during student creation, inside the same transaction. */
+export async function provisionStudentPortalAccessTx(
+  tx: DbTransactionClient,
+  scope: Scope,
+  studentId: string,
+  request?: RequestContext,
+  now: Date = new Date(),
+): Promise<CredentialResult | null> {
+  const ctx = resolveContext(request);
+
+  const student = await tx.student.findFirst({
+    where: { id: studentId, workspaceId: scope.workspaceId },
+    select: { id: true, phoneE164: true },
+  });
+  if (!student) {
+    throw new AppError("NOT_FOUND");
+  }
+
+  return provisionCredentialTx(tx, scope, student, ctx, now, "skip");
+}
+
+/**
+ * Keep the portal credential in sync with a student phone change, inside the
+ * caller's transaction. Changing the phone changes the sign-in identifier,
+ * so an assistant without `portal_access:write` may not make the change once
+ * a credential exists: the credential fails closed rather than silently
+ * pointing at a phone the student no longer has.
+ */
+export async function syncStudentPortalCredentialPhoneTx(
+  tx: DbTransactionClient,
+  scope: Scope,
+  studentId: string,
+  newPhone: string | null,
+  request?: RequestContext,
+  now: Date = new Date(),
+): Promise<void> {
+  const ctx = resolveContext(request);
+  const existing = await findAutoPortalGrantForStudentTx(tx, {
+    workspaceId: scope.workspaceId,
+    studentId,
+  });
+  if (!existing) return;
+
+  const previous = existing.login.usernamePhone;
+  if (newPhone === previous) return;
+
+  if (!isAllowed(scope, "portal_access", "write")) {
+    throw new AppError("FORBIDDEN", {
+      messageKey: "errors.portalPhoneUpdateNeedsPortalAccess",
+    });
+  }
+
+  if (newPhone) {
+    await updatePortalLoginPhoneTx(tx, {
+      portalUserId: existing.login.portalUserId,
+      phone: newPhone,
+      now,
+    });
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "portal_credential",
+      entityId: existing.login.portalUserId,
+      action: "portal.credential.phone_updated",
+      diff: { studentId },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+    return;
+  }
+
+  await setPortalLoginStatusTx(tx, {
+    portalUserId: existing.login.portalUserId,
+    status: "disabled",
+    now,
+  });
+  await deleteSessionsForUserTx(tx, existing.login.portalUserId);
+  await writeAuditEvent(tx, {
+    workspaceId: scope.workspaceId,
+    actorUserId: scope.actorUserId,
+    actorDisplayName: scope.actorDisplayName,
+    actorType: "user",
+    entityType: "portal_credential",
+    entityId: existing.login.portalUserId,
+    action: "portal.credential.disabled",
+    diff: { studentId, reason: "phone_removed" },
+    requestId: ctx.requestId,
+    ipHash: ctx.ipHash,
+  });
+}
+
+/**
+ * Read the credential state for the student profile card. Contains no secret:
+ * the password is never recoverable after creation, only the username, the
+ * status, and whether a credential exists.
+ */
+export async function getPortalCredentialState(
+  scope: Scope,
+  studentId: string,
+) {
+  authorize(scope, "portal_access", "read");
+
+  return withScope(scope, async (tx) => {
+    const student = await tx.student.findFirst({
+      where: { id: studentId, workspaceId: scope.workspaceId, archivedAt: null },
+      select: { id: true, phoneE164: true },
+    });
+    if (!student) {
+      throw new AppError("NOT_FOUND");
+    }
+
+    const existing = await findAutoPortalGrantForStudentTx(tx, {
+      workspaceId: scope.workspaceId,
+      studentId,
+    });
+
+    if (!existing) {
+      return {
+        canProvision: normalizePortalPhone(student.phoneE164) !== null,
+        credential: null as {
+          username: string;
+          status: "active" | "disabled" | "revoked";
+        } | null,
+      };
+    }
+
+    return {
+      canProvision: false,
+      credential: {
+        username: existing.login.usernamePhone,
+        status:
+          existing.grant.revokedAt !== null
+            ? ("revoked" as const)
+            : existing.login.status,
+      },
+    };
+  });
+}
+
+/** Regenerate the student's password; the old password stops working immediately. */
+export async function regenerateStudentPortalCredential(
+  scope: Scope,
+  studentId: string,
+  request?: RequestContext,
+  now: Date = new Date(),
+) {
+  authorize(scope, "portal_access", "write");
+  const ctx = resolveContext(request);
+
+  return withScope(scope, async (tx) => {
+    const student = await tx.student.findFirst({
+      where: { id: studentId, workspaceId: scope.workspaceId, archivedAt: null },
+      select: { id: true, phoneE164: true },
+    });
+    if (!student) {
+      throw new AppError("NOT_FOUND");
+    }
+
+    const grant = await findAutoPortalGrantForStudentTx(tx, {
+      workspaceId: scope.workspaceId,
+      studentId,
+    });
+
+    if (grant && grant.grant.revokedAt === null) {
+      return rotatePortalCredentialTx(
+        tx,
+        scope,
+        grant,
+        { ...ctx, studentId },
+        "portal.credential.regenerated",
+        now,
+      );
+    }
+
+    const phone = student.phoneE164 ? normalizePortalPhone(student.phoneE164) : null;
+    if (!phone) {
+      throw new AppError("VALIDATION_FAILED", {
+        messageKey: "students.portalCredentialPhoneRequired",
+      });
+    }
+
+    const result = await createPortalCredentialTx(
+      tx,
+      scope,
+      { id: student.id, phoneE164: phone },
+      ctx,
+      "portal.credential.regenerated",
+      now,
+    );
+    if (!result) {
+      throw new AppError("VALIDATION_FAILED", {
+        messageKey: "students.portalCredentialPhoneRequired",
+      });
+    }
+    return result;
+  });
+}
+
+/** Enable or disable the student's sign-in account. Disabling kills sessions. */
+export async function setStudentPortalAccessStatus(
+  scope: Scope,
+  studentId: string,
+  enabled: boolean,
+  request?: RequestContext,
+  now: Date = new Date(),
+) {
+  authorize(scope, "portal_access", "write");
+  const ctx = resolveContext(request);
+
+  return withScope(scope, async (tx) => {
+    const grant = await findAutoPortalGrantForStudentTx(tx, {
+      workspaceId: scope.workspaceId,
+      studentId,
+    });
+
+    if (!grant) {
+      throw new AppError("NOT_FOUND");
+    }
+
+    if (!enabled) {
+      await setPortalLoginStatusTx(tx, {
+        portalUserId: grant.login.portalUserId,
+        status: "disabled",
+        now,
+      });
+      await deleteSessionsForUserTx(tx, grant.login.portalUserId);
+    } else {
+      if (grant.grant.revokedAt !== null) {
+        throw new AppError("CONFLICT", {
+          messageKey: "errors.portalGrantRevoked",
+        });
+      }
+      await setPortalLoginStatusTx(tx, {
+        portalUserId: grant.login.portalUserId,
+        status: "active",
+        now,
+      });
+    }
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "portal_credential",
+      entityId: grant.login.portalUserId,
+      action: enabled ? "portal.credential.enabled" : "portal.credential.disabled",
+      diff: { studentId, enabled },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return { id: grant.grant.id, status: enabled ? "active" : "disabled" };
+  });
+}
+
+/** Verify credentials and resolve the matching account for `/portal` sign-in. */
+export async function resolveStudentPortalSignIn(
+  input: { phone: string; password: string },
+  request?: RequestContext,
+  now: Date = new Date(),
+) {
+  const ctx = resolveContext(request);
+  const lockoutContext = {
+    requestId: ctx.requestId,
+    ipHash: ctx.ipHash,
+    userAgentHash: null as string | null,
+  };
+  const normalizedPhone = normalizePortalPhone(input.phone);
+  if (!normalizedPhone) {
+    await recordPortalSignInFailure(input.phone, lockoutContext, now);
+    throw new AppError("VALIDATION_FAILED", {
+      messageKey: "auth.errors.invalidCredentials",
+    });
+  }
+
+  if (await isPortalPhoneLocked(normalizedPhone, now)) {
+    throw new AppError("RATE_LIMITED", {
+      messageKey: "auth.errors.rateLimited",
+    });
+  }
+
+  const candidates = await findPortalLoginCandidates(normalizedPhone, 20);
+  for (const candidate of candidates) {
+    for (const account of candidate.portalUser.accounts ?? []) {
+      if (!account?.password) continue;
+      const ok = await verifyPassword({ hash: account.password, password: input.password });
+      if (!ok) continue;
+
+      if (candidate.status !== "active") {
+        await recordPortalSignInFailure(normalizedPhone, lockoutContext, now);
+        throw new AppError("FORBIDDEN", {
+          messageKey: "errors.portalAccessDisabled",
+        });
+      }
+
+      const grants = await findActivePortalGrants(candidate.portalUserId, now);
+      const hasStudentGrant = grants.some((grant) => grant.kind === "student");
+      if (!hasStudentGrant) {
+        await recordPortalSignInFailure(normalizedPhone, lockoutContext, now);
+        throw new AppError("FORBIDDEN", {
+          messageKey: "errors.notLinked",
+        });
+      }
+
+      return {
+        userId: candidate.portalUserId,
+        email: candidate.portalUser.email,
+        phone: normalizedPhone,
+      };
+    }
+  }
+
+  await recordPortalSignInFailure(normalizedPhone, lockoutContext, now);
+  throw new AppError("VALIDATION_FAILED", {
+    messageKey: "auth.errors.invalidCredentials",
+  });
 }
 
 export async function getStudentPortalAccess(

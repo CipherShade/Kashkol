@@ -76,6 +76,7 @@ enum PermissionResource {
   team
   audit
   forms
+  portal_access
 
   @@map("permission_resource")
 }
@@ -109,6 +110,18 @@ enum PortalKind {
   student
 
   @@map("portal_kind")
+}
+
+/// The state of a teacher-provisioned student sign-in account.
+///
+/// A student account is disabled when the teacher turns portal access off, when
+/// the grant is revoked, or when the student's phone number is removed. A
+/// disabled account cannot sign in even if a session cookie is still present.
+enum PortalLoginStatus {
+  active
+  disabled
+
+  @@map("portal_login_status")
 }
 
 enum SessionStatus {
@@ -445,6 +458,7 @@ model User {
   memberships  WorkspaceMember[]
   auditEvents  AuditEvent[]
   portalGrants PortalGrant[]
+  portalLogin  PortalLogin?
   portalPushSubscriptions PortalPushSubscription[]
   platformAdmin PlatformAdmin?
 
@@ -887,6 +901,34 @@ model PortalGrant {
   @@index([workspaceId])
   @@index([portalUserId])
   @@map("portal_grant")
+}
+
+/// Teacher-provisioned student sign-in identity.
+///
+/// This table is deliberately *not* tenant-scoped. Sign-in happens before a
+/// workspace is known, so the phone number must be resolvable without a tenant
+/// GUC. It stores no workspace id, no student id, and no permission. The
+/// tenant link lives in `portal_grant`; the password lives in Better Auth's
+/// `account` table, hashed. Student QR codes are attendance identification only
+/// and never touch this table (ADR-0027): the password is always required.
+///
+/// A phone number is not globally unique. Several students (siblings, or the
+/// same person in two teachers' workspaces) may share one. Sign-in therefore
+/// resolves the candidate accounts and verifies the supplied password against
+/// each; the password is what selects the account.
+model PortalLogin {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  portalUserId  String            @unique @map("portal_user_id")
+  usernamePhone String            @map("username_phone")
+  status        PortalLoginStatus @default(active)
+  passwordSetAt DateTime          @map("password_set_at") @db.Timestamptz(6)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  portalUser User @relation(fields: [portalUserId], references: [id], onDelete: Cascade)
+
+  @@index([usernamePhone])
+  @@map("portal_login")
 }
 
 model PortalInvitation {

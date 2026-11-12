@@ -4,6 +4,12 @@ export type FormActionState = {
   errorKey?: string;
   noticeKey?: string;
   fieldErrors?: Record<string, string[]>;
+  /**
+   * A one-time secret handed to the actor exactly once: a teacher-generated
+   * portal password. It is never persisted in the client, never re-served,
+   * and never logged. Absent on every other action.
+   */
+  oneTimeCredential?: { username: string; password: string };
 };
 
 export const initialFormState: FormActionState = { status: "idle" };

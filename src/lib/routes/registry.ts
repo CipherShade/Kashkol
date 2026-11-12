@@ -505,6 +505,30 @@ export const ROUTES: RouteEntry[] = [
       "List active portal grants and pending invitations for a student, or issue a verified single-use portal invitation link.",
   },
   {
+    path: "/api/students/[studentId]/portal-access/credential",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Read the teacher-generated student credential state (username, status), or provision a new one. The plaintext password is returned once, only to portal_access:write holders.",
+  },
+  {
+    path: "/api/students/[studentId]/portal-access/credential/regenerate",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Regenerate the student portal password. The old password stops working immediately and every active session for the account is invalidated.",
+  },
+  {
+    path: "/api/students/[studentId]/portal-access/credential/status",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "Enable or disable the student portal sign-in account. Disabling invalidates every active session.",
+  },
+  {
     path: "/api/students/[studentId]/portal-access/invitations/[invitationId]/revoke",
     methods: ["POST"],
     access: "workspace",

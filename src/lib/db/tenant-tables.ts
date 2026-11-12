@@ -73,11 +73,19 @@ export const TENANT_ROOT_TABLE = "workspace" as const;
 
 export const RLS_TABLES = [TENANT_ROOT_TABLE, ...TENANT_TABLES] as const;
 
-/** Tables Better Auth owns; they are global by design, not tenant-scoped. */
+/**
+ * Identity tables that are global by design, not tenant-scoped.
+ *
+ * Better Auth owns `user`, `session`, `account`, `verification`, and
+ * `rate_limit`. `portal_login` is Kashkol's student sign-in identity: it is
+ * reachable before a workspace is known, so it stores no workspace or student
+ * id and must never be queried by a tenant route.
+ */
 export const IDENTITY_TABLES = [
   "user",
   "session",
   "account",
   "verification",
   "rate_limit",
+  "portal_login",
 ] as const;

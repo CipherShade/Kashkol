@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { assertTrustedOrigin } from "@/lib/http/csrf";
 import { errorResponse } from "@/lib/http/errors";
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
+import { assertRateLimit, getClientIp } from "@/lib/http/rate-limit";
 import { getServerEnv } from "@/lib/config/env";
 import { requireStaffSession } from "@/modules/identity/session";
 import { scanStudentQrSchema, fieldErrorsFrom } from "@/modules/attendance/schemas";
@@ -15,13 +16,17 @@ function requestIdFrom(request: Request): string {
 }
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const requestId = requestIdFrom(request);
   try {
     const env = getServerEnv();
     assertTrustedOrigin(await headers(), env.BETTER_AUTH_URL);
+
+    // Scanning is a staff-camera action; rate-limit per client IP so a
+    // device cannot brute-force or flood scans.
+    assertRateLimit(`attendance:scan:${getClientIp(request)}`, 10, 60_000);
 
     const { scope } = await requireStaffSession();
     const { sessionId } = await params;

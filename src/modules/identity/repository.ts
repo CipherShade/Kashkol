@@ -182,6 +182,25 @@ export async function findActivePortalGrants(userId: string, now: Date): Promise
   );
 }
 
+/**
+ * The teacher-provisioned sign-in identity for a portal user, if one exists.
+ *
+ * Invited parent/student accounts have no row here; they authenticate with
+ * their own verified email. A disabled row must block the portal even while a
+ * session cookie is still valid.
+ */
+export async function findPortalLoginByUserId(userId: string) {
+  return getDb().portalLogin.findUnique({
+    where: { portalUserId: userId },
+    select: {
+      portalUserId: true,
+      usernamePhone: true,
+      status: true,
+      passwordSetAt: true,
+    },
+  });
+}
+
 export async function findStudentInWorkspace(workspaceId: string, studentId: string) {
   return withScope({ workspaceId }, (tx) =>
     tx.student.findFirst({

@@ -5,6 +5,8 @@ import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
+import { provisionStudentPortalAccessTx, syncStudentPortalCredentialPhoneTx } from "@/modules/portals/service";
+import { createStudentQrForTx } from "@/modules/attendance/student-qr";
 import {
   parseSpreadsheetBuffer,
   generateExportBuffer,
@@ -145,7 +147,18 @@ export async function createStudent(
       ipHash: ctx.ipHash,
     });
 
-    return { duplicateWarning: false as const, student };
+    await createStudentQrForTx(tx, scope, studentId, ctx);
+
+    // The generated password is returned to the creator exactly once. Only
+    // members who may manage portal access see it; an assistant without the
+    // grant creates the student without a credential, which the teacher can
+    // provision later from the student record.
+    let portalCredential: { username: string; password: string } | null = null;
+    if (isAllowed(scope, "portal_access", "write")) {
+      portalCredential = await provisionStudentPortalAccessTx(tx, scope, studentId, ctx);
+    }
+
+    return { duplicateWarning: false as const, student, portalCredential };
   });
 }
 
@@ -192,6 +205,14 @@ export async function updateStudent(
       parentName: input.parentName,
       parentPhoneE164: input.parentPhone,
     });
+
+    const previousPhone = existing.phoneE164 ?? null;
+    if (input.phone !== undefined) {
+      const nextPhone = input.phone ?? null;
+      if (previousPhone !== nextPhone) {
+        await syncStudentPortalCredentialPhoneTx(tx, scope, input.id, nextPhone, ctx);
+      }
+    }
 
     if (input.groupIds !== undefined) {
       await syncStudentEnrollmentsTx(tx, scope, input.id, input.groupIds);

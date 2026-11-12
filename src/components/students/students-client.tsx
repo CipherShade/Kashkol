@@ -20,6 +20,7 @@ import {
 } from "@/app/actions/students";
 import type { StudentListItem, StudentDerivedStatus } from "@/modules/students/repository";
 import type { ImportPreviewResult } from "@/modules/students/adapters/spreadsheet";
+import { PortalCredentialReveal, type OneTimeCredential } from "./portal-credential-reveal";
 
 type GroupOption = {
   id: string;
@@ -87,6 +88,8 @@ export function StudentsClient({
   // Duplicate Warning state for Add/Edit
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [addFormPending, setAddFormPending] = useState(false);
+  // The teacher-generated password is shown once, right after creation.
+  const [oneTimeCredential, setOneTimeCredential] = useState<OneTimeCredential | null>(null);
 
   // Import flow state
   const [importStep, setImportStep] = useState<"upload" | "preview" | "done">("upload");
@@ -164,7 +167,11 @@ export function StudentsClient({
       }
     } else {
       setAddModalOpen(false);
-      setStatusMessage({ text: labels.createdSuccess ?? "Student created successfully.", tone: "success" });
+      if (result.oneTimeCredential) {
+        setOneTimeCredential(result.oneTimeCredential);
+      } else {
+        setStatusMessage({ text: labels.createdSuccess ?? "Student created successfully.", tone: "success" });
+      }
       startTransition(() => router.refresh());
     }
   }
@@ -1323,6 +1330,11 @@ export function StudentsClient({
           </div>
         </div>
       </Dialog>
+
+      <PortalCredentialReveal
+        credential={oneTimeCredential}
+        onClose={() => setOneTimeCredential(null)}
+      />
     </div>
   );
 }

@@ -38,12 +38,14 @@ const STUDENT_PROFILE_TABS = [
   "payments",
   "notes",
   "portal",
-  "qr",
 ] as const;
 type StudentProfileTabId = (typeof STUDENT_PROFILE_TABS)[number];
 
 function parseTabParam(value: string | string[] | undefined): StudentProfileTabId {
   const raw = Array.isArray(value) ? value[0] : value;
+  // The attendance QR moved into the Portal Access section; keep old deep
+  // links (`?tab=qr`) working by landing on that tab.
+  if (raw === "qr") return "portal";
   return (STUDENT_PROFILE_TABS as readonly string[]).includes(raw ?? "")
     ? (raw as StudentProfileTabId)
     : "overview";

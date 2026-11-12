@@ -92,6 +92,8 @@ erDiagram
     WORKSPACE ||--o{ JOB : runs
     WORKSPACE ||--o{ PORTAL_GRANT : issues
     PORTAL_GRANT }o--|| STUDENT : links
+    USER ||--o| PORTAL_LOGIN : authenticates
+    PORTAL_LOGIN ||--o| PORTAL_GRANT : links
     WORKSPACE ||--o{ ATTENDANCE_TOKEN : mints
     WORKSPACE ||--o{ ONBOARDING_TASK : tracks
     WORKSPACE ||--o{ DELETION_REQUEST : schedules
@@ -617,6 +619,23 @@ nullable `guardian_id` (composite FK to `student_guardian`), `kind` (`parent` / 
 Accepting an invitation verifies that the signed-in user's verified email matches `invited_email`
 and atomically creates/updates the `portal_grant` row in the same transaction.
 
+#### `portal_login` (M2, teacher-generated credentials)
+
+Global identity table, **not** tenant-scoped and deliberately without RLS: sign-in resolves the
+account by phone before any workspace is known. `portal_user_id` (a Better Auth `user` row whose
+synthetic email is `student-<id>@students.kashkol.invalid`, always `email_verified = true`),
+`username_phone` (E.164-normalised; **not** unique — a phone may name one credential per workspace),
+`status` (`active` / `disabled`), `password_set_at`, `created_at`, `updated_at`. The paired Better Auth
+`account` row (`provider_id = 'credential'`, `account_id = user.id`) stores the password as a scrypt hash;
+the plaintext is returned once, in the issuing request only. A `portal_login` row is created only inside
+the same transaction as a `portal_grant` (`kind = 'student'`) for that workspace, so the tenant link and
+the credential can never exist without each other. Disabling the login flips `status` to `disabled`,
+deletes the credential's sessions, and invalidates any active sessions; re-enabling restores `active`
+but never revives a revoked grant. Audit events `portal.credential.*` are written in the same
+transaction. The `portal_access` permission resource (`read` / `write`) gates every credential view and
+mutation; assistants receive no grant by default. Migration header note: `20261112000000_student_portal_credentials`
+cites `F-P3-01` by mistake — the feature serves `F-P2-03` / `F18`.
+
 #### `portal_push_subscription` (M2)
 
 `workspace_id`, `user_id`, `portal_kind` (`parent` / `student`), `endpoint`, `p256dh_key`,
@@ -830,6 +849,7 @@ students, and the balance includes all applicable fee rules for those students.
 | `outbox_event` | `(state, run_at)` | Worker poll |
 | `message_draft` | `(workspace_id, created_at desc)` | Prepared-messages list |
 | `portal_grant` | `(workspace_id, student_id, kind, revoked_at)`, `(portal_user_id, revoked_at)` | Active portal links per student and per portal user |
+| `portal_login` | `portal_user_id` unique, `(username_phone)` | Sign-in candidate lookup by phone (bounded scan; password disambiguates) |
 | `portal_invitation` | `token_hash` unique, `(workspace_id, student_id, kind)`, `(workspace_id, invited_email)` | Single-use token lookup and student portal-access listing |
 | `portal_push_subscription` | `(workspace_id, user_id, endpoint)` unique, `(workspace_id, user_id, revoked_at)` | Active Web Push device subscriptions per portal user |
 
@@ -900,7 +920,7 @@ exist before any data is written.
 same migration** (`ARCHITECTURE.md` §19 rule 5). Migration 14 exists for tables whose policies
 depend on later tables only as a safety net; it must be empty if rule 5 was followed.
 
-**Implemented migrations (through 2026-11-10).** The repository currently applies the sequence in a
+**Implemented migrations (through 2026-11-11).** The repository currently applies the sequence in a
 consolidated form rather than one directory per row above:
 
 | Migration | Contents |
@@ -933,11 +953,13 @@ consolidated form rather than one directory per row above:
 | `20261108000001_attendance_payment_verification` | Adds `payment_verified` boolean to `attendance_mark` |
 | `20261108000002_cross_season_attendance` | Adds `is_cross_season` boolean and `primary_group_id` foreign key to `attendance_mark` |
 | `20261108000003_student_qr_identity` | Adds `qr_token_hash` persistent identity token hash to `student` |
+| `20261112000000_student_portal_credentials` | Adds `portal_login_status` enum, the global `portal_login` identity table, the `portal_access` permission resource, and application-role grants; no tenant link is stored on it (`F-P2-03` / `F18`) |
+| `20261113000000_drop_portal_login_qr` | Drops `portal_login.qr_token_hash` and `portal_login.qr_token_expires_at`; the portal-sign-in prefill QR is removed (`ADR-0027`) |
 | `20261108000004_homework_completion_marks` | Adds `homework_completion_status` enum and `homework_completion_mark` table with forced RLS and tenant indexes |
 | `20261110000000_worker_workspace_enumeration` | Adds `list_active_workspace_ids_for_worker()` (`SECURITY DEFINER`, `STABLE`) returning the ids of active non-deleted workspaces only, never any other tenant field; `GRANT EXECUTE` to `kashkol_app` only (`ADR-0024`) |
 | `20261111000000_expired_online_exam_attempt_status` | Adds `expired` to the `online_exam_attempt_status` enum (`F-P3-01`) |
 
-The current local development database tracks all thirty-one migrations above (`prisma migrate status`). `student` and
+The current local development database tracks all thirty-three migrations above (`prisma migrate status`). `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

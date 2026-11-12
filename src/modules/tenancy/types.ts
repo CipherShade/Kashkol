@@ -2,6 +2,7 @@ import { AppError } from "@/lib/http/errors";
 
 export const PERMISSION_RESOURCES = [
   "students",
+  "portal_access",
   "grades",
   "groups",
   "sessions",
@@ -25,6 +26,7 @@ export type MemberRole = "owner" | "assistant";
 
 export const GRANTABLE_ACTIONS: Record<PermissionResource, readonly PermissionAction[]> = {
   students: ["read", "write"],
+  portal_access: ["read", "write"],
   grades: ["read", "write"],
   groups: ["read", "write"],
   sessions: ["read", "write"],
@@ -51,6 +53,8 @@ export const GRANTABLE_ACTIONS: Record<PermissionResource, readonly PermissionAc
 export const SENSITIVE_PERMISSIONS: ReadonlySet<Permission> = new Set([
   "students:read",
   "students:write",
+  "portal_access:read",
+  "portal_access:write",
   "grades:read",
   "grades:write",
   "sessions:read",

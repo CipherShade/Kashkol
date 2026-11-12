@@ -47,6 +47,8 @@ Every ADR uses the same sections:
 | [0022](0022-forms-visual-builder.md) | Forms visual builder supersedes revision deferral | Accepted (approved 2026-11-04) | M4 / extension |
 | [0023](0023-interface-visual-refresh.md) | Interface visual refresh — the Kashkol canvas | Accepted (approved 2026-11-08) | M0–M3 |
 | [0024](0024-worker-cross-workspace-enumeration.md) | Worker workspace enumeration via a `SECURITY DEFINER` function | Accepted | M0–M3 |
+| [0026](0026-student-portal-credentials.md) | Teacher-generated student portal credentials | Accepted (partially superseded by ADR-0027) | M2 |
+| [0027](0027-student-qr-attendance-only.md) | Student QR codes are attendance identification only | Accepted | M2 |
 
 ## Conventions
 
@@ -93,3 +95,5 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0022 | `F-P3-09`, `F-P3-12`, `NF-1`, `NF-12` |
 | 0023 | `F-P0-04`, `F-P0-05`, `F-P1-01`, `F-P1-02`, `F-P1-15`, `NF-10`, `DEF-13` |
 | 0024 | `F-P2-07`, `F-P2-10`, `R-01`, `NF-9` |
+| 0026 | `F-P2-03`, `R-01`, `R-06`, `NF-1`, `NF-9`, `A-18`, `A-19`, `A-20`, `OQ-03`, `OQ-21` |
+| 0027 | `F-P2-03`, `F-P2-05`, `R-01`, `R-06`, `NF-1`, `NF-9`, `A-21`, `OQ-22` |

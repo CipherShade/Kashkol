@@ -12,6 +12,33 @@ export const portalPermissionsSchema = z.object({
 
 export type PortalPermissions = z.infer<typeof portalPermissionsSchema>;
 
+/**
+ * Student sign-in with the phone number as the username.
+ *
+ * The phone is normalised by the service; an invalid value is rejected with
+ * the same generic error as a wrong password, so the form cannot be used to
+ * probe which phone numbers have accounts.
+ */
+export const portalSignInSchema = z
+  .object({
+    phone: z.string().trim().min(1).max(30),
+    password: z.string().min(1).max(128),
+  })
+  .strict();
+
+export type PortalSignInInput = z.infer<typeof portalSignInSchema>;
+
+export const setPortalAccessStatusSchema = z
+  .object({
+    enabled: z.boolean(),
+  })
+  .strict();
+
+export type SetPortalAccessStatusInput = z.infer<typeof setPortalAccessStatusSchema>;
+
+export const provisionPortalAccessSchema = z.object({}).strict();
+
+
 export const issuePortalInvitationSchema = z
   .object({
     studentId: z.uuid(),

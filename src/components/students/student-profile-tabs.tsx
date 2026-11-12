@@ -11,7 +11,6 @@ import { FormField, Textarea } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
 import { Link } from "@/i18n/navigation";
 import { StudentPortalAccessPanel } from "./student-portal-access-panel";
-import { StudentQrTab } from "./student-qr-tab";
 
 type StudentData = {
   id: string;
@@ -92,8 +91,7 @@ type StudentProfileTabId =
   | "homework"
   | "payments"
   | "notes"
-  | "portal"
-  | "qr";
+  | "portal";
 
 export function StudentProfileTabs({
   student,
@@ -236,18 +234,6 @@ export function StudentProfileTabs({
           }`}
         >
           {isAr ? "بوابة الطالب وولي الأمر" : "Portal Access"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("qr")}
-          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === "qr"
-              ? "border-indigo-600 text-indigo-600 font-semibold"
-              : "border-transparent text-muted hover:text-foreground"
-          }`}
-        >
-          {isAr ? "بطاقة الحضور QR" : "QR Card"}
         </button>
       </div>
 
@@ -620,12 +606,7 @@ export function StudentProfileTabs({
 
       {/* PORTAL ACCESS TAB */}
       {activeTab === "portal" && (
-        <StudentPortalAccessPanel studentId={student.id} locale={locale} />
-      )}
-
-      {/* QR ATTENDANCE TAB */}
-      {activeTab === "qr" && (
-        <StudentQrTab
+        <StudentPortalAccessPanel
           studentId={student.id}
           studentName={`${student.firstName} ${student.lastName}`.trim()}
           grade={student.grade}

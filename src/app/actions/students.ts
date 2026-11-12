@@ -81,7 +81,14 @@ export async function createStudentAction(
     revalidatePath("/[locale]/app/groups", "page");
     revalidatePath("/[locale]/app", "page");
 
-    return noticeState("students.createdSuccess");
+    // The plaintext password travels once, in this response, to the teacher
+    // who just created the student. Nothing stores it.
+    return {
+      ...noticeState("students.createdSuccess"),
+      ...(result.portalCredential
+        ? { oneTimeCredential: result.portalCredential }
+        : {}),
+    };
   } catch (error) {
     if (error instanceof AppError) {
       return errorState(error.messageKey);

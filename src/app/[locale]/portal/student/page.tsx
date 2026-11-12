@@ -37,7 +37,7 @@ export default async function StudentPortalPage({
     portal = await requireStudentPortalContext();
   } catch (error) {
     if (error instanceof AppError && error.code === "UNAUTHORIZED") {
-      return redirect({ href: "/sign-in", locale });
+      return redirect({ href: "/portal", locale });
     }
     return redirect({ href: "/not-available", locale });
   }

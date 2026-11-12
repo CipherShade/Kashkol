@@ -463,7 +463,8 @@
       "settings": "Workspace settings",
       "team": "Team",
       "audit": "Audit history",
-      "forms": "Forms and surveys"
+      "forms": "Forms and surveys",
+      "portal_access": "Student portal credentials"
     },
     "errors": {
       "requestFailed": "The request could not be completed. Check your access and try again.",
@@ -1557,7 +1558,11 @@
     "formOptionInvalid": "An answer selected an option that does not belong to the question.",
     "formFileInvalid": "An uploaded file is missing or does not belong to this workspace.",
     "formLogicInvalid": "A conditional rule refers to a question or section outside this form.",
-    "formModifiedByAnotherUser": "This form was changed by another user. Reload the page before saving."
+    "formModifiedByAnotherUser": "This form was changed by another user. Reload the page before saving.",
+    "portalAccessDisabled": "This student's portal access is disabled.",
+    "credentialAlreadyExists": "A portal credential already exists for this student.",
+    "portalGrantRevoked": "The portal grant for this student was revoked.",
+    "portalPhoneUpdateNeedsPortalAccess": "Only someone who manages portal access can change this student's phone number."
   },
   "Sessions": {
     "eyebrow": "Sessions",
@@ -1967,7 +1972,37 @@
         "expired": "Expired"
       },
       "expiresAtLabel": "Expires",
-      "revokeInviteAction": "Revoke"
+      "revokeInviteAction": "Revoke",
+      "credentialTitle": "Student portal credentials",
+      "credentialSubtitle": "The student signs in at /portal with their phone number and this password. The password is shown only once, right after it is created or regenerated.",
+      "credentialNone": "No login yet. A login is created automatically with the phone number when the student is created, or you can create one here.",
+      "usernameLabel": "Username",
+      "credentialStatusLabel": "Account status",
+      "credentialStatusActive": "Active",
+      "credentialStatusDisabled": "Disabled",
+      "credentialStatusRevoked": "Revoked",
+      "provisionAction": "Create login",
+      "regenerateAction": "Regenerate password",
+      "enableAction": "Enable access",
+      "disableAction": "Disable access",
+      "disableConfirm": "Disable this student login? They will not be able to sign in until you enable it again.",
+      "credentialError": "Something went wrong. Please try again.",
+      "phoneMissingNotice": "This student has no phone number on file, so no login can be created. Add a phone number first.",
+      "credentialReadyTitle": "Save these now — shown only once",
+      "credentialReadyWarning": "This password is shown once and is never stored in readable form. Store it safely and give it to the student. If it is lost, regenerate it.",
+      "passwordLabel": "Password",
+      "credentialCopyPassword": "Copy password",
+      "credentialCopyUsername": "Copy username"
+    },
+    "signIn": {
+      "metaTitle": "Kashkol — Student portal",
+      "title": "Student sign-in",
+      "subtitle": "Sign in with the phone number your teacher recorded and the password your teacher gave you.",
+      "phoneLabel": "Phone number",
+      "phoneHint": "The number your teacher recorded, e.g. +2010 12345678",
+      "passwordLabel": "Password",
+      "passwordHint": "Provided by your teacher (e.g. KSH-AB12-CD34)",
+      "signInAction": "Sign in"
     }
   },
   "PlatformAdmin": {
@@ -2308,5 +2343,8 @@
       "archive": "The form was archived.",
       "duplicate": "The form was duplicated."
     }
+  },
+  "students": {
+    "portalCredentialPhoneRequired": "This student has no phone number, so a credential cannot be created."
   }
 }

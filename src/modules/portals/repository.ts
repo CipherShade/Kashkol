@@ -1,4 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
+import { getDb } from "@/lib/db/client";
 import { withPortalInvitationScope, withScope } from "@/lib/db/scope";
 import { newUuidV7 } from "@/lib/id";
 import type { PortalGrantRow } from "@/modules/identity/repository";
@@ -432,8 +433,185 @@ export async function revokePortalGrantTx(
     data: { revokedAt: input.now },
   });
 
+  // A teacher-provisioned student credential is invalidated with the grant:
+  // the account is disabled immediately.
+  if (existing.kind === "student") {
+    await tx.portalLogin.updateMany({
+      where: { portalUserId: existing.portalUserId },
+      data: {
+        status: "disabled",
+        updatedAt: input.now,
+      },
+    });
+  }
+
   return updated;
 }
+
+/** The candidate sign-in identities for one normalised phone number. */
+export async function findPortalLoginCandidates(phone: string, limit = 20) {
+  return getDb().portalLogin.findMany({
+    where: { usernamePhone: phone },
+    select: {
+      portalUserId: true,
+      status: true,
+      portalUser: {
+        select: {
+          email: true,
+          accounts: {
+            where: { providerId: "credential" },
+            select: { accountId: true, password: true },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  });
+}
+
+export async function findPortalGrantWithLoginTx(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; studentId: string; grantId: string },
+) {
+  const grant = await tx.portalGrant.findFirst({
+    where: {
+      id: input.grantId,
+      workspaceId: input.workspaceId,
+      studentId: input.studentId,
+      kind: "student",
+    },
+    select: {
+      id: true,
+      portalUserId: true,
+      revokedAt: true,
+      expiresAt: true,
+      portalUser: { select: { id: true, name: true, email: true } },
+    },
+  });
+  if (!grant) return null;
+
+  const login = await tx.portalLogin.findUnique({
+    where: { portalUserId: grant.portalUserId },
+    select: {
+      portalUserId: true,
+      usernamePhone: true,
+      status: true,
+      passwordSetAt: true,
+    },
+  });
+
+  return { grant, login };
+}
+
+export async function findAutoPortalGrantForStudentTx(
+  tx: Prisma.TransactionClient,
+  input: { workspaceId: string; studentId: string },
+) {
+  const grants = await tx.portalGrant.findMany({
+    where: {
+      workspaceId: input.workspaceId,
+      studentId: input.studentId,
+      kind: "student",
+    },
+    select: { id: true, portalUserId: true, revokedAt: true },
+    orderBy: { issuedAt: "asc" },
+  });
+  if (grants.length === 0) return null;
+
+  const login = await tx.portalLogin.findFirst({
+    where: { portalUserId: { in: grants.map((grant) => grant.portalUserId) } },
+    select: { portalUserId: true, usernamePhone: true, status: true },
+  });
+  if (!login) return null;
+  const grant = grants.find((candidate) => candidate.portalUserId === login.portalUserId);
+  return grant ? { grant, login } : null;
+}
+
+export async function insertPortalLoginTx(
+  tx: Prisma.TransactionClient,
+  data: {
+    id: string;
+    portalUserId: string;
+    usernamePhone: string;
+    passwordSetAt: Date;
+  },
+) {
+  return tx.portalLogin.create({
+    data: {
+      id: data.id,
+      portalUserId: data.portalUserId,
+      usernamePhone: data.usernamePhone,
+      status: "active",
+      passwordSetAt: data.passwordSetAt,
+    },
+    select: { portalUserId: true, usernamePhone: true, status: true },
+  });
+}
+
+export async function updatePortalLoginPasswordTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    portalUserId: string;
+    passwordHash: string;
+    now: Date;
+    status?: "active" | "disabled";
+  },
+) {
+  const account = await tx.account.updateMany({
+    where: {
+      userId: input.portalUserId,
+      providerId: "credential",
+      accountId: input.portalUserId,
+    },
+    data: { password: input.passwordHash, updatedAt: input.now },
+  });
+  if (account.count !== 1) return null;
+
+  return tx.portalLogin.update({
+    where: { portalUserId: input.portalUserId },
+    data: {
+      passwordSetAt: input.now,
+      status: input.status,
+      updatedAt: input.now,
+    },
+    select: { portalUserId: true, status: true, passwordSetAt: true },
+  });
+}
+
+export async function setPortalLoginStatusTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    portalUserId: string;
+    status: "active" | "disabled";
+    now: Date;
+  },
+) {
+  return tx.portalLogin.update({
+    where: { portalUserId: input.portalUserId },
+    data: {
+      status: input.status,
+      updatedAt: input.now,
+    },
+    select: { portalUserId: true, status: true },
+  });
+}
+
+export async function updatePortalLoginPhoneTx(
+  tx: Prisma.TransactionClient,
+  input: { portalUserId: string; phone: string | null; now: Date },
+) {
+  return tx.portalLogin.update({
+    where: { portalUserId: input.portalUserId },
+    data: {
+      ...(input.phone ? { usernamePhone: input.phone } : { status: "disabled" }),
+      updatedAt: input.now,
+    },
+    select: { portalUserId: true, status: true },
+  });
+}
+
+
 
 function formatTimeUtc(value: Date | null): string | null {
   if (!value) return null;

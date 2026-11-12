@@ -200,6 +200,39 @@ Parent and student sessions are separate session kinds from staff sessions.
 An SMS provider is **not** required for M2 to ship (`RELEASE_PLAN.md` §9): the emailed-link path is
 the default and the OTP path is an optional upgrade.
 
+### 3.5 Student portal credentials (teacher-generated) — M2
+
+Teacher-provisioned credentials let a student sign in at `/{locale}/portal` with their phone number
+and a code the teacher generated. This replaces nothing: the invitation-link flow (`OQ-09`) is the
+parent default and stays unchanged.
+
+| Aspect | Control |
+|---|---|
+| Username | The student's phone number normalised to E.164 (`normalizePortalPhone`, Arabic-Indic digit aware). Two students **in one workspace** cannot share a phone (partial unique index `student_workspace_phone_unique`); the same phone across workspaces resolves each credential by password. |
+| Password | `KSH-XXXX-XXXX` — 8 ambiguous-glyph-free characters from `[2-9A-HJKMNPQRSTUVWXYZ]`, drawn with `crypto.randomBytes`. Unguessable from the profile; unknown to the student until the teacher reads it out. |
+| Storage | Better Auth `credential` `account` (synthetic, non-deliverable email `student-<id>@students.kashkol.invalid`, `email_verified = true`) storing the scrypt hash. No plaintext column exists anywhere. The issuing response carries the plaintext exactly once; it is never persisted, re-served, logged, or sent to any provider. |
+| Delivery | The teacher reads the code from the screen during provisioning (one-time reveal). There is **no** automated delivery channel; WhatsApp/SMS delivery of the credential is out of scope. |
+| Reset | No self-service reset exists for student credentials. Only regeneration by an actor holding `portal_access:write`. Regeneration replaces the hash and immediately invalidates the old password; all sessions of the credential user are revoked in the same transaction. |
+| QR token | **Removed.** The `/{locale}/portal?t=<token>` prefill token was a QR used for portal sign-in and has been dropped (`ADR-0027`, migration `20261113000000_drop_portal_login_qr`). A student's QR code is now attendance identification only (`student.qr_token_hash`, HMAC-signed `kqr_v1.<studentId>.<nonce>.<signature>`, §3.5 note). |
+| Phone change | Re-points `username_phone` for the existing credential; the old phone stops resolving to it. Changing the phone of a student with a credential requires `portal_access:write` (fail-closed `403` otherwise); removing the phone disables the credential, revokes sessions. |
+| Authorization | A new sensitive resource `portal_access` (`read` / `write`). Assistants hold it only when explicitly granted (default deny); owners always pass. Credential metadata (username, status) requires `read`; provision/regenerate/enable/disable require `write`. |
+| Sign-in | Real Better Auth session as the synthetic user. Application-level lockout: 5 failures per 15 minutes keyed on the hashed `portal:<phone>` namespace (`auth_event`), identifier hashed, on top of Better Auth's `/sign-in/email` limit (3 per 10s). Sign-in additionally requires an `active` `portal_login` and a non-revoked student `portal_grant`. The password alone selects the account among shared-phone candidates. |
+| Session | A portal session can never call a teacher endpoint (unchanged, §3.4). Disabling or regenerating revokes all credential sessions via `deleteSessionsForUserTx` inside the same transaction. |
+| Audit | `portal.credential.provisioned` / `regenerated` / `enabled` / `disabled` are written in the same transaction as the mutation, on the `audit_event` path with redaction. |
+| Verify at test time | Hash/verify round-trip; one-time reveal is not re-served by any endpoint; regeneration invalidates the old password and its sessions; credential hashes are stored, plaintext never; assistant without the grant receives `403`; a disabled login rejects sign-in with a single generic error; the attendance QR identifies students but can never authenticate them. |
+
+**Student attendance QR (separate from portal sign-in).** The student QR is attendance identification
+only (`ADR-0027`). It is a signed opaque token `kqr_v1.<studentId>.<nonce>.<signature>` (HMAC-SHA256,
+server-secret signed; signature and record hash verified on scan), generated with `crypto.randomBytes`
+on student creation, stored hashed in `student.qr_token_hash` (per-workspace), and used exclusively by
+the session attendance scan path (`scanStudentQrCode`). It **cannot** sign a student in, reset a
+password, activate an account, or read private data — the scan path verifies the signature, looks up
+the student within the workspace, and records attendance. It is revocable (revocation clears the hash),
+regenerable (the previous identifier is invalidated immediately), rate-limited at the scan endpoint
+(10 requests/minute per IP), and never encodes a password, hash, or personal data. QR scanning runs
+through the same attendance authorization rules as manual marking: an assistant without
+`attendance:write` receives `403`.
+
 ---
 
 ## 4. Authorisation and tenancy

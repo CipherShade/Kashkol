@@ -9,6 +9,7 @@ import {
   findActiveMemberships,
   findActivePortalGrants,
   findGrantedPermissions,
+  findPortalLoginByUserId,
   findPortalStudentProjection,
   findSessionActivity,
   findStudentInWorkspace,
@@ -178,6 +179,10 @@ export async function getPortalContext(requestHeaders?: Headers): Promise<Portal
 
   const user = toAuthUser(result.user);
   const userId = user.id;
+  const login = await findPortalLoginByUserId(userId);
+  if (login?.status === "disabled") {
+    throw new AppError("FORBIDDEN", { messageKey: "errors.portalAccessDisabled" });
+  }
   const grants = await findActivePortalGrants(userId, new Date());
   if (grants.length === 0) {
     throw new AppError("FORBIDDEN", { messageKey: "errors.notPortalActor" });

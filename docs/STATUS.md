@@ -1,14 +1,14 @@
 # Kashkol — Status
 
-**Date:** 2026-11-10 · **Status:** Operational model correction & workflow upgrade complete: session-based revenue calculation (`ADR-0025`), Google Calendar-style sessions scheduling, indefinite-lifetime student QR identity with scanner panel (fast mode + per-student homework yes/no on the session attendance screen, 2026-11-10), cross-season attendance tracking with primary group isolation, offline homework completion tracking, dashboard financial consistency, SVG/PNG QR card downloads on the student profile, and a demo ledger rebuilt truthfully under the per-session billing model · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-12 · **Status:** Student portal sign-in QR removed; student QR attendance-only (`ADR-0027`, partially superseding `ADR-0026`): permanent teacher-generated passwords (`KSH-XXXX-XXXX`), shared phones across workspaces, attendance QR auto-created on student creation, separated credential/QR operations in the Portal Access section · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
 ## 1. Where the project stands
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
-now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and thirty
-migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
+now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and
+thirty-three migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
 infrastructure, the core domain schema with Arabic search indexes, the bilingual shell,
@@ -493,7 +493,7 @@ This work makes the demo tenant (`Nile Academy`) money-honest under the per-sess
 - **Balance engine.** `calculateStudentBalances` accepts `sessionCharges` (expected = session price × `present`/`late` marks on non-cancelled sessions) **+** `sessionPricedGroupIds`. Session-priced groups never accrue monthly fee rules for their enrolled students. Dashboard, payments, reports, parent portal, and dashboard collection rate all pass the same computed charges.
 - **Ledger wiring.** `attendance_mark.paymentVerified` is no longer a UI-only state: toggling it on a session screen writes or reuses a real session-linked `payment` row in the same transaction (advisory lock per `(session, student)`, price required, audited `payment.recorded` / `payment.voided`). Verified/unverified never diverges from the ledger. A price-unconfigured toggle is rejected with `Payment.errors.sessionPriceMissing`.
 - **Session attendance screen.** Revenue card is visible only to members with `payments:read`; the client fetches `SessionRevenueSummary` from `/api/sessions/[sessionId]/revenue` with loading and retryable-error states; amounts are formatted from `sessions.price_per_student_minor`/group default, not from ad-hoc arithmetic.
-- **Student profile.** Header quick actions deep-link to the attendance and QR tabs using `?tab=` search params (`profile-tabs`-known list); the QR tab downloads SVG and 512px PNG cards alongside Print and Re-issue.
+- **Student profile.** Header quick actions deep-link to the attendance and Portal Access tabs using `?tab=` search params (`profile-tabs`-known list; the former `?tab=qr` now lands on Portal Access); the attendance QR card — now rendered inside the Portal Access tab, below the credential card — downloads SVG and 512px PNG cards alongside Print and Re-issue.
 - **Demo seed.** The demo workspace is session-priced (four groups: 45 000 / 50 000 / 60 000 / 45 000 minor units per session). The stale monthly `fee_rule` rows were wiping the ledger (expected >> received for every student). The financial ledger is append-only **by trigger**, so resetting it uses `TRUNCATE` (row triggers do not fire) for the local-only reset; re-seeding recreates one real session-linked `payment` per eligible mark and retains the voided erroneous entry, the payment revision, and the two reasoned adjustments. `npm run db:seed:demo` was re-run idempotently afterward.
 - **Zero-attendance pricing gap closed.** Reports balance and parent portal balance both now pass `extraSessionPricedGroupIds` (groups with `default_price_per_student_minor > 0`) so a session-priced group shows zero expected revenue pre-attendance rather than accruing phantom monthly fees.
 - **Verification.** `npm run lint` (ESLint + project rules), `npm run typecheck` (Prisma generate + `tsc --noEmit`), `npm test` (374 unit / 21 UI tests passed), `npm run test:integration` (16 files / 99 tests passed) and `npm run build` all pass after the reseed.
@@ -870,6 +870,67 @@ These implement the established session-priced billing rules (`ADR-0025`): direc
   - **Screenshots kept as-is (decision 2026-11-11).** The Arabic and English captures remain; NILE
     demo data was not deleted, reset, or reseeded. Their content is the current smoke-test data and
     their visual quality still requires final human review before public launch.
+
+### 5.17 Student portal credentials and attendance-only QR on 2026-11-12 — `F-P2-03`, `F-P2-05`, `F18`, `ADR-0026`, `ADR-0027`
+
+**Original gaps.** The student sign-in page carried a QR **prefill** token (`/portal?t=<token>`,
+`ADR-0026` item 8) — a second printed artifact for the student's portal and a confusing mix with
+the attendance QR. The attendance QR hash was created lazily on first view rather than at student
+creation. The Portal Access tab mixed the QR sign-in button into the credential actions without a
+clearly separated attendance-QR operation group.
+
+**Decisions and changes.**
+
+- `ADR-0027` (Accepted 2026-11-12) supersedes the QR-access portion of `ADR-0026` (item 8) and
+  assumption `A-20` (superseded by `A-21`). The `/{locale}/portal?t=<token>` prefill flow is
+  removed end-to-end: the API route was deleted, the sign-in page/form no longer read `?t=`, the
+  `portal_login.qr_token_hash` / `qr_token_expires_at` columns were dropped by migration
+  `20261113000000_drop_portal_login_qr`, and the `qrPrefilledNotice` / `qrAction` /
+  `qrInstructions` / `qrValidFor` / `qrHideAction` message keys are gone from both catalogues.
+- The student QR is now **attendance identification only**: signed opaque token
+  `kqr_v1.<studentId>.<nonce>.<signature>` (HMAC-SHA256), stored hashed as
+  `student.qr_token_hash`, generated atomically with the student row inside the student-creation
+  transaction (`createStudentQrForTx`, audit `student.qr_generated`). It never authenticates,
+  resets, or enables anything; scanning runs the same `attendance:write` authorization as manual
+  marking (assistant without the grant gets `403`), is rate-limited at the scan route
+  (`attendance:scan:<ip>`, 10/minute), and rejects duplicates (`CONFLICT`) and foreign-workspace
+  students (`FORBIDDEN`).
+- **Credentials** (`ADR-0026` stands otherwise): permanent `KSH-XXXX-XXXX` password, phone as
+  username, one-time reveal at creation/regeneration, no activation/OTP/self-set, regenerate only
+  on explicit teacher action; the same phone may exist across workspaces independently and
+  resolves by password at sign-in; a disabled login rejects sign-in with the generic error.
+- **UI.** The QR tab was merged into the student profile **Portal Access** section as its own
+  sub-section (heading, download/print/re-issue/revoke), kept as a fully separate operation from
+  the credential card (username, regenerate, enable/disable). `?tab=qr` deep links land on Portal
+  Access. Credential and QR management use separate handlers, separate API routes
+  (`/api/students/[studentId]/portal-access/credential/*` vs `/api/students/[studentId]/qr`),
+  and separate audit events.
+- Test matrix extended: permanent password across repeated sign-ins (integration), auto-generated
+  QR on creation (integration), QR cannot authenticate (integration), QR re-issue invalidates the
+  previous token (integration), QR revocation rejects scans (integration), cross-workspace QR scan
+  rejected (integration), duplicate scan safe (integration), assistant without
+  `attendance:write` cannot scan (integration), student cannot read another student's portal
+  record (integration). Unit coverage for the token format/signature/rotation unchanged.
+- Docs updated: `DATA_MODEL.md` (portal_login QR columns removed; migration row added; count
+  updated to thirty-three), `SECURITY_AND_PRIVACY.md` (§3.5 rewritten; attendance-QR paragraph),
+  `OPEN_QUESTIONS_AND_ASSUMPTIONS.md` (`A-20` superseded by `A-21`, `OQ-22` added; counts 21/22),
+  `decisions/README.md` (0026 marked partially superseded; 0027 indexed and traced),
+  `STATUS.md` (this section).
+
+**Result of the full gate (2026-11-12).**
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** |
+| `npm run typecheck` | **Passed** |
+| `npm test` | **Passed** — unit 66 files / 445 tests; UI 1 file / 21 tests |
+| `npm run test:integration` | **3 pre-existing environmental failures** (`search.test.ts` ×2, `students-groups.test.ts` ×1 — `assertWorkspaceWriteAllowedTx` plan-limit conflicts, see §5.9); **all other 17 files passed, including the new `student-qr-attendance.test.ts` (9 tests) and the updated `portal-credentials.test.ts` (10 tests)** |
+| `npm run build` | **Passed** (exit 0) |
+
+**Not claimed by this section:** camera capture on real hardware; QR decode throughput load
+testing; the `attendanceQrCopyFor` strings live outside the message catalogue (matching the
+pre-existing `StudentAttendanceQr` component contract — both locales are present); `OQ-05`
+remains open (the implemented flow is (b)-style staff scanning, recorded as `OQ-22` default (b)).
 
 ## 6. Implementation plan
 

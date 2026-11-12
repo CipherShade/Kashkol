@@ -463,7 +463,8 @@
       "settings": "إعدادات مساحة العمل",
       "team": "الفريق",
       "audit": "سجل التدقيق",
-      "forms": "النماذج والاستبيانات"
+      "forms": "النماذج والاستبيانات",
+      "portal_access": "بيانات دخول بوابة الطالب"
     },
     "errors": {
       "requestFailed": "تعذّر إكمال الطلب. تحقق من صلاحيتك ثم أعد المحاولة.",
@@ -1557,7 +1558,11 @@
     "formOptionInvalid": "اختار أحد الردود خيارًا لا ينتمي إلى السؤال.",
     "formFileInvalid": "ملف مرفوع مفقود أو لا ينتمي إلى مساحة العمل هذه.",
     "formLogicInvalid": "تشير قاعدة شرطية إلى سؤال أو قسم خارج هذا النموذج.",
-    "formModifiedByAnotherUser": "تم تعديل هذا النموذج بواسطة مستخدم آخر. أعد تحميل الصفحة قبل الحفظ."
+    "formModifiedByAnotherUser": "تم تعديل هذا النموذج بواسطة مستخدم آخر. أعد تحميل الصفحة قبل الحفظ.",
+    "portalAccessDisabled": "تم إيقاف دخول هذا الطالب إلى البوابة.",
+    "credentialAlreadyExists": "يوجد بالفعل بيانات دخول لهذا الطالب.",
+    "portalGrantRevoked": "تم إلغاء إذن بوابة هذا الطالب.",
+    "portalPhoneUpdateNeedsPortalAccess": "فقط من يدير أذونات البوابة يمكنه تغيير رقم هاتف هذا الطالب."
   },
   "Sessions": {
     "calendarTitle": "التقويم",
@@ -1967,7 +1972,37 @@
         "expired": "منتهية"
       },
       "expiresAtLabel": "تنتهي في",
-      "revokeInviteAction": "إلغاء الدعوة"
+      "revokeInviteAction": "إلغاء الدعوة",
+      "credentialTitle": "بيانات دخول بوابة الطالب",
+      "credentialSubtitle": "يسجّل الطالب الدخول إلى /portal برقم الهاتف وكلمة المرور هذه. تُعرض كلمة المرور مرة واحدة فقط، فور إنشائها أو إعادة إنشائها.",
+      "credentialNone": "لا يوجد تسجيل دخول بعد. يُنشأ تلقائيًا برقم الهاتف عند إضافة الطالب، أو يمكنك إنشاء واحد هنا.",
+      "usernameLabel": "اسم الدخول",
+      "credentialStatusLabel": "حالة الحساب",
+      "credentialStatusActive": "نشط",
+      "credentialStatusDisabled": "متوقف",
+      "credentialStatusRevoked": "ملغى",
+      "provisionAction": "إنشاء بيانات الدخول",
+      "regenerateAction": "إعادة إنشاء كلمة المرور",
+      "enableAction": "تفعيل الدخول",
+      "disableAction": "إيقاف الدخول",
+      "disableConfirm": "إيقاف دخول هذا الطالب؟ لن يتمكن من تسجيل الدخول حتى تعيد تفعيله.",
+      "credentialError": "حدث خطأ ما. حاول مرة أخرى.",
+      "phoneMissingNotice": "لا يوجد رقم هاتف لهذا الطالب، ولا يمكن إنشاء بيانات دخول. أضف رقم هاتف أولاً.",
+      "credentialReadyTitle": "احفظها الآن — تظهر مرة واحدة فقط",
+      "credentialReadyWarning": "تُعرض كلمة المرور هذه مرة واحدة ولا تُخزَّن بصيغة مقروءة. احفظها بأمان وسلّمها للطالب. إذا فُقدت، أعد إنشاءها.",
+      "passwordLabel": "كلمة المرور",
+      "credentialCopyPassword": "نسخ كلمة المرور",
+      "credentialCopyUsername": "نسخ اسم الدخول"
+    },
+    "signIn": {
+      "metaTitle": "كشكول — بوابة الطالب",
+      "title": "تسجيل دخول الطالب",
+      "subtitle": "سجّل الدخول برقم الهاتف الذي سجّله معلمك وكلمة المرور التي أعطاك إياها.",
+      "phoneLabel": "رقم الهاتف",
+      "phoneHint": "الرقم الذي سجّله معلمك، مثل +201012345678",
+      "passwordLabel": "كلمة المرور",
+      "passwordHint": "كلمة المرور من معلمك (مثل KSH-AB12-CD34)",
+      "signInAction": "تسجيل الدخول"
     }
   },
   "PlatformAdmin": {
@@ -2308,5 +2343,8 @@
       "archive": "تمت أرشفة النموذج.",
       "duplicate": "تم نسخ النموذج."
     }
+  },
+  "students": {
+    "portalCredentialPhoneRequired": "لا يوجد رقم هاتف لهذا الطالب، ولا يمكن إنشاء بيانات دخول."
   }
 }

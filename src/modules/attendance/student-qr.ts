@@ -8,11 +8,11 @@
  *   - IN-6 (docs/INTEGRATIONS.md §9.2): Signed opaque payload, no personal info exposed
  */
 
-import { createHmac, createHash, randomBytes } from "node:crypto";
+import { createHmac, createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { type DbTransactionClient, withScope } from "@/lib/db/scope";
 import { getServerEnv } from "@/lib/config/env";
 import { AppError } from "@/lib/http/errors";
 import { newRequestId } from "@/lib/http/request-id";
-import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import {
@@ -21,6 +21,15 @@ import {
 } from "./repository";
 
 const TOKEN_PREFIX = "kqr_v1";
+const QR_IDENTITY_RANDOM_BYTES = 16;
+
+/** Constant-time string comparison for signature and hash checks. */
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
 
 function getSecret(): string {
   const env = getServerEnv();
@@ -77,8 +86,47 @@ export function verifyStudentQrTokenSignature(token: string): { studentId: strin
   const dataToSign = `${studentId}:${nonce}`;
   const expectedSignature = createHmac("sha256", secret).update(dataToSign).digest("base64url");
 
-  if (providedSignature !== expectedSignature) return null;
+  if (!safeEqual(providedSignature, expectedSignature)) return null;
   return { studentId, nonce };
+}
+
+/**
+ * Generate the persistent storage value (`nonce:sha256(token)`) for a newly
+ * created student's QR identity. Callers persist the value themselves; the
+ * raw token is never returned (it is shown to the teacher on the profile
+ * screen after creation).
+ */
+export function generateStudentQrStorageValue(studentId: string): string {
+  const nonce = randomBytes(QR_IDENTITY_RANDOM_BYTES).toString("base64url");
+  const token = buildStudentQrPayload(studentId, nonce);
+  return encodeStorage(nonce, token);
+}
+
+/**
+ * Create the attendance QR identity inside an open transaction (e.g. the
+ * student-creation transaction) so a new student never exists without one.
+ */
+export async function createStudentQrForTx(
+  tx: DbTransactionClient,
+  scope: Scope,
+  studentId: string,
+  reqCtx?: { requestId?: string; ipHash?: string | null },
+): Promise<{ storageValue: string }> {
+  const storageValue = generateStudentQrStorageValue(studentId);
+  await updateStudentQrHashTx(tx, scope.workspaceId, studentId, storageValue);
+  await writeAuditEvent(tx, {
+    workspaceId: scope.workspaceId,
+    actorUserId: scope.actorUserId,
+    actorDisplayName: scope.actorDisplayName,
+    actorType: "user",
+    entityType: "student",
+    entityId: studentId,
+    action: "student.qr_generated",
+    diff: { studentId, reason: "student_created" },
+    requestId: reqCtx?.requestId ?? newRequestId(),
+    ipHash: reqCtx?.ipHash,
+  });
+  return { storageValue };
 }
 
 /**
@@ -214,8 +262,8 @@ export function validateStudentQrAgainstRecord(
   const parsed = parseStorage(studentQrTokenHash);
   if (!parsed) return false;
 
-  if (parsed.nonce !== verified.nonce) return false;
+  if (!safeEqual(parsed.nonce, verified.nonce)) return false;
 
   const computedHash = hashStudentQrToken(token);
-  return computedHash === parsed.hash;
+  return safeEqual(computedHash, parsed.hash);
 }

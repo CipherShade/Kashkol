@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
+import { StudentAttendanceQr } from "./student-attendance-qr";
+import { attendanceQrCopyFor } from "./attendance-qr-copy";
 import type { PortalPermissions } from "@/modules/portals/schemas";
+import {
+  PortalCredentialReveal,
+  type OneTimeCredential,
+} from "./portal-credential-reveal";
 
 type PortalGrantItem = {
   id: string;
@@ -45,16 +51,39 @@ type GuardianItem = {
 
 export function StudentPortalAccessPanel({
   studentId,
+  studentName,
+  grade,
   locale,
 }: {
   studentId: string;
+  studentName: string;
+  grade?: string | null;
   locale: string;
 }) {
   const t = useTranslations("Portal.staff");
+  const isAr = locale === "ar";
   const [loading, setLoading] = useState(true);
   const [grants, setGrants] = useState<PortalGrantItem[]>([]);
   const [invitations, setInvitations] = useState<PortalInvitationItem[]>([]);
   const [guardians, setGuardians] = useState<GuardianItem[]>([]);
+
+  // Teacher-generated student credential card.
+  const [credentialState, setCredentialState] = useState<
+    | { kind: "loading" }
+    | { kind: "unavailable" }
+    | {
+        kind: "ready";
+        canProvision: boolean;
+        credential: {
+          username: string;
+          status: "active" | "disabled" | "revoked";
+        } | null;
+      }
+  >({ kind: "loading" });
+  const [credentialBusy, setCredentialBusy] = useState(false);
+  const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [oneTimeCredential, setOneTimeCredential] =
+    useState<OneTimeCredential | null>(null);
 
   const [inviteKind, setInviteKind] = useState<"parent" | "student">("parent");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -75,6 +104,71 @@ export function StudentPortalAccessPanel({
   >(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const loadCredential = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/students/${encodeURIComponent(studentId)}/portal-access/credential`,
+        { cache: "no-store" },
+      );
+      if (res.status === 403 || res.status === 404) {
+        // Not an anti-leak: the profile renders without the card for
+        // assistants without portal_access read rights.
+        setCredentialState({ kind: "unavailable" });
+        return;
+      }
+      if (!res.ok) {
+        setCredentialState({ kind: "unavailable" });
+        return;
+      }
+      const data = (await res.json()) as {
+        canProvision: boolean;
+        credential: {
+          username: string;
+          status: "active" | "disabled" | "revoked";
+        } | null;
+      };
+      setCredentialState({ kind: "ready", ...data });
+    } catch {
+      setCredentialState({ kind: "unavailable" });
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(
+      `/api/students/${encodeURIComponent(studentId)}/portal-access/credential`,
+      { cache: "no-store" },
+    )
+      .then(async (res) => {
+        if (!active) return;
+        if (res.status === 403 || res.status === 404) {
+          // Not an anti-leak: the profile renders without the card for
+          // assistants without portal_access read rights.
+          setCredentialState({ kind: "unavailable" });
+          return;
+        }
+        if (!res.ok) {
+          setCredentialState({ kind: "unavailable" });
+          return;
+        }
+        const data = (await res.json()) as {
+          canProvision: boolean;
+          credential: {
+            username: string;
+            status: "active" | "disabled" | "revoked";
+          } | null;
+        };
+        if (!active) return;
+        setCredentialState({ kind: "ready", ...data });
+      })
+      .catch(() => {
+        if (active) setCredentialState({ kind: "unavailable" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [studentId]);
 
   const loadAccess = useCallback(async () => {
     try {
@@ -122,6 +216,75 @@ export function StudentPortalAccessPanel({
       active = false;
     };
   }, [studentId]);
+
+  const handleProvisionCredential = async () => {
+    setCredentialBusy(true);
+    setCredentialError(null);
+    try {
+      const res = await fetch(
+        `/api/students/${encodeURIComponent(studentId)}/portal-access/credential`,
+        { method: "POST", headers: { "x-locale": locale } },
+      );
+      if (!res.ok) {
+        setCredentialError(t("credentialError"));
+        return;
+      }
+      const data = (await res.json()) as OneTimeCredential;
+      setOneTimeCredential(data);
+      await loadCredential();
+    } catch {
+      setCredentialError(t("credentialError"));
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
+
+  const handleRegenerateCredential = async () => {
+    setCredentialBusy(true);
+    setCredentialError(null);
+    try {
+      const res = await fetch(
+        `/api/students/${encodeURIComponent(studentId)}/portal-access/credential/regenerate`,
+        { method: "POST", headers: { "x-locale": locale } },
+      );
+      if (!res.ok) {
+        setCredentialError(t("credentialError"));
+        return;
+      }
+      const data = (await res.json()) as OneTimeCredential;
+      setOneTimeCredential(data);
+      await loadCredential();
+    } catch {
+      setCredentialError(t("credentialError"));
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
+
+  const handleToggleCredential = async (enabled: boolean) => {
+    if (!enabled && !window.confirm(t("disableConfirm"))) return;
+    setCredentialBusy(true);
+    setCredentialError(null);
+    try {
+      const res = await fetch(
+        `/api/students/${encodeURIComponent(studentId)}/portal-access/credential/status`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        },
+      );
+      if (!res.ok) {
+        setCredentialError(t("credentialError"));
+        return;
+      }
+      await loadCredential();
+    } catch {
+      setCredentialError(t("credentialError"));
+    } finally {
+      setCredentialBusy(false);
+    }
+  };
 
   const handleIssueInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,6 +391,179 @@ export function StudentPortalAccessPanel({
 
   return (
     <div className="space-y-6">
+      {/* Teacher-generated student sign-in credential */}
+      {credentialState.kind !== "unavailable" && (
+        <Card>
+          <CardBody className="p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-subtle)] text-[var(--brand-fg)]">
+                <Icon name="shield" size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">
+                  {t("credentialTitle")}
+                </h3>
+                <p className="text-xs text-muted mt-0.5">
+                  {t("credentialSubtitle")}
+                </p>
+              </div>
+            </div>
+
+            {credentialState.kind === "loading" ? (
+              <p className="text-xs text-muted py-1">{t("loading")}</p>
+            ) : (
+              <>
+                {credentialState.credential === null ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-muted max-w-md">
+                      {credentialState.canProvision
+                        ? t("credentialNone")
+                        : t("phoneMissingNotice")}
+                    </p>
+                    {credentialState.canProvision && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        disabled={credentialBusy}
+                        onClick={() => void handleProvisionCredential()}
+                        className="gap-1.5"
+                      >
+                        <Icon name="shield" size={14} />
+                        <span>{t("provisionAction")}</span>
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="ui-label">{t("usernameLabel")}</span>
+                          <Badge
+                            tone={
+                              credentialState.credential.status === "active"
+                                ? "success"
+                                : credentialState.credential.status === "disabled"
+                                  ? "warn"
+                                  : "danger"
+                            }
+                          >
+                            {t(
+                              `credentialStatus${
+                                credentialState.credential.status === "active"
+                                  ? "Active"
+                                  : credentialState.credential.status === "disabled"
+                                    ? "Disabled"
+                                    : "Revoked"
+                              }`,
+                            )}
+                          </Badge>
+                        </div>
+                        <p className="mt-0.5 font-mono text-sm text-foreground" dir="ltr">
+                          {credentialState.credential.username}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {credentialState.credential.status === "active" ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={credentialBusy}
+                              onClick={() => void handleRegenerateCredential()}
+                            >
+                              {t("regenerateAction")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={credentialBusy}
+                              onClick={() => void handleToggleCredential(false)}
+                              className="text-rose-600"
+                            >
+                              {t("disableAction")}
+                            </Button>
+                          </>
+                        ) : credentialState.credential.status === "disabled" ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              disabled={credentialBusy}
+                              onClick={() => void handleToggleCredential(true)}
+                            >
+                              {t("enableAction")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={credentialBusy}
+                              onClick={() => void handleRegenerateCredential()}
+                            >
+                              {t("regenerateAction")}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            disabled={credentialBusy}
+                            onClick={() => void handleRegenerateCredential()}
+                          >
+                            {t("regenerateAction")}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {credentialError && (
+                      <p className="text-xs font-medium text-rose-600">
+                        {credentialError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Attendance QR — separate operation from the portal credential */}
+      <section aria-labelledby="attendance-qr-heading" className="space-y-3">
+        <div className="flex items-start gap-3 px-1">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-subtle)] text-[var(--brand-fg)]">
+            <Icon name="qr" size={16} />
+          </div>
+          <div>
+            <h3
+              id="attendance-qr-heading"
+              className="text-sm font-bold text-foreground"
+            >
+              {isAr ? "رمز الحضور (QR)" : "Attendance QR"}
+            </h3>
+            <p className="text-xs text-muted mt-0.5 max-w-lg">
+              {isAr
+                ? "رمز تعريف للحضور فقط. لا يفتح أي حساب ولا يحتوي على أي كلمة مرور. إعادة الإصدار تُبطل الرمز القديم فورًا."
+                : "Identification for attendance only. It cannot sign in anywhere and stores no password. Re-issuing invalidates the previous code immediately."}
+            </p>
+          </div>
+        </div>
+        <StudentAttendanceQr
+          studentId={studentId}
+          studentName={studentName}
+          grade={grade}
+          copy={attendanceQrCopyFor(locale)}
+        />
+      </section>
+
       {/* Issue Verified One-Time Portal Invitation */}
       <Card>
         <CardBody className="p-5 space-y-4">
@@ -558,6 +894,11 @@ export function StudentPortalAccessPanel({
           )}
         </CardBody>
       </Card>
+
+      <PortalCredentialReveal
+        credential={oneTimeCredential}
+        onClose={() => setOneTimeCredential(null)}
+      />
     </div>
   );
 }
