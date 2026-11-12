@@ -2,19 +2,23 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
 
+    # Isolated, freshly provisioned test database. It is created by the service
+    # below for every run, is never shared with a development database, and is
+    # discarded when the job ends. No production credentials are used and the
+    # NILE development workspace is never touched.
     services:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_DB: kashkol_dev
+          POSTGRES_DB: kashkol_test
           POSTGRES_USER: kashkol
           POSTGRES_PASSWORD: kashkol_dev
         ports:
@@ -27,8 +31,8 @@ jobs:
 
     env:
       APP_ENV: local
-      DATABASE_URL: postgresql://kashkol_app:kashkol_dev_app@localhost:5432/kashkol_dev
-      DIRECT_DATABASE_URL: postgresql://kashkol:kashkol_dev@localhost:5432/kashkol_dev
+      DATABASE_URL: postgresql://kashkol_app:kashkol_dev_app@localhost:5432/kashkol_test
+      DIRECT_DATABASE_URL: postgresql://kashkol:kashkol_dev@localhost:5432/kashkol_test
 
     steps:
       - uses: actions/checkout@v4
@@ -44,11 +48,11 @@ jobs:
 
       - name: Setup Database Roles
         run: |
-          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "CREATE ROLE kashkol_app WITH LOGIN PASSWORD 'kashkol_dev_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
-          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "GRANT CONNECT ON DATABASE kashkol_dev TO kashkol_app;"
-          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "GRANT USAGE ON SCHEMA public TO kashkol_app;"
-          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kashkol_app;"
-          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_dev -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_test -c "CREATE ROLE kashkol_app WITH LOGIN PASSWORD 'kashkol_dev_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_test -c "GRANT CONNECT ON DATABASE kashkol_test TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_test -c "GRANT USAGE ON SCHEMA public TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_test -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO kashkol_app;"
+          PGPASSWORD=kashkol_dev psql -h localhost -U kashkol -d kashkol_test -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO kashkol_app;"
 
       - name: Lint
         run: npm run lint
@@ -61,6 +65,13 @@ jobs:
 
       - name: Run Migrations
         run: npm run db:deploy
+
+      # Deterministic fixtures: the base seed creates two synthetic workspaces
+      # (NILE, DELTA) and three synthetic users, nothing else. The NILE workspace
+      # here is a fresh fixture created inside kashkol_test by this job, not the
+      # NILE development workspace, which this workflow never connects to.
+      - name: Seed Database
+        run: npm run db:seed
 
       - name: Integration Tests
         run: npm run test:integration
