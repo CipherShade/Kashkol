@@ -775,6 +775,102 @@ These implement the established session-priced billing rules (`ADR-0025`): direc
 
 ---
 
+### 5.16 Public bilingual landing page on 2026-11-11 - user-requested (release-plan conflict recorded)
+
+- `/ar` and `/en` now render a public marketing landing page (Arabic-first, RTL; English second,
+  LTR; light and dark) built from the existing token layer (`src/styles/tokens.css`, ADR-0023) and
+  logical CSS only (`src/styles/landing.css`). The readiness/status page moved to
+  `/{locale}/status` and no longer redirects to sign-in/app when the system is ready; `/healthz` and
+  `/readyz` are unchanged.
+- Scope decisions locked by the user:
+  - `/{locale}` hosts the landing page; the readiness page moves to `/status`.
+  - CTAs are "Try Now!" (Arabic: "جرّب دلوقتي!") + "Sign in" (signed-in visitors see "Open app"). This reverses
+    `RELEASE_PLAN.md` § 3.4 (M1 had no self-signup) and § 3.5 (no public marketing). Both sections
+    carry the recorded override.
+  - The hero uses a **real screenshot** of the seeded demo workspace inside the Stitch-style frame;
+    `public/landing/workspace-ar.png` and `workspace-en.png` are the captured artifacts (see the
+    2026-11-12 verification below).
+  - Indexable landing with localized metadata, `hreflang`, `robots.txt`, and `sitemap.xml` (only
+    the two landing pages). The locale layout's `noindex` default is overridden only by the landing.
+  - Arabic and English copy are single-language per route (no inline duplicates); Latin "Kashkol"
+    wordmark kept.
+  - "Start free / no credit card" claims were **rejected**; the CTA is "Try Now!" / "جرّب دلوقتي!".
+  - No fabricated statistics, testimonials, logos, or pricing anywhere; the eight problem→solution
+    pairs each map to a real, merged module (students, groups, session conflict detection,
+    attendance/QR, homework, assessments, student follow-up, staff roles).
+- **Open items recorded, not hidden:**
+  - No public privacy notice or terms of service exist yet. Legal review (`F-P0-08` AC-7) is
+    required before promoting the site; the landing collects no data and runs no analytics.
+  - § 3.4 / § 3.5 override must be confirmed by the product owner before the M1 cohort launch.
+  - The landing is `force-dynamic` because the header reads the session to choose between
+    "Sign in" and "Open app"; that is why it is not a static route.
+  - Screenshots must be re-captured whenever the sessions UI changes.
+  - A stale `manifest.webmanifest` vs `public/manifest.json` mismatch (both exist; the layout points
+    at `/manifest.webmanifest`) is noted and intentionally left out of scope.
+- Verification on 2026-11-11 (after the first build):
+  - `npm run lint`, `npm run typecheck`, `npm test` (445 passed), `npm run build` (67 pages;
+    `/[locale]` dynamic, `robots.txt` and `sitemap.xml` static) — all pass.
+  - `/ar`, `/en`, `/ar/status`, `/en/status`, `robots.txt`, `sitemap.xml` all served HTTP 200 from
+    the production standalone build; the served `<head>` contains `canonical`, `hrefLang` alternates
+    (`ar`, `en`, `x-default`), and the `noindex` default is overridden only on the landing page.
+
+- Verification on 2026-11-12 (isolated integration database and real screenshots):
+  - `npm run test:integration`: **123 of 123 pass** on a fresh, isolated `kashkol_integration`
+    database on the embedded cluster (localhost:5433). The `kashkol_dev` demo workspace was left
+    untouched, as were the plan limits. The earlier "dev-database contamination" diagnosis recorded
+    above was wrong: the same 3 failures reproduced on a pristine database until the missing grant
+    (below) was applied; after a full reset the suite passes 123/123. Note that each run leaks
+    ~5–6 NILE groups (pilot plan cap is 12), so the suite degrades across re-runs on a reused
+    database — the reset procedure is: drop and recreate `kashkol_integration`,
+    `prisma migrate deploy`, re-apply the grant, `tsx scripts/seed.ts`, then run the suite.
+  - **Pre-existing defect found:** `prisma/migrations/20261108000004_homework_completion_marks/migration.sql`
+    creates `homework_completion_mark` with no `GRANT` to the app role (21 other migrations do
+    grant). CI works around this only via `ALTER DEFAULT PRIVILEGES`. A forward-only migration
+    adding the missing grant is the right fix — **not applied**, awaiting approval.
+  - **`.github/workflows/ci.yml` cannot pass as written:** with a fresh database, CI-style default
+    privileges and no seed step, 88 of 123 tests fail. The workflow never runs `npm run db:seed`
+    before `npm run test:integration`. Proposal (not applied): add a seed step to `ci.yml` and
+    commit the missing-grant migration.
+  - **Screenshots captured and wired:** `public/landing/workspace-ar.png` and `workspace-en.png`
+    (1422×804, valid PNGs) are real captures of the seeded demo workspace sessions screen using the
+    system Chrome over the DevTools protocol via Node's built-in WebSocket — no new dependency was
+    added. Verified by dumping the rendered DOM text: no phone-like strings, no guardian data. The
+    demo data shown is the noisy smoke-test accumulation in the demo workspace; nothing was deleted
+    or re-seeded. `HAS_DEMO_SCREENSHOT = true`; the hero `next/image` is sized 1422×804 and the
+    captioned illustration is no longer shipped.
+  - After wiring the screenshots, `npm run build` passes and the rebuilt standalone server serves
+    `/ar` (200, references `/landing/workspace-ar.png`) and `/en` (200, references
+    `/landing/workspace-en.png`); the screenshot itself returns HTTP 200 (87104 bytes).
+  - **Migration `20261113000001_homework_completion_mark_grants` (approved 2026-11-11).** A
+    forward-only migration grants the application role `SELECT, INSERT, UPDATE, DELETE` on
+    `homework_completion_mark`; no historical migration was modified. Verified against a fresh,
+    isolated `kashkol_integration` database: `prisma migrate deploy` applies it, the
+    `kashkol_app` role holds the four privileges, and the suite passes 123/123 with no manual
+    grant whatsoever. `REQUIRED_MIGRATION_NAME` in `src/lib/db/migration-state.ts` was bumped
+    in the same change as the file's own doc comment requires â€” that constant lives in a file
+    shared with the portal/QR changeset, and the edit is the one-line bump only.
+  - **`ci.yml` integration path fixed (approved 2026-11-11).** The integration job now runs against
+    a freshly provisioned, isolated `kashkol_test` database created by the CI postgres service and
+    discarded when the job ends, and `npm run db:seed` runs between migrations and integration
+    tests (deterministic fixtures: two synthetic workspaces, three synthetic users). It never
+    connects to production and never seeds or modifies the NILE development workspace. Emulated the
+    complete workflow locally on a fresh disposable database (fresh DB â†’ roles/default privileges â†’
+    `db:deploy` â†’ `db:seed` â†’ `test:integration`): all steps pass, 123/123, and the YAML parses
+    to the expected job structure. The GitHub-hosted run itself has not been executed; the earlier
+    "88/123 fail without a seed" finding is what this fix addresses.
+  - **robots.txt and sitemap.xml are now dynamic (approved 2026-11-11).** Both routes export
+    `dynamic = "force-dynamic"`, so the origin comes from the runtime `BETTER_AUTH_URL`, not from
+    whatever was present at build time. Verified with a deliberately mismatched setup: built with
+    `BETTER_AUTH_URL=https://build-time-check.example.com`, served with
+    `https://runtime-check.example.com` â€” robots `Host`/`Sitemap` and sitemap `loc`/alternates
+    and the page canonical/`hrefLang` alternates all emit the **runtime** origin, with zero
+    `localhost` or `trycloudflare` mentions anywhere in the responses. Trade-off: both routes
+    render per request (trivial string building, no I/O) and sitemap `lastModified` is now request
+    time, not build time. Build output confirms `/robots.txt` and `/sitemap.xml` as `Æ’` (dynamic).
+  - **Screenshots kept as-is (decision 2026-11-11).** The Arabic and English captures remain; NILE
+    demo data was not deleted, reset, or reseeded. Their content is the current smoke-test data and
+    their visual quality still requires final human review before public launch.
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work

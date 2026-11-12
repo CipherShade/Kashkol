@@ -29,9 +29,11 @@ flow, release, and architecture specifications live in [`docs/`](docs/). Read
 | Health and readiness probes                                   | `/healthz` and `/readyz`                                           |
 | Local embedded PostgreSQL and deterministic seed              | Working; local-only by construction                                |
 
-Nothing is simulated. The status page reports only the configuration, database, and migration state
-the server can observe. There are no placeholder buttons. The local seed creates synthetic demo
-workspaces; it refuses to run outside a loopback `APP_ENV=local` database.
+Nothing is simulated. The landing page at `/ar` and `/en` makes no claims the product cannot back:
+every number is described as computed from records, WhatsApp is described as prepared-and-opened,
+and payments are described as teacher-recorded. The status page at `/ar/status` reports only the
+configuration, database, and migration state the server can observe. The local seed creates
+synthetic demo workspaces; it refuses to run outside a loopback `APP_ENV=local` database.
 
 ## Requirements
 
@@ -62,8 +64,9 @@ npm run dev
 
 Open:
 
-- `http://localhost:3000` — redirects to the Arabic status page
-- `http://localhost:3000/ar` and `/en` — bilingual status shell
+- `http://localhost:3000` — redirects to the Arabic landing page
+- `http://localhost:3000/ar` and `/en` — bilingual public landing page
+- `http://localhost:3000/ar/status` and `/en/status` — readiness status page
 - `http://localhost:3000/ar/sign-in` and `/en/sign-in` — sign in
 - `http://localhost:3000/ar/sign-up` and `/en/sign-up` — create an account
 - `http://localhost:3000/healthz` — liveness

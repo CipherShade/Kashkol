@@ -135,7 +135,9 @@ Kashkol shows them is derived from what they entered.
 ### 3.4 Private beta design (M1 → M2)
 
 - **Cohort:** 5–10 teachers from the Egyptian private-teaching market, recruited directly.
-  Not a public beta — no self-signup during M1.
+  Not a public beta for real cohort access — but the product now ships a **public landing page**
+  at `/{locale}` with self-signup enabled by decision (see `docs/STATUS.md`, "Public landing page").
+  The M1 cohort remains invite-based; the landing page does not imply a public cohort or pricing.
 - **Duration:** 4 weeks minimum, with at least one full school term fragment if possible.
 - **Data:** each beta teacher's real student roster, **with consent**, in a production-shaped
   environment. Seeded/demo data is never mixed with real data.
@@ -151,7 +153,9 @@ Kashkol shows them is derived from what they entered.
 
 ### 3.5 Rollout and rollback for M1
 
-- Dark launch by invite only; no public marketing.
+- Dark launch by invite only; no public marketing. Localized landing pages at `/ar` and `/en` are
+  the only public surfaces; they collect no data, run no analytics, and publish no pricing (see
+  `STATUS.md`).
 - Rollback: the previous application image is redeployed within 10 minutes; database migrations are
   forward-only with compensating migrations, and the pre-release restore drill is re-verified before
   each release.

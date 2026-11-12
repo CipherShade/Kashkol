@@ -1,136 +1,89 @@
-import NextLink from "next/link";
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Link } from "@/i18n/navigation";
-import { directionForLocale, type AppLocale } from "@/i18n/routing";
-import { getReadiness, type CheckState, type ReadinessCheck } from "@/lib/health/readiness";
+import { LandingFooter } from "@/components/landing/footer";
+import { LandingHeader } from "@/components/landing/header";
+import { LandingHero } from "@/components/landing/hero";
+import {
+  LandingCallToAction,
+  LandingFaq,
+  LandingGap,
+  LandingHow,
+  LandingProblems,
+  LandingSecurity,
+  LandingTruth,
+} from "@/components/landing/sections";
+import { buildLandingMetadata, landingSiteUrl } from "@/lib/landing/seo";
+import type { PreferredTheme } from "@/lib/theme";
+import { getPreferredTheme } from "@/modules/identity/preferences";
 import { getOptionalUser } from "@/modules/identity/session";
 
+/**
+ * The public landing page (`/ar`, `/en`).
+ *
+ * It is the only indexable surface in the product, and the only page that does
+ * not require a session. It reads the session only to choose between "Sign in"
+ * and "Open app", so it has to render per request.
+ *
+ * It collects nothing: no form, no analytics, no third-party script, and no
+ * cookie of its own. The theme and language switches are the app's own
+ * preference controls.
+ */
 export const dynamic = "force-dynamic";
 
-type StatusPageProps = {
+type LandingPageProps = {
   params: Promise<{ locale: string }>;
 };
 
-const STATE_LABEL_KEYS: Record<CheckState, "stateOk" | "stateFail" | "stateUnknown"> = {
-  ok: "stateOk",
-  fail: "stateFail",
-  unknown: "stateUnknown",
-};
+export async function generateMetadata({ params }: LandingPageProps): Promise<Metadata> {
+  const { locale } = await params;
+  const appLocale = locale === "en" ? "en" : "ar";
+  const t = await getTranslations({ locale: appLocale, namespace: "Landing" });
 
-function otherLocale(locale: AppLocale): AppLocale {
-  return locale === "ar" ? "en" : "ar";
+  return buildLandingMetadata({
+    locale: appLocale,
+    title: t("meta.title"),
+    description: t("meta.description"),
+    siteUrl: landingSiteUrl(),
+  });
 }
 
-export default async function StatusPage({ params }: StatusPageProps) {
+export default async function LandingPage({ params }: LandingPageProps) {
   const { locale } = await params;
-  // Normalise before use: an unknown value must never reach `Intl`, which
-  // throws a `RangeError` for malformed locale tags.
-  const appLocale: AppLocale = locale === "ar" ? "ar" : "en";
+  const appLocale = locale === "en" ? "en" : "ar";
   setRequestLocale(appLocale);
 
-  const t = await getTranslations("Status");
-  const readiness = await getReadiness();
+  const t = await getTranslations("Landing");
   const user = await getOptionalUser().catch(() => null);
-  const switchTo = otherLocale(appLocale);
-  const dateFormatter = new Intl.DateTimeFormat(appLocale, {
-    dateStyle: "medium",
-    timeStyle: "medium",
-  });
+  const signedIn = Boolean(user);
 
-  const checks: Array<{ label: string; check: ReadinessCheck }> = [
-    { label: t("configuration"), check: readiness.checks.config },
-    { label: t("database"), check: readiness.checks.database },
-    { label: t("migrations"), check: readiness.checks.migrations },
-  ];
-
-  // If the system is ready, redirect to the actual app (or sign-in if not authenticated)
-  if (readiness.status === "ready") {
-    const redirectUrl = user ? "/app" : "/sign-in";
-    redirect(`/${locale}${redirectUrl}`);
+  let initialTheme: PreferredTheme = null;
+  try {
+    initialTheme = await getPreferredTheme();
+  } catch {
+    // An expired session or a failed preference read must not break the page;
+    // the client falls back to the cookie, then localStorage, then the system.
   }
 
   return (
-    <main className="status-page">
-      <div className="status-shell">
-        <header className="status-header">
-          <div>
-            <p className="status-eyebrow">{t("eyebrow")}</p>
-            <h1 className="status-title">{t("title")}</h1>
-            <p className="status-subtitle">{t("subtitle")}</p>
-          </div>
-          <span className="status-badge" data-state="fail">
-            {t("notReady")}
-          </span>
-        </header>
+    <div className="landing">
+      <a className="landing-skip" href="#main">
+        {t("skipToContent")}
+      </a>
 
-        <section className="status-card" aria-labelledby="status-environment">
-          <h2 id="status-environment">{t("environment")}</h2>
-          <div className="status-grid">
-            <div>
-              <p className="status-meta">
-                <strong>{t("environment")}:</strong> <code>{readiness.appEnv}</code>
-              </p>
-              <p className="status-meta">
-                <strong>{t("locale")}:</strong> <code>{appLocale}</code>
-              </p>
-              <p className="status-meta">
-                <strong>{t("direction")}:</strong>{" "}
-                {directionForLocale(appLocale) === "rtl" ? t("directionRtl") : t("directionLtr")}
-              </p>
-            </div>
-            <div>
-              <p className="status-meta">
-                <strong>{t("generatedAt")}:</strong>{" "}
-                {dateFormatter.format(new Date(readiness.timestamp))}
-              </p>
-              <p className="status-meta">
-                <strong>{t("endpoints")}:</strong> <NextLink href="/healthz">/healthz</NextLink> ·{" "}
-                <NextLink href="/readyz">/readyz</NextLink>
-              </p>
-            </div>
-          </div>
-        </section>
+      <LandingHeader signedIn={signedIn} initialTheme={initialTheme} />
 
-        <section className="status-card" aria-labelledby="status-checks">
-          <h2 id="status-checks">{t("checks")}</h2>
-          <ul className="status-checks">
-            {checks.map(({ label, check }) => (
-              <li className="status-check" key={label}>
-                <span className="status-check-label">{label}</span>
-                <span className="status-badge" data-state={check.state}>
-                  {t(STATE_LABEL_KEYS[check.state])}
-                </span>
-                <code className="status-check-detail">{check.detail}</code>
-              </li>
-            ))}
-          </ul>
-        </section>
+      <main id="main">
+        <LandingHero signedIn={signedIn} locale={appLocale} />
+        <LandingTruth />
+        <LandingProblems />
+        <LandingGap />
+        <LandingHow />
+        <LandingSecurity />
+        <LandingFaq />
+        <LandingCallToAction signedIn={signedIn} />
+      </main>
 
-        <section className="status-card">
-          <h2>{t("endpoints")}</h2>
-          <ul className="status-links">
-            <li>
-              <NextLink href="/healthz">{t("liveness")} — /healthz</NextLink>
-            </li>
-            <li>
-              <NextLink href="/readyz">{t("readiness")} — /readyz</NextLink>
-            </li>
-          </ul>
-        </section>
-
-        <footer className="status-footer">
-          <p className="status-note">{t("scopeNote")}</p>
-          <span className="status-links">
-            <Link href={user ? "/app" : "/sign-in"} locale={appLocale}>
-              {user ? t("enterApp") : t("signIn")}
-            </Link>
-            <Link href="/" locale={switchTo} aria-label={t("languageSwitchAria")}>
-              {t("languageSwitch")}
-            </Link>
-          </span>
-        </footer>
-      </div>
-    </main>
+      <LandingFooter signedIn={signedIn} />
+    </div>
   );
 }
