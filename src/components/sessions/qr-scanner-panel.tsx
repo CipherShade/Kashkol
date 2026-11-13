@@ -15,7 +15,6 @@ interface QrScannerPanelProps {
     mark: {
       id: string;
       mark: string;
-      paymentVerified: boolean;
       isCrossSeason: boolean;
     };
     isCrossSeason: boolean;
@@ -85,7 +84,6 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             qrToken: token.trim(),
-            paymentVerified: false,
             markLate: false,
           }),
         });

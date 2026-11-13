@@ -3,11 +3,6 @@ import { getDb } from "@/lib/db/client";
 import { withPortalInvitationScope, withScope } from "@/lib/db/scope";
 import { newUuidV7 } from "@/lib/id";
 import type { PortalGrantRow } from "@/modules/identity/repository";
-import {
-  calculateStudentBalances,
-  currentMonthInTimezone,
-} from "@/modules/payments/calculations";
-import { buildSessionCharges } from "@/modules/payments/session-revenue";
 import type { Scope } from "@/modules/tenancy/types";
 import type {
   PortalPermissions,
@@ -1162,186 +1157,8 @@ export async function loadParentChildDetail(
       }));
     }
 
-    // 5. Approved Payment & Balance Data (only when `permissions.showPayments === true`)
-    let payments: {
-      currency: string;
-      balance: {
-        expectedMinor: number;
-        receivedMinor: number;
-        adjustmentsMinor: number;
-        balanceMinor: number;
-      };
-      history: Array<{
-        id: string;
-        period: string | null;
-        amountMinor: number;
-        currency: string;
-        method: string;
-        methodLabel: string | null;
-        paidOn: string;
-        purpose: string | null;
-        referenceNumber: string | null;
-      }>;
-      adjustments: Array<{
-        id: string;
-        kind: string;
-        amountMinor: number;
-        balanceImpact: number;
-        currency: string;
-        paidOn: string;
-        reason: string;
-      }>;
-    } | null = null;
-
-    if (permissions.showPayments) {
-      const [allEnrollments, paymentRows, adjustmentRows, feeRuleRows, chargeRows, sessionPricedGroups] = await Promise.all([
-        tx.enrollment.findMany({
-          where: { workspaceId: grant.workspaceId, studentId: student.id },
-          select: {
-            studentId: true,
-            groupId: true,
-            enrolledAt: true,
-            leftAt: true,
-          },
-        }),
-        tx.payment.findMany({
-          where: {
-            workspaceId: grant.workspaceId,
-            studentId: student.id,
-            voidedAt: null,
-          },
-          orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
-          select: {
-            id: true,
-            studentId: true,
-            period: true,
-            amountMinor: true,
-            currency: true,
-            method: true,
-            methodLabel: true,
-            paidOn: true,
-            purpose: true,
-            referenceNumber: true,
-            voidedAt: true,
-          },
-        }),
-        tx.paymentAdjustment.findMany({
-          where: {
-            workspaceId: grant.workspaceId,
-            studentId: student.id,
-          },
-          orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
-          select: {
-            id: true,
-            studentId: true,
-            kind: true,
-            amountMinor: true,
-            balanceImpact: true,
-            currency: true,
-            paidOn: true,
-            reason: true,
-          },
-        }),
-        tx.feeRule.findMany({
-          where: {
-            workspaceId: grant.workspaceId,
-            OR: [
-              { studentId: student.id },
-              ...(activeGroupIds.length > 0 ? [{ groupId: { in: activeGroupIds } }] : []),
-            ],
-          },
-          select: {
-            studentId: true,
-            groupId: true,
-            amountMinor: true,
-            effectiveFrom: true,
-          },
-        }),
-        tx.attendanceMark.findMany({
-          where: {
-            workspaceId: grant.workspaceId,
-            studentId: student.id,
-            mark: { in: ["present", "late"] },
-            session: { status: { not: "cancelled" } },
-          },
-          select: {
-            studentId: true,
-            session: {
-              select: {
-                id: true,
-                groupId: true,
-                pricePerStudentMinor: true,
-                group: { select: { defaultPricePerStudentMinor: true } },
-              },
-            },
-          },
-        }),
-        tx.group.findMany({
-          where: {
-            workspaceId: grant.workspaceId,
-            defaultPricePerStudentMinor: { gt: 0 },
-          },
-          select: { id: true },
-        }),
-      ]);
-
-      const chargeSessions = new Map<string, (typeof chargeRows)[number]["session"]>();
-      for (const row of chargeRows) chargeSessions.set(row.session.id, row.session);
-      const sessionCharges = buildSessionCharges(
-        [...chargeSessions.values()],
-        chargeRows.map((row) => ({ studentId: row.studentId, sessionId: row.session.id })),
-        sessionPricedGroups.map((g) => g.id),
-      );
-
-      const asOfMonth = currentMonthInTimezone(now, timezone);
-      const computed = calculateStudentBalances({
-        students: [{ id: student.id }],
-        feeRules: feeRuleRows,
-        enrollments: allEnrollments,
-        payments: paymentRows,
-        adjustments: adjustmentRows,
-        sessionCharges: sessionCharges.charges,
-        sessionPricedGroupIds: sessionCharges.sessionPricedGroupIds,
-        asOfMonth,
-        timezone,
-      })[0] ?? {
-        studentId: student.id,
-        expectedMinor: 0,
-        receivedMinor: 0,
-        adjustmentsMinor: 0,
-        balanceMinor: 0,
-      };
-
-      payments = {
-        currency,
-        balance: {
-          expectedMinor: computed.expectedMinor,
-          receivedMinor: computed.receivedMinor,
-          adjustmentsMinor: computed.adjustmentsMinor,
-          balanceMinor: computed.balanceMinor,
-        },
-        history: paymentRows.map((p) => ({
-          id: p.id,
-          period: p.period,
-          amountMinor: p.amountMinor,
-          currency: p.currency,
-          method: p.method,
-          methodLabel: p.methodLabel,
-          paidOn: p.paidOn.toISOString().slice(0, 10),
-          purpose: p.purpose,
-          referenceNumber: p.referenceNumber,
-        })),
-        adjustments: adjustmentRows.map((adj) => ({
-          id: adj.id,
-          kind: adj.kind,
-          amountMinor: adj.amountMinor,
-          balanceImpact: adj.balanceImpact,
-          currency: adj.currency,
-          paidOn: adj.paidOn.toISOString().slice(0, 10),
-          reason: adj.reason,
-        })),
-      };
-    }
+    // Payments are never exposed to portals (ADR-0028): the ledger is staff-only.
+    // No `payments` key is emitted at all.
 
     // 6. Schedule & Schedule Changes
     let schedule: {
@@ -1513,7 +1330,6 @@ export async function loadParentChildDetail(
       homework,
       resources,
       videos,
-      payments,
       schedule,
       notifications,
     };

@@ -155,7 +155,7 @@ Workspace
 | `D-09` | Homework submissions are explicit records with a status, not an array of booleans carried on the homework row. |
 | `D-10` | **Session corrections never destroy history.** Every attendance write creates an immutable revision entry recording actor, timestamp, prior value, and new value. The current value is the head of the revision chain. |
 | `D-11` | "Quiz" in the prototype maps to **paper assessment with manual grade entry** in the brief. Kashkol uses the term *Assessment (paper)* to distinguish it from the P3 online exam. (`A-06`) |
-| `D-14` | Payments are **records of money the teacher received**, entered manually: student, period covered, amount, method, date, note. Kashkol performs no reconciliation and no settlement. |
+| `D-14` | Payments are **records of money the teacher received**, entered manually: student, period covered, amount, method, date, note. Kashkol performs no reconciliation and no settlement. **Superseded by `ADR-0028`** (2026-11-13): the record is now a session receipt (session, amount, method, date, note); the per-student ledger is removed. |
 | `D-15` | Files have exactly three visibility scopes: `teacher_only`, `groups`, and `students`. Group/student targets are explicit tenant-scoped associations and may contain multiple targets. Parents/students must also have a live explicit portal grant for the assigned student. |
 | `D-16` | Messages are **prepared drafts** plus an optional record of the teacher opening them. Kashkol never asserts delivery. (`F-P1-10`) |
 
@@ -958,6 +958,15 @@ to prepare.
 
 ### F-P2-04 — Manual payment tracking
 
+> **Status: superseded by `ADR-0028`** (2026-11-13). Manual tracking remains, but it is
+> **session-scoped**: the teacher records one receipt per session, and expected revenue is
+> price × (present + late marks). The per-student model described below (criteria 2, 3, 4, the
+> per-student fee rules in 2, the "paid" toggle in 9, and the balances report in 10) is removed.
+> Criteria 5 (append-only, idempotent), 6 (assistant permission gate), 7 (no settlement claim),
+> 8 (EGP-only), and 11 (no parent access) continue to apply. Criterion 1 is replaced by: a
+> session receipt records session, amount (EGP), method, date, optional reference/note, and the
+> authenticated operator.
+
 **User story:** As a teacher, I want to record what each parent paid and what is still outstanding, so
 that I know who to follow up with.
 
@@ -1588,7 +1597,7 @@ Observed in the reference file. Each is a requirement in disguise.
 | D-11 | The prototype's "Quiz" is the brief's paper assessment with manual grade entry. |
 | D-12 | Permissions and tenancy are enforced server-side, never only in the UI. |
 | D-13 | Platform administrators have no standing access to tenant content; break-glass access is audited and time-boxed. |
-| D-14 | Payments are manually recorded facts about money the teacher received. Kashkol moves no money. |
+| D-14 | Payments are manually recorded facts about money the teacher received. Kashkol moves no money. **Superseded by `ADR-0028`** (session-scoped receipts). |
 | D-15 | File visibility has exactly three scopes: teacher-only, selected groups, and selected students. |
 | D-16 | Parent messages are prepared drafts; Kashkol never claims delivery. |
 | D-17 | Online live meetings are never in scope; only externally produced recordings, in P3. |

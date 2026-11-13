@@ -2,8 +2,6 @@ import { withScope } from "@/lib/db/scope";
 import { getDb } from "@/lib/db/client";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Scope } from "@/modules/tenancy/types";
-import { calculateStudentBalances } from "@/modules/payments/calculations";
-import { buildSessionCharges } from "@/modules/payments/session-revenue";
 import type { ReportExportQuery, ReportQuery } from "./schemas";
 
 type DateBounds = { from?: Date; toExclusive?: Date; dateFrom?: Date; dateTo?: Date };
@@ -194,149 +192,89 @@ export async function loadReport(
       };
     }
 
-    if (query.type === "balances") {
-      const asOf = query.to;
-      if (!asOf || !bounds.toExclusive) {
-        throw new Error("A balance report requires an as-of date");
-      }
-      const asOfMonth = asOf.slice(0, 7);
-      const studentWhere = {
+    if (query.type === "sessionRevenue") {
+      const sessionWhere: Prisma.TeachingSessionWhereInput = {
         workspaceId: scope.workspaceId,
-        archivedAt: null,
-        ...(query.studentId ? { id: query.studentId } : {}),
-        ...(query.groupId
-          ? { enrollments: { some: { groupId: query.groupId } } }
+        status: { not: "cancelled" },
+        ...(query.groupId ? { groupId: query.groupId } : {}),
+        ...(bounds.dateFrom || bounds.dateTo
+          ? { startsAt: { gte: bounds.dateFrom, lte: bounds.dateTo } }
           : {}),
       };
-      const [students, selectedGroup, feeRules, enrollments, pricedSessions, chargedMarks, paymentTotals, adjustmentTotals, sessionPricedGroups] =
-        await Promise.all([
-          tx.student.findMany({
-            where: studentWhere,
-            select: { id: true, firstName: true, lastName: true },
-            orderBy: [{ firstName: "asc" }, { lastName: "asc" }, { id: "asc" }],
-          }),
-          query.groupId
-            ? tx.group.findFirst({
-                where: { id: query.groupId, workspaceId: scope.workspaceId },
-                select: { name: true },
-              })
-            : Promise.resolve(null),
-          tx.feeRule.findMany({
-            where: { workspaceId: scope.workspaceId, effectiveFrom: { lt: bounds.toExclusive } },
-            select: { studentId: true, groupId: true, amountMinor: true, effectiveFrom: true },
-          }),
-          tx.enrollment.findMany({
-            where: { workspaceId: scope.workspaceId },
-            select: { studentId: true, groupId: true, enrolledAt: true, leftAt: true },
-          }),
-          tx.teachingSession.findMany({
-            where: {
-              workspaceId: scope.workspaceId,
-              status: { not: "cancelled" },
-              startsAt: { lt: bounds.toExclusive },
-            },
-            select: {
-              id: true,
-              groupId: true,
-              pricePerStudentMinor: true,
-              group: { select: { defaultPricePerStudentMinor: true } },
-            },
-          }),
-          tx.attendanceMark.findMany({
-            where: {
-              workspaceId: scope.workspaceId,
-              student: studentWhere,
-              mark: { in: ["present", "late"] },
-              session: {
-                status: { not: "cancelled" },
-                startsAt: { lt: bounds.toExclusive },
-              },
-            },
-            select: { studentId: true, sessionId: true },
-          }),
-          tx.payment.groupBy({
-            by: ["studentId"],
-            where: {
-              workspaceId: scope.workspaceId,
-              student: studentWhere,
-              paidOn: { lt: bounds.toExclusive },
-              voidedAt: null,
-            },
-            _sum: { amountMinor: true },
-          }),
-          tx.paymentAdjustment.groupBy({
-            by: ["studentId", "balanceImpact"],
-            where: {
-              workspaceId: scope.workspaceId,
-              student: studentWhere,
-              paidOn: { lt: bounds.toExclusive },
-            },
-            _sum: { amountMinor: true },
-          }),
-          tx.group.findMany({
-            where: { workspaceId: scope.workspaceId, defaultPricePerStudentMinor: { gt: 0 } },
-            select: { id: true },
-          }),
-        ]);
-      const paymentByStudent = new Map(
-        paymentTotals.map((row) => [row.studentId, row._sum.amountMinor ?? 0]),
-      );
-      const sessionCharges = buildSessionCharges(
-        pricedSessions,
-        chargedMarks,
-        sessionPricedGroups.map((g) => g.id),
-      );
-      const balances = calculateStudentBalances({
-        students,
-        feeRules,
-        enrollments,
-        payments: students.map((student) => ({
-          studentId: student.id,
-          amountMinor: paymentByStudent.get(student.id) ?? 0,
-          voidedAt: null,
-        })),
-        adjustments: adjustmentTotals.map((row) => ({
-          studentId: row.studentId,
-          amountMinor: row._sum.amountMinor ?? 0,
-          balanceImpact: row.balanceImpact,
-        })),
-        sessionCharges: sessionCharges.charges,
-        sessionPricedGroupIds: sessionCharges.sessionPricedGroupIds,
-        asOfMonth,
-        timezone,
+      const sessions = await tx.teachingSession.findMany({
+        where: sessionWhere,
+        select: {
+          id: true,
+          startsAt: true,
+          pricePerStudentMinor: true,
+          group: { select: { name: true, defaultPricePerStudentMinor: true } },
+        },
+        orderBy: { startsAt: "asc" },
+        take:
+          exportLimit === undefined
+            ? (query.page - 1) * query.pageSize + query.pageSize
+            : exportLimit + 1,
       });
-      const studentsById = new Map(students.map((student) => [student.id, student]));
-      const rows = balances
-        .filter(
-          (balance) =>
-            balance.expectedMinor !== 0 ||
-            balance.receivedMinor !== 0 ||
-            balance.adjustmentsMinor !== 0,
-        )
-        .map((balance): ReportRow => {
-          const student = studentsById.get(balance.studentId);
-          if (!student) throw new Error("Balance report student is missing");
-          return {
-            asOf,
-            student: `${student.firstName} ${student.lastName}`,
-            group: selectedGroup?.name ?? null,
-            expectedMinor: balance.expectedMinor,
-            receivedMinor: balance.receivedMinor,
-            adjustmentsMinor: balance.adjustmentsMinor,
-            balanceMinor: balance.balanceMinor,
-          };
-        });
-      const total = rows.length;
+      // Sessions are few relative to rows; count exactly for pagination.
+      const sessionCount = await tx.teachingSession.count({ where: sessionWhere });
+      const sessionIds = sessions.map((session) => session.id);
+      const [marks, collectedRows] = await Promise.all([
+        tx.attendanceMark.findMany({
+          where: {
+            workspaceId: scope.workspaceId,
+            sessionId: { in: sessionIds },
+            mark: { in: ["present", "late"] },
+            session: { status: { not: "cancelled" } },
+          },
+          select: { sessionId: true },
+        }),
+        tx.payment.groupBy({
+          by: ["sessionId"],
+          where: {
+            workspaceId: scope.workspaceId,
+            sessionId: { in: sessionIds },
+            voidedAt: null,
+          },
+          _sum: { amountMinor: true },
+        }),
+      ]);
+      const attendedBySession = new Map<string, number>();
+      for (const mark of marks) {
+        attendedBySession.set(mark.sessionId, (attendedBySession.get(mark.sessionId) ?? 0) + 1);
+      }
+      const collectedBySession = new Map(
+        collectedRows.map((row) => [row.sessionId, row._sum.amountMinor ?? 0]),
+      );
+      const rows = sessions.map((session): ReportRow => {
+        const price = session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+        const attended = attendedBySession.get(session.id) ?? 0;
+        return {
+          date: session.startsAt,
+          group: session.group.name,
+          priceMinor: price,
+          attended,
+          expectedMinor: price != null ? price * attended : null,
+          collectedMinor: collectedBySession.get(session.id) ?? 0,
+        };
+      });
+      const offset = exportLimit === undefined ? (query.page - 1) * query.pageSize : 0;
       const visible = rows.slice(
-        exportLimit === undefined ? offset : 0,
+        offset,
         exportLimit === undefined ? offset + query.pageSize : exportLimit,
       );
-      return { timezone, total, items: visible };
+      return { timezone, total: sessionCount, items: visible };
     }
 
     const studentFilter = {
       ...(query.studentId ? { studentId: query.studentId } : {}),
-      ...(query.groupId ? { student: { enrollments: { some: { groupId: query.groupId } } } } : {}),
+      ...(query.groupId
+        ? {
+            OR: [
+              { session: { groupId: query.groupId } },
+              { student: { enrollments: { some: { groupId: query.groupId } } } },
+            ],
+          }
+        : {}),
     };
     const paidOn =
       bounds.dateFrom || bounds.dateTo
@@ -355,13 +293,23 @@ export async function loadReport(
     const [paymentRows, adjustmentRows, paymentCount, adjustmentCount] = await Promise.all([
       tx.payment.findMany({
         where: paymentWhere,
-        include: { student: { select: { firstName: true, lastName: true } } },
+        include: {
+          student: { select: { firstName: true, lastName: true } },
+          session: { select: { startsAt: true, group: { select: { name: true } } } },
+        },
         orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
         take,
       }),
       tx.paymentAdjustment.findMany({
         where: adjustmentWhere,
-        include: { student: { select: { firstName: true, lastName: true } } },
+        include: {
+          student: { select: { firstName: true, lastName: true } },
+          payment: {
+            select: {
+              session: { select: { startsAt: true, group: { select: { name: true } } } },
+            },
+          },
+        },
         orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
         take,
       }),
@@ -371,7 +319,11 @@ export async function loadReport(
     const items: Array<ReportRow & { sortDate: Date; sortCreated: Date }> = [
       ...paymentRows.map((row) => ({
         date: row.paidOn,
-        student: `${row.student.firstName} ${row.student.lastName}`,
+        student: row.student
+          ? `${row.student.firstName} ${row.student.lastName}`
+          : row.session
+            ? `${row.session.group.name} · ${row.session.startsAt.toISOString().slice(0, 10)}`
+            : "—",
         kind: "receipt",
         amountMinor: row.amountMinor,
         balanceImpact: -1,
@@ -386,7 +338,11 @@ export async function loadReport(
       })),
       ...adjustmentRows.map((row) => ({
         date: row.paidOn,
-        student: `${row.student.firstName} ${row.student.lastName}`,
+        student: row.student
+          ? `${row.student.firstName} ${row.student.lastName}`
+          : row.payment?.session
+            ? `${row.payment.session.group.name} · ${row.payment.session.startsAt.toISOString().slice(0, 10)}`
+            : "—",
         kind: row.kind,
         amountMinor: row.amountMinor,
         balanceImpact: row.balanceImpact,

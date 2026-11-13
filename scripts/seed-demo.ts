@@ -27,7 +27,7 @@ import { disconnectDb, getDb } from "../src/lib/db/client";
 import { withScope } from "../src/lib/db/scope";
 import { evaluateExamResponses, type GradableQuestion } from "../src/modules/exams/grading";
 import { renderTemplate } from "../src/modules/messaging/templates";
-import { DEFAULT_PARENT_PERMISSIONS } from "../src/modules/portals/tokens";
+import { DEFAULT_PARENT_PERMISSIONS, DEFAULT_STUDENT_PERMISSIONS } from "../src/modules/portals/tokens";
 import { normalizeSearchTerm } from "../src/modules/search/schemas";
 
 loadEnv({ path: ".env.local", quiet: true });
@@ -641,11 +641,12 @@ type MarkPlanEntry = {
 
 /**
  * The single deterministic attendance plan shared by the attendance-mark seed
- * and the ledger seed, so `paymentVerified` and the seeded session payments
- * always agree with what was attended.
+ * and the receipt seed, so the seeded session receipts always agree with
+ * what was attended.
  *
- * The most recent completed session of each group leaves its last enrolled
- * student unpaid — a small, truthful outstanding subset for the demo.
+ * The most recent completed session of each group records no receipt — a
+ * small, truthful uncollected subset for the demo (expected is shown, but
+ * collected for that session stays 0 until the teacher records it).
  */
 function buildMarkPlan(): MarkPlanEntry[] {
   const plan = buildSessionPlan();
@@ -680,8 +681,8 @@ function buildMarkPlan(): MarkPlanEntry[] {
   return marks;
 }
 
-/** Eligible (present/late) marks that deliberately have no payment yet. */
-function unpaidMarkIds(): Set<string> {
+/** Sessions that deliberately have no receipt yet (the latest per group). */
+function unreceiptedSessionIds(): Set<string> {
   const marks = buildMarkPlan();
   const byGroup = new Map<number, MarkPlanEntry[]>();
   for (const mark of marks) {
@@ -689,21 +690,19 @@ function unpaidMarkIds(): Set<string> {
     list.push(mark);
     byGroup.set(mark.groupIndex, list);
   }
-  const unpaid = new Set<string>();
-  for (const [groupIndex, list] of byGroup) {
+  const unreceipted = new Set<string>();
+  for (const [, list] of byGroup) {
     const latest = Math.max(...list.map((mark) => mark.occurrenceNo));
-    const roster = studentsInGroup(groupIndex);
-    const targetStudent = roster[roster.length - 1];
     const target = list.find(
       (mark) =>
         mark.occurrenceNo === latest &&
-        mark.studentId === targetStudent.id &&
         (mark.mark === "present" || mark.mark === "late"),
     );
-    if (target) unpaid.add(target.id);
+    if (target) unreceipted.add(target.sessionId);
   }
-  return unpaid;
+  return unreceipted;
 }
+
 
 function isPayableMark(mark: MarkPlanEntry): boolean {
   return mark.mark === "present" || mark.mark === "late";
@@ -751,7 +750,6 @@ async function seedSessionsAndAttendance(): Promise<void> {
         });
       }
 
-      const unpaidIds = unpaidMarkIds();
       const marks = buildMarkPlan();
       const revisionSeeds = marks
         .filter((mark) => mark.revision)
@@ -763,7 +761,6 @@ async function seedSessionsAndAttendance(): Promise<void> {
         }));
 
       for (const mark of marks) {
-        const payable = isPayableMark(mark);
         const data = {
           workspaceId: NILE_WORKSPACE_ID,
           sessionId: mark.sessionId,
@@ -773,7 +770,6 @@ async function seedSessionsAndAttendance(): Promise<void> {
           deviceId: mark.studentIndex === 1 ? "demo-device-1" : null,
           recordedBy: mark.groupIndex === 1 ? ASSISTANT_USER_ID : OWNER_USER_ID,
           recordedAt: new Date(mark.startsAt.getTime() + 30 * 60000),
-          paymentVerified: payable && !unpaidIds.has(mark.id),
           isCrossSeason: false,
           primaryGroupId: null,
         };
@@ -1151,7 +1147,7 @@ async function seedAssessmentsAndHomework(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Fee rules, the manual payments ledger, adjustments, and revisions.
+// 4. The session-scoped payments ledger (ADR-0028), adjustments, and revisions.
 // ---------------------------------------------------------------------------
 
 function monthDay(offsetMonths: number, day: number): CairoDay {
@@ -1172,9 +1168,10 @@ async function seedPayments(): Promise<void> {
       //    (see assertLocalSeedTarget), so it is the honest way to rebuild the
       //    demo ledger from scratch. The complete row set is re-created below
       //    in the same transaction. Nothing here fabricates the billing model:
-      //    one session-linked payment per non-cancelled completed/started
-      //    present-or-late mark, an explicitly voided mistaken entry, a payment
-      //    revision, a discount adjustment, and a refund adjustment.
+      //    one session receipt per completed session that had present/late
+      //    attendance (expected = attendees × session price, per ADR-0028),
+      //    an explicitly voided mistaken entry, a payment revision, a discount
+      //    adjustment, and a refund adjustment — none of them per-student.
       //
       //    NOTE: this wipes ledger rows for every workspace in the local
       //    database. That is safe locally (scripts/seed.ts creates no ledger
@@ -1183,33 +1180,50 @@ async function seedPayments(): Promise<void> {
         'TRUNCATE TABLE "payment", "payment_adjustment", "fee_rule", "payment_revision"',
       );
 
-      // 2. Payment rows: one non-voided ledger row for every present/late mark
-      //    that has not been deliberately left unpaid, at that session's price.
+      // 2. Payment rows: one receipt per completed session with present/late
+      //    attendance, except the latest completed session of each group,
+      //    which is left unreceipted on purpose (ADR-0028 truthful subset).
       const today = todayInCairo();
-      const eligibleMarks = buildMarkPlan().filter((mark) =>
-        isPayableMark(mark) && !unpaidMarkIds().has(mark.id),
-      );
+      const marks = buildMarkPlan();
+      const attendedBySession = new Map<string, number>();
+      for (const mark of marks) {
+        if (!isPayableMark(mark)) continue;
+        attendedBySession.set(
+          mark.sessionId,
+          (attendedBySession.get(mark.sessionId) ?? 0) + 1,
+        );
+      }
+      const sessionById = new Map(marks.map((mark) => [mark.sessionId, mark]));
+      const unreceipted = unreceiptedSessionIds();
+      const receiptable = [...attendedBySession.keys()]
+        .filter((sessionId) => !unreceipted.has(sessionId))
+        .map((sessionId) => sessionById.get(sessionId))
+        .filter((mark): mark is MarkPlanEntry => Boolean(mark))
+        .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+
       const paymentRows: Prisma.PaymentUncheckedCreateInput[] = [];
-      for (let index = 0; index < eligibleMarks.length; index += 1) {
-        const mark = eligibleMarks[index];
+      for (let index = 0; index < receiptable.length; index += 1) {
+        const mark = receiptable[index];
+        const sessionId = mark.sessionId;
+        const attended = attendedBySession.get(sessionId) ?? 0;
         const parts = cairoParts(mark.startsAt);
         const period = `${parts.year}-${String(parts.month).padStart(2, "0")}`;
         const method = (index % 3 === 0 ? "transfer" : "cash") as "cash" | "transfer";
         paymentRows.push({
           id: fid(0x91, 200 + index),
           workspaceId: NILE_WORKSPACE_ID,
-          studentId: mark.studentId,
-          sessionId: mark.sessionId,
+          studentId: null,
+          sessionId,
           period,
-          amountMinor: mark.pricePerStudentMinor,
+          amountMinor: mark.pricePerStudentMinor * attended,
           currency: "EGP",
           method,
           methodLabel: method === "transfer" ? "تحويل بنكي" : null,
           paidOn: new Date(Date.UTC(parts.year, parts.month - 1, parts.day)),
           purpose: "سداد حصة",
           referenceNumber: method === "transfer" ? `TRX-${period}-${index + 1}` : null,
-          idempotencyKey: `demo-session-payment-${index}`,
-          note: `دفع لحصة حضور/تأخر في ${mark.startsAt.toISOString().slice(0, 10)}`,
+          idempotencyKey: `demo-session-receipt-${sessionId}`,
+          note: `تحصيل حصة (${attended} حاضر/متأخر × ${mark.pricePerStudentMinor / 100} جنيه) في ${mark.startsAt.toISOString().slice(0, 10)}`,
           voidedAt: null,
           voidReason: null,
           createdBy: OWNER_USER_ID,
@@ -1218,34 +1232,39 @@ async function seedPayments(): Promise<void> {
 
       await tx.payment.createMany({ data: paymentRows, skipDuplicates: true });
 
-      // A voided mistaken entry on the demo ledger — a real ledger row, not an
-      // inferred balance.
+      // A voided mistaken entry on the demo ledger — a real ledger row
+      // linked to a session, not an inferred balance.
       const voidedId = fid(0x91, 101);
-      await tx.payment.create({
-        data: {
-          id: voidedId,
-          workspaceId: NILE_WORKSPACE_ID,
-          studentId: STUDENTS[4].id,
-          sessionId: null,
-          period: monthKey(today, -1),
-          amountMinor: GROUPS[1].pricePerStudentMinor,
-          currency: "EGP",
-          method: "cash" as const,
-          methodLabel: null,
-          paidOn: dateOnly(monthDay(-1, 4)),
-          purpose: "اشتراك شهري",
-          referenceNumber: null,
-          idempotencyKey: "demo-payment-voided-1",
-          note: "قيد خاطئ أُلغي بعد مراجعة الخزينة.",
-          voidedAt: daysAgo(20, 13),
-          voidReason: "سُجّل المبلغ مرتين بالخطأ.",
-          createdBy: OWNER_USER_ID,
-        },
-      });
+      const voidedSession = receiptable[0] ?? sessionById.values().next().value;
+      if (voidedSession) {
+        const voidedAttended = attendedBySession.get(voidedSession.sessionId) ?? 0;
+        await tx.payment.create({
+          data: {
+            id: voidedId,
+            workspaceId: NILE_WORKSPACE_ID,
+            studentId: null,
+            sessionId: voidedSession.sessionId,
+            period: monthKey(today, -1),
+            amountMinor: GROUPS[1].pricePerStudentMinor * Math.max(voidedAttended, 1),
+            currency: "EGP",
+            method: "cash" as const,
+            methodLabel: null,
+            paidOn: dateOnly(monthDay(-1, 4)),
+            purpose: "سداد حصة",
+            referenceNumber: null,
+            idempotencyKey: "demo-payment-voided-1",
+            note: "قيد خاطئ أُلغي بعد مراجعة الخزينة.",
+            voidedAt: daysAgo(20, 13),
+            voidReason: "سُجّل المبلغ مرتين بالخطأ.",
+            createdBy: OWNER_USER_ID,
+          },
+        });
+      }
 
-      // 3. A payment revision pointing at the first eligible mark's payment.
+      // 3. A payment revision pointing at the first seeded receipt.
       const firstPaymentId: string = paymentRows[0]?.id ?? "";
-      if (eligibleMarks.length > 0) {
+      const firstReceiptAmount = paymentRows[0]?.amountMinor ?? 0;
+      if (paymentRows.length > 0) {
         await tx.paymentRevision.upsert({
           where: { id: fid(0x94, 1) },
           create: {
@@ -1253,9 +1272,9 @@ async function seedPayments(): Promise<void> {
             workspaceId: NILE_WORKSPACE_ID,
             paymentId: firstPaymentId,
             actorId: OWNER_USER_ID,
-            before: { amountMinor: eligibleMarks[0].pricePerStudentMinor, method: "cash", methodLabel: null },
+            before: { amountMinor: firstReceiptAmount, method: "cash", methodLabel: null },
             after: {
-              amountMinor: eligibleMarks[0].pricePerStudentMinor,
+              amountMinor: firstReceiptAmount,
               method: "transfer",
               methodLabel: "تحويل بنكي",
             },
@@ -1264,9 +1283,9 @@ async function seedPayments(): Promise<void> {
           },
           update: {
             paymentId: firstPaymentId,
-            before: { amountMinor: eligibleMarks[0].pricePerStudentMinor, method: "cash", methodLabel: null },
+            before: { amountMinor: firstReceiptAmount, method: "cash", methodLabel: null },
             after: {
-              amountMinor: eligibleMarks[0].pricePerStudentMinor,
+              amountMinor: firstReceiptAmount,
               method: "transfer",
               methodLabel: "تحويل بنكي",
             },
@@ -1275,26 +1294,28 @@ async function seedPayments(): Promise<void> {
         });
       }
 
-      // 4. Adjustments (real rows on the same ledger, not UI voodoo).
+      // 4. Adjustments (real rows on the same ledger, not UI voodoo), linked
+      //    to receipts rather than to students (ADR-0028).
+      const lastPaymentId: string = paymentRows[paymentRows.length - 1]?.id ?? firstPaymentId;
       const adjustments: Prisma.PaymentAdjustmentUncheckedCreateInput[] = [
         {
           id: fid(0x92, 1),
           workspaceId: NILE_WORKSPACE_ID,
-          studentId: STUDENTS[2].id,
-          paymentId: null,
+          studentId: null,
+          paymentId: firstPaymentId || null,
           kind: "discount",
           amountMinor: 5000,
           balanceImpact: -1,
           paidOn: dateOnly(monthDay(-1, 5)),
-          reason: "خصم أخوة — شقيقان في نفس المجموعة.",
+          reason: "خصم أُقر بالتنسيق مع ولي الأمر بعد الحصة.",
           idempotencyKey: "demo-adjustment-discount-1",
           createdBy: OWNER_USER_ID,
         },
         {
           id: fid(0x92, 2),
           workspaceId: NILE_WORKSPACE_ID,
-          studentId: STUDENTS[7].id,
-          paymentId: null,
+          studentId: null,
+          paymentId: lastPaymentId || null,
           kind: "refund",
           amountMinor: 10000,
           balanceImpact: 1,
@@ -2699,7 +2720,7 @@ async function seedPortalsInvitationsReportsAndAudit(): Promise<void> {
         studentId: STUDENTS[0].id,
         guardianId: null,
         kind: "student" as const,
-        permissions: { ...DEFAULT_PARENT_PERMISSIONS, showPayments: false } as unknown as Prisma.InputJsonValue,
+        permissions: DEFAULT_STUDENT_PERMISSIONS as unknown as Prisma.InputJsonValue,
         issuedBy: OWNER_USER_ID,
         issuedAt: daysAgo(20, 11),
         expiresAt: null,

@@ -21,11 +21,6 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
     maximumFractionDigits: 0,
   });
 
-  const formattedOutstanding = (revenue.outstandingMinor / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-
   const formattedExpected =
     revenue.expectedMinor !== null
       ? (revenue.expectedMinor / 100).toLocaleString(undefined, {
@@ -68,7 +63,11 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
           href="/app/payments"
           className="ui-stat"
           data-interactive="true"
-          data-tone={revenue.outstandingMinor > 0 ? "warn" : "success"}
+          data-tone={
+            revenue.expectedMinor !== null && revenue.collectedMinor < revenue.expectedMinor
+              ? "warn"
+              : "success"
+          }
           style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
         >
           <div className="ui-stat-top">
@@ -81,9 +80,6 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
             {formattedCollected} <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>{revenue.currency}</span>
           </div>
           <div className="ui-stat-hint" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-            <span>
-              {t("kpiRevenueOutstanding", { amount: formattedOutstanding, currency: revenue.currency })}
-            </span>
             <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>
               {formattedExpected !== null
                 ? t("kpiRevenueExpected", { amount: formattedExpected, currency: revenue.currency })

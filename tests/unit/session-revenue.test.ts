@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   calculateSessionExpectedRevenue,
   calculateSessionCollectedRevenue,
-  calculateSessionOutstanding,
-  calculatePaymentCollectionRate,
   buildSessionRevenueSummary,
 } from "../../src/modules/payments/session-revenue.js";
 
@@ -83,58 +81,9 @@ describe("calculateSessionCollectedRevenue", () => {
     expect(result).toBe(10_000);
   });
 
-  it("unpaid student is not counted (they have no payment record)", () => {
-    // This test documents the design: an absent payment = 0 collected.
+  it("unreceipted session is not counted (it has no payment record)", () => {
+    // This test documents the design: no receipt = 0 collected.
     expect(calculateSessionCollectedRevenue([])).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// calculateSessionOutstanding
-// ---------------------------------------------------------------------------
-
-describe("calculateSessionOutstanding", () => {
-  it("outstanding = expected - collected", () => {
-    expect(calculateSessionOutstanding(100_000, 70_000)).toBe(30_000);
-  });
-
-  it("returns 0 when fully paid", () => {
-    expect(calculateSessionOutstanding(100_000, 100_000)).toBe(0);
-  });
-
-  it("returns negative when overpaid", () => {
-    expect(calculateSessionOutstanding(100_000, 110_000)).toBe(-10_000);
-  });
-
-  it("returns null when expected is null (no price set)", () => {
-    expect(calculateSessionOutstanding(null, 50_000)).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// calculatePaymentCollectionRate
-// ---------------------------------------------------------------------------
-
-describe("calculatePaymentCollectionRate", () => {
-  it("returns 1 when fully collected", () => {
-    expect(calculatePaymentCollectionRate(100_000, 100_000)).toBe(1);
-  });
-
-  it("returns 0.5 when half collected", () => {
-    expect(calculatePaymentCollectionRate(100_000, 50_000)).toBe(0.5);
-  });
-
-  it("returns null when expected is null", () => {
-    expect(calculatePaymentCollectionRate(null, 50_000)).toBeNull();
-  });
-
-  it("returns 1 when expected is 0 and collected is 0", () => {
-    expect(calculatePaymentCollectionRate(0, 0)).toBe(1);
-  });
-
-  it("returns null when expected is 0 but collected is positive", () => {
-    // Over-collected with 0 price set — rate is undefined (not meaningful)
-    expect(calculatePaymentCollectionRate(0, 1000)).toBeNull();
   });
 });
 
@@ -143,28 +92,27 @@ describe("calculatePaymentCollectionRate", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildSessionRevenueSummary", () => {
-  it("full scenario: 100 students, 130 EGP price, some unpaid", () => {
-    // 100 attending students; price = 13,000 piastres each
-    // 80 have paid; 20 have not
-    const payments = Array.from({ length: 80 }, () => payment(13_000));
+  it("full scenario: 100 students, 130 EGP price, one session receipt recorded", () => {
+    // 100 attending students; price = 13,000 piastres each; expected = 1,300,000
+    // Exactly one receipt covering the session → collected is the receipt amount,
+    // never inferred from attendance.
+    const payments = [payment(1_300_000)];
     const summary = buildSessionRevenueSummary(13_000, 100, payments);
 
     expect(summary.pricePerStudentMinor).toBe(13_000);
     expect(summary.eligibleAttendanceCount).toBe(100);
     expect(summary.expectedRevenueMinor).toBe(1_300_000); // 100 × 13,000
-    expect(summary.collectedRevenueMinor).toBe(1_040_000); // 80 × 13,000
-    expect(summary.outstandingRevenueMinor).toBe(260_000);  // 20 × 13,000
-    expect(summary.collectionRate).toBeCloseTo(0.8);
+    expect(summary.collectedRevenueMinor).toBe(1_300_000);
+    expect(summary).not.toHaveProperty("outstandingRevenueMinor");
+    expect(summary).not.toHaveProperty("collectionRate");
   });
 
-  it("produces null expected/outstanding when no price configured", () => {
+  it("produces null expected when no price configured", () => {
     const payments = [payment(13_000)];
     const summary = buildSessionRevenueSummary(null, 10, payments);
 
     expect(summary.pricePerStudentMinor).toBeNull();
     expect(summary.expectedRevenueMinor).toBeNull();
-    expect(summary.outstandingRevenueMinor).toBeNull();
-    expect(summary.collectionRate).toBeNull();
     expect(summary.collectedRevenueMinor).toBe(13_000);
   });
 
@@ -173,6 +121,5 @@ describe("buildSessionRevenueSummary", () => {
     const summary = buildSessionRevenueSummary(13_000, 50, []);
     expect(summary.collectedRevenueMinor).toBe(0);
     expect(summary.expectedRevenueMinor).toBe(650_000); // price × attendance
-    expect(summary.outstandingRevenueMinor).toBe(650_000); // all outstanding
   });
 });

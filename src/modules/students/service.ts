@@ -62,10 +62,9 @@ export async function getStudent(scope: Scope, studentId: string) {
 
 export async function getStudentProfileDetails(scope: Scope, studentId: string) {
   authorize(scope, "students", "read");
-  const canViewPayments = isAllowed(scope, "payments", "read");
-  const profile = await findStudentProfile(scope, studentId, canViewPayments);
+  const profile = await findStudentProfile(scope, studentId);
   if (!profile) throw new AppError("NOT_FOUND");
-  return { ...profile, canViewPayments };
+  return profile;
 }
 
 export async function createStudent(

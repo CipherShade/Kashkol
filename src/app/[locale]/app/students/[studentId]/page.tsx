@@ -35,7 +35,6 @@ const STUDENT_PROFILE_TABS = [
   "attendance",
   "assessments",
   "homework",
-  "payments",
   "notes",
   "portal",
 ] as const;
@@ -166,7 +165,7 @@ export default async function StudentProfilePage({
         </Card>
       </div>
 
-      {/* Tabs view: Overview, Attendance, Grades, Homework, Payments, Notes */}
+      {/* Tabs view: Overview, Attendance, Grades, Homework, Notes */}
       <StudentProfileTabs
         key={initialTab}
         initialTab={initialTab}
@@ -224,17 +223,6 @@ export default async function StudentProfilePage({
             group: s.assessment.group,
           },
         }))}
-        payments={profile.payments.map((p) => ({
-          id: p.id,
-          period: p.period,
-          amountMinor: p.amountMinor,
-          currency: p.currency,
-          method: p.method,
-          paidOn: p.paidOn.toISOString().slice(0, 10),
-          voidedAt: p.voidedAt ? p.voidedAt.toISOString() : null,
-          note: p.note,
-        }))}
-        canViewPayments={profile.canViewPayments}
         notes={profile.notes.map((note) => ({
           id: note.id,
           body: note.body,

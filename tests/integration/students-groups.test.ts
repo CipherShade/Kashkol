@@ -9,24 +9,24 @@ import {
   previewStudentsImport,
 } from "@/modules/students/service";
 import type { CommitImportInput } from "@/modules/students/schemas";
-import { DELTA, NILE, ownerScope } from "./helpers";
+import { DELTA, FIXTURES, fixturesScope } from "./helpers";
 
 const created: Array<{ groupId: string; studentId: string }> = [];
 
 afterEach(async () => {
   for (const item of created.splice(0)) {
-    await withScope({ workspaceId: NILE }, async (tx) => {
-      await tx.enrollment.deleteMany({ where: { workspaceId: NILE, groupId: item.groupId } });
-      await tx.teachingSession.deleteMany({ where: { workspaceId: NILE, groupId: item.groupId } });
-      await tx.group.deleteMany({ where: { workspaceId: NILE, id: item.groupId } });
-      await tx.student.deleteMany({ where: { workspaceId: NILE, id: item.studentId } });
+    await withScope({ workspaceId: FIXTURES }, async (tx) => {
+      await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId: item.groupId } });
+      await tx.teachingSession.deleteMany({ where: { workspaceId: FIXTURES, groupId: item.groupId } });
+      await tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: item.groupId } });
+      await tx.student.deleteMany({ where: { workspaceId: FIXTURES, id: item.studentId } });
     });
   }
 });
 
 describe("students and groups services", () => {
   it("creates records and makes concurrent enrollment idempotent", async () => {
-    const scope = ownerScope();
+    const scope = fixturesScope();
     const studentResult = await createStudent(
       scope,
       {
@@ -70,7 +70,7 @@ describe("students and groups services", () => {
     ]);
     expect(first.id).toBe(second.id);
 
-    const openEnrollments = await withScope({ workspaceId: NILE }, (tx) =>
+    const openEnrollments = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.enrollment.count({ where: { groupId: group.id, studentId: studentResult.student.id, leftAt: null } }),
     );
     expect(openEnrollments).toBe(1);
@@ -84,7 +84,7 @@ describe("students and groups services", () => {
       }),
     );
     try {
-      await expect(getStudent(ownerScope(), foreignStudentId)).rejects.toBeInstanceOf(AppError);
+      await expect(getStudent(fixturesScope(), foreignStudentId)).rejects.toBeInstanceOf(AppError);
     } finally {
       await withScope({ workspaceId: DELTA }, (tx) =>
         tx.student.deleteMany({ where: { id: foreignStudentId, workspaceId: DELTA } }),
@@ -93,7 +93,7 @@ describe("students and groups services", () => {
   });
 
   it("requires acknowledgment for a name-only import match and audits each row", async () => {
-    const scope = ownerScope();
+    const scope = fixturesScope();
     const lastName = `Import${randomUUID().slice(0, 8)}`;
     const studentResult = await createStudent(
       scope,
@@ -152,9 +152,9 @@ describe("students and groups services", () => {
     );
     expect(result.updatedCount).toBe(1);
 
-    const rowAudits = await withScope({ workspaceId: NILE }, (tx) =>
+    const rowAudits = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.auditEvent.count({
-        where: { workspaceId: NILE, requestId, action: "student.updated", entityId: studentId },
+        where: { workspaceId: FIXTURES, requestId, action: "student.updated", entityId: studentId },
       }),
     );
     expect(rowAudits).toBe(1);

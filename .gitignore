@@ -23,6 +23,7 @@ src/generated/prisma/
 coverage/
 test-results/
 playwright-report/
+.vitest/
 
 # Logs
 *.log

@@ -130,35 +130,6 @@ type ParentChildDetail = {
     publishedAt: string | null;
     playbackEndpoint: string;
   }> | null;
-  payments: {
-    currency: string;
-    balance: {
-      expectedMinor: number;
-      receivedMinor: number;
-      adjustmentsMinor: number;
-      balanceMinor: number;
-    };
-    history: Array<{
-      id: string;
-      period: string | null;
-      amountMinor: number;
-      currency: string;
-      method: string;
-      methodLabel: string | null;
-      paidOn: string;
-      purpose: string | null;
-      referenceNumber: string | null;
-    }>;
-    adjustments: Array<{
-      id: string;
-      kind: string;
-      amountMinor: number;
-      balanceImpact: number;
-      currency: string;
-      paidOn: string;
-      reason: string;
-    }>;
-  } | null;
   schedule: {
     upcomingSessions: Array<{
       id: string;
@@ -189,13 +160,7 @@ type TabKey =
   | "grades"
   | "homework"
   | "resources"
-  | "payments"
   | "notifications";
-
-function formatMoney(amountMinor: number, currency: string): string {
-  const major = (amountMinor / 100).toFixed(2);
-  return `${major} ${currency}`;
-}
 
 export function ParentPortalClient({
   userEmail,
@@ -305,12 +270,6 @@ export function ParentPortalClient({
       label: t("tabs.resources"),
       icon: "file",
       visible: perms.showResources,
-    },
-    {
-      key: "payments",
-      label: t("tabs.payments"),
-      icon: "creditCard",
-      visible: perms.showPayments,
     },
     {
       key: "notifications",
@@ -855,85 +814,7 @@ export function ParentPortalClient({
           </div>
         )}
 
-        {/* Tab 6: Approved Payments & Balance */}
-        {activeTab === "payments" && activeChild.payments && (
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {t("paymentStats.expected")}
-                </span>
-                <p className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {formatMoney(
-                    activeChild.payments.balance.expectedMinor,
-                    activeChild.payments.currency,
-                  )}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {t("paymentStats.received")}
-                </span>
-                <p className="mt-1 font-mono text-lg font-bold text-[var(--success-fg)]">
-                  {formatMoney(
-                    activeChild.payments.balance.receivedMinor,
-                    activeChild.payments.currency,
-                  )}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4">
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {t("paymentStats.outstanding")}
-                </span>
-                <p className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {formatMoney(
-                    activeChild.payments.balance.balanceMinor,
-                    activeChild.payments.currency,
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)]">
-              <div className="border-b border-[var(--border-subtle)] px-4 py-3">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                  {t("paymentHistoryTitle")}
-                </h3>
-              </div>
-              {activeChild.payments.history.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
-                  {t("noPaymentsRecorded")}
-                </div>
-              ) : (
-                <ul className="divide-y divide-[var(--border-subtle)]">
-                  {activeChild.payments.history.map((payment) => (
-                    <li
-                      key={payment.id}
-                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-[var(--text-primary)]">
-                          {payment.purpose ?? payment.period ?? t("tuitionPayment")}
-                        </p>
-                        <p className="font-mono text-xs text-[var(--text-secondary)]">
-                          {payment.paidOn}
-                          {payment.referenceNumber
-                            ? ` · #${payment.referenceNumber}`
-                            : ""}
-                        </p>
-                      </div>
-                      <span className="font-mono text-sm font-bold text-[var(--success-fg)]">
-                        {formatMoney(payment.amountMinor, payment.currency)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 7: In-App Notifications & Push Privacy */}
+        {/* Tab: In-App Notifications & Push Privacy */}
         {activeTab === "notifications" && (
           <PortalNotificationsPanel
             initialNotifications={activeChild.notifications}

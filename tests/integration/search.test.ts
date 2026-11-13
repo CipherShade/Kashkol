@@ -4,7 +4,7 @@ import { withScope } from "@/lib/db/scope";
 import { createGroup } from "@/modules/groups/service";
 import { searchWorkspace } from "@/modules/search/service";
 import { permissionKey, type Scope } from "@/modules/tenancy/types";
-import { createStudent, DELTA, deleteStudent, NILE, ownerScope } from "./helpers";
+import { createStudent, DELTA, deleteStudent, FIXTURES, fixturesScope } from "./helpers";
 
 const createdStudents: Array<{ workspaceId: string; studentId: string }> = [];
 const createdGroups: string[] = [];
@@ -47,10 +47,10 @@ async function addGroup(scope: Scope, name: string): Promise<string> {
 
 afterEach(async () => {
   for (const groupId of createdGroups.splice(0)) {
-    await withScope({ workspaceId: NILE }, async (tx) => {
-      await tx.teachingSession.deleteMany({ where: { workspaceId: NILE, groupId } });
-      await tx.enrollment.deleteMany({ where: { workspaceId: NILE, groupId } });
-      await tx.group.deleteMany({ where: { workspaceId: NILE, id: groupId } });
+    await withScope({ workspaceId: FIXTURES }, async (tx) => {
+      await tx.teachingSession.deleteMany({ where: { workspaceId: FIXTURES, groupId } });
+      await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId } });
+      await tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: groupId } });
     });
   }
   for (const item of createdStudents.splice(0)) {
@@ -60,10 +60,10 @@ afterEach(async () => {
 
 describe("workspace search", () => {
   it("matches normalized student and group names", async () => {
-    const scope = ownerScope();
+    const scope = fixturesScope();
     const suffix = token();
     const studentId = await addStudent(
-      NILE,
+      FIXTURES,
       "\u0623\u064e\u062d\u0652\u0645\u064e\u062f",
       suffix.toUpperCase(),
     );
@@ -81,16 +81,16 @@ describe("workspace search", () => {
   });
 
   it("caps each result type and excludes archived and other-workspace records", async () => {
-    const scope = ownerScope();
+    const scope = fixturesScope();
     const suffix = token();
     for (let index = 0; index < 6; index += 1) {
-      await addStudent(NILE, `\u0637\u0627\u0644\u0628 ${suffix}`, `${index}`);
+      await addStudent(FIXTURES, `\u0637\u0627\u0644\u0628 ${suffix}`, `${index}`);
     }
 
-    const archivedId = await addStudent(NILE, `\u0637\u0627\u0644\u0628 ${suffix}`, "archived");
-    await withScope({ workspaceId: NILE }, (tx) =>
+    const archivedId = await addStudent(FIXTURES, `\u0637\u0627\u0644\u0628 ${suffix}`, "archived");
+    await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.student.update({
-        where: { workspaceId: NILE, id: archivedId },
+        where: { workspaceId: FIXTURES, id: archivedId },
         data: { archivedAt: new Date() },
       }),
     );
@@ -109,13 +109,13 @@ describe("workspace search", () => {
   it("includes only the resource types the member may read", async () => {
     const suffix = token();
     const studentScope: Scope = {
-      ...ownerScope(),
+      ...fixturesScope(),
       actorUserId: randomUUID(),
       role: "assistant",
       permissions: new Set([permissionKey("students", "read")]),
     };
-    const studentId = await addStudent(NILE, "\u0637\u0627\u0644\u0628", suffix);
-    const groupId = await addGroup(ownerScope(), `\u0645\u062c\u0645\u0648\u0639\u0629 ${suffix}`);
+    const studentId = await addStudent(FIXTURES, "\u0637\u0627\u0644\u0628", suffix);
+    const groupId = await addGroup(fixturesScope(), `\u0645\u062c\u0645\u0648\u0639\u0629 ${suffix}`);
 
     const result = await searchWorkspace(studentScope, { q: suffix });
     expect(result.students.map((student) => student.id)).toContain(studentId);
@@ -133,7 +133,7 @@ describe("workspace search", () => {
   });
 
   it("returns no records for a term that normalizes to nothing", async () => {
-    const result = await searchWorkspace(ownerScope(), { q: "\u0640\u064b" });
+    const result = await searchWorkspace(fixturesScope(), { q: "\u0640\u064b" });
     expect(result).toEqual({ students: [], groups: [] });
   });
 });

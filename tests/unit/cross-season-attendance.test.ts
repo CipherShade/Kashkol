@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  markAttendance,
-  verifySessionPayment,
-} from "../../src/modules/attendance/service.js";
+import { markAttendance } from "../../src/modules/attendance/service.js";
 import * as attendanceRepo from "../../src/modules/attendance/repository.js";
-import * as paymentsRepo from "../../src/modules/payments/repository.js";
 import * as dbScope from "../../src/lib/db/scope.js";
 import { AppError } from "../../src/lib/http/errors.js";
 import type { Scope } from "../../src/modules/tenancy/types.js";
@@ -17,7 +13,7 @@ const scope: Scope = {
   permissions: new Set(),
 };
 
-describe("Cross-Season Attendance & Payment Verification", () => {
+describe("Cross-Season Attendance", () => {
   const sessionId = "018f6c5b-1111-7000-8000-000000000001";
   const regularStudentId = "018f6c5b-2222-7000-8000-000000000001";
   const crossSeasonStudentId = "018f6c5b-3333-7000-8000-000000000001";
@@ -45,22 +41,6 @@ describe("Cross-Season Attendance & Payment Verification", () => {
       return cb(tx as unknown as Parameters<Parameters<typeof dbScope.withScope>[1]>[0]);
     });
 
-    // Payment helpers now live in @/modules/payments/repository, called from
-    // attendance.service.verifySessionPayment.
-    vi.spyOn(paymentsRepo, "findSessionForPaymentTx").mockResolvedValue({
-      id: sessionId,
-      status: "completed",
-      startsAt: new Date("2026-11-10T14:00:00Z"),
-      pricePerStudentMinor: 40000,
-      group: { defaultPricePerStudentMinor: 40000 },
-    });
-    vi.spyOn(paymentsRepo, "findSessionLinkedPaymentsTx").mockResolvedValue([]);
-    vi.spyOn(paymentsRepo, "createPaymentTx").mockImplementation(async () => ({
-      payment: { id: "pay-1", amountMinor: 40000 } as never,
-      duplicate: false,
-      matches: true,
-    }));
-
     // Mock getSessionWithGroup
     vi.spyOn(attendanceRepo, "getSessionWithGroup").mockResolvedValue({
       id: sessionId,
@@ -85,7 +65,6 @@ describe("Cross-Season Attendance & Payment Verification", () => {
       sessionId,
       studentId: regularStudentId,
       mark: "present",
-      paymentVerified: false,
       isCrossSeason: false,
       primaryGroupId: null,
     } as unknown as Awaited<ReturnType<typeof attendanceRepo.upsertAttendanceMarkTx>>);
@@ -124,7 +103,6 @@ describe("Cross-Season Attendance & Payment Verification", () => {
       sessionId,
       studentId: crossSeasonStudentId,
       mark: "present",
-      paymentVerified: true,
       isCrossSeason: true,
       primaryGroupId: otherGroupId,
     } as unknown as Awaited<ReturnType<typeof attendanceRepo.upsertAttendanceMarkTx>>);
@@ -133,7 +111,6 @@ describe("Cross-Season Attendance & Payment Verification", () => {
       sessionId,
       studentId: crossSeasonStudentId,
       mark: "present",
-      paymentVerified: true,
     });
 
     expect(mark.isCrossSeason).toBe(true);
@@ -143,7 +120,6 @@ describe("Cross-Season Attendance & Payment Verification", () => {
       expect.objectContaining({
         isCrossSeason: true,
         primaryGroupId: otherGroupId,
-        paymentVerified: true,
       }),
     );
   });
@@ -159,29 +135,5 @@ describe("Cross-Season Attendance & Payment Verification", () => {
         mark: "present",
       }),
     ).rejects.toThrow(AppError);
-  });
-
-  it("verifies session payment toggling", async () => {
-    const setPaymentSpy = vi.spyOn(attendanceRepo, "setPaymentVerifiedTx").mockResolvedValue({
-      id: "mark-1",
-      sessionId,
-      studentId: regularStudentId,
-      paymentVerified: true,
-    } as unknown as Awaited<ReturnType<typeof attendanceRepo.setPaymentVerifiedTx>>);
-
-    const res = await verifySessionPayment(scope, {
-      sessionId,
-      studentId: regularStudentId,
-      verified: true,
-    });
-
-    expect(res.paymentVerified).toBe(true);
-    expect(setPaymentSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      scope.workspaceId,
-      sessionId,
-      regularStudentId,
-      true,
-    );
   });
 });

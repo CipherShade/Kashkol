@@ -175,7 +175,7 @@ export const ROUTES: RouteEntry[] = [
     methods: ["GET", "POST"],
     access: "workspace",
     tenantScoped: true,
-    description: "Read a payment ledger and balances, or append a manual receipt.",
+    description: "Read session receipts (optional session filter), or append a manual receipt.",
   },
   {
     path: "/api/payments/adjustments",
@@ -189,7 +189,7 @@ export const ROUTES: RouteEntry[] = [
     methods: ["POST"],
     access: "workspace",
     tenantScoped: true,
-    description: "Append a monthly group or student fee convention.",
+    description: "Append a monthly group fee convention.",
   },
   {
     path: "/api/reports",
@@ -304,18 +304,11 @@ export const ROUTES: RouteEntry[] = [
     description: "Scan student QR code for live session attendance.",
   },
   {
-    path: "/api/sessions/[sessionId]/attendance/[studentId]/payment",
-    methods: ["PATCH"],
-    access: "workspace",
-    tenantScoped: true,
-    description: "Verify or update payment status for a student during session attendance.",
-  },
-  {
     path: "/api/sessions/[sessionId]/revenue",
     methods: ["GET"],
     access: "workspace",
     tenantScoped: true,
-    description: "Get session revenue calculations, expected vs collected payments, and collection rate.",
+    description: "Get session revenue calculations: expected (attendees × price) vs collected receipts.",
   },
   {
     path: "/api/sessions/[sessionId]/homework/[homeworkId]",
@@ -573,7 +566,7 @@ export const ROUTES: RouteEntry[] = [
     access: "session",
     tenantScoped: true,
     description:
-      "Parent portal single-child projection (permitted attendance, published grades, homework, clean resources, approved payments, schedule changes, notifications).",
+      "Parent portal single-child projection (permitted attendance, published grades, homework, clean resources, schedule changes, notifications). No financial data is ever exposed.",
   },
   {
     path: "/api/portal/student",

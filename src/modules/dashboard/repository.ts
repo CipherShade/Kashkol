@@ -140,7 +140,6 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
           mark: true,
           recordedBy: true,
           recordedAt: true,
-          paymentVerified: true,
           isCrossSeason: true,
           session: {
             select: {
@@ -244,6 +243,14 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
           createdAt: true,
           student: {
             select: { id: true, firstName: true, lastName: true },
+          },
+          session: {
+            select: {
+              id: true,
+              startsAt: true,
+              groupId: true,
+              group: { select: { id: true, name: true, color: true } },
+            },
           },
         },
         orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],

@@ -612,9 +612,17 @@ Three business-logic corrections in the online-exam module, none of which change
 
 **Not claimed by this section:** changes to paper assessments, search behavior, or any other callers beyond the short-answer normalizer used by online exams; no change to how Latin custom transliterations are transliterated.
 
-### 5.9 Known environmental integration failures awaiting test-fixture cleanup on 2026-11-10
+### 5.9 Known environmental integration failures — remediated on 2026-11-13 (fixture-isolation change); the original failure record follows on 2026-11-10
 
-The integration suite shows 101 passing / 3 failing out of 104. These are all the same, pre-existing cause, unrelated to any of the online-exam or payment changes:
+**Remediation (2026-11-13).** The dedicated fixture-isolation change the earlier entry called for landed. Integration fixtures no longer create records in the seeded NILE tenant:
+
+- `tests/integration/helpers.ts` gained a disposable fixture workspace — slug `integration-fixtures`, fixed id `00000000-0000-4000-8000-000000000099`, with its own owner and assistant users (`...0099` / `...0098`) and members, `planTier: pilot`, `planStatus: pilot_active`, and the same assistant grant set the seeded NILE assistant holds (students, grades, attendance, homework, files read, messages — deliberately no `portal_access`). Its grants are reconciled to that baseline on every run (grants are mutable configuration, not append-only records).
+- `ensureIntegrationFixtures()` runs from `tests/integration/setup.ts` once per test file (`setupFiles`). It upserts the workspace, its settings, and the two members, then **archives every active (`archivedAt IS NULL`) fixture student and group** in the fixture workspace — acting only on that workspace, never deleting a record and never touching NILE/DELTA. The pilot plan-cap counts start from zero for every file, so the fixture workspace is self-sustaining forever; archived fixture history is preserved.
+- The six test files that create fixtures were repointed from NILE to the fixture workspace: `search.test.ts`, `students-groups.test.ts`, `academic-records.test.ts`, `portal-credentials.test.ts`, `student-qr-attendance.test.ts`, and `session-attendance-homework.test.ts` (the file whose leaked fixtures caused the original failure). `fixturesScope()` / `fixtureAssistantScope()` replaced `ownerScope()` / `assistantScope()` there; cross-tenant assertions against DELTA are unchanged; tests that exercise NILE assistant permissions (`assistantScope()`, `NILE_ASSISTANT_MEMBER`) keep pointing at NILE and are unaffected.
+
+**Result: `npm run test:integration` — 19/19 files, 123/123 tests pass** (run twice in a row on 2026-11-13). The NILE demo database was not reset, its `planLimitOverrides` were not raised, no rows were deleted to make the suite green, and no test was weakened or skipped. Existing leaked NILE fixture rows from previous runs remain in place (they are append-only history and must not be deleted). Other integration files still deposit best-effort-deletable fixtures in NILE (e.g. `administration-routes.test.ts`, `files.test.ts`, `forms*.test.ts`, `payments-tenant-isolation.test.ts`, `portals-access.test.ts`, `workspace-authorization.test.ts`, `tenant-isolation.test.ts`); they use the direct-insert helper (no plan-cap enforcement) so they do not fail, and repointing them was not part of this fix.
+
+**Original failure record (2026-11-10, kept for history).** The integration suite showed 101 passing / 3 failing out of 104:
 
 | Failing test | Cause |
 |---|---|
@@ -622,9 +630,7 @@ The integration suite shows 101 passing / 3 failing out of 104. These are all th
 | `tests/integration/search.test.ts > includes only the resource types the member may read` | same |
 | `tests/integration/students-groups.test.ts > creates records and makes concurrent enrollment idempotent` | same |
 
-Root cause: the seeded local development database (NILE workspace) holds more than the pilot plan's 12-active-groups limit — 4 seeded demo groups plus **12 leaked test fixtures** (`Roster <uuid>` / `Other <uuid>` pairs created by `tests/integration/session-attendance-homework.test.ts`). That file's best-effort `afterEach` cleanup cannot delete groups referenced by append-only attendance-mark revisions (rows must be kept by design), so fixture groups accumulate on every gate run until the limit is reached; once reached, every workflow that creates a group in NILE throws. The enforcement behavior is correct and has not been changed, the tests have not been weakened, and no database rows have been deleted to make the suite green.
-
-**Not acceptable to fix by:** resetting the local database or raising NILE's `planLimitOverrides` — both were declined. The intended remedy is a test-fixture strategy for `session-attendance-homework.test.ts` (e.g., isolating fixtures into a disposable workspace per run, or bounding growth under the pilot cap), done as a dedicated change.
+Root cause then: the seeded NILE workspace held more than the pilot plan's 12-active-groups limit — 4 seeded demo groups plus **12 leaked test fixtures** (`Roster <uuid>` / `Other <uuid>` pairs created by `tests/integration/session-attendance-homework.test.ts`). That file's best-effort `afterEach` cleanup could not delete groups referenced by append-only attendance-mark revisions, so fixture groups accumulated on every gate run until the limit was reached; once reached, every workflow that creates a group in NILE threw. The enforcement behavior was correct and was not changed. By 2026-11-13 the same contamination had drifted the suite to **98/123 passing** (student cap also exhausted) — see §5.19. Resetting the database or raising NILE's `planLimitOverrides` was declined then and remains declined.
 
 ### 5.10 Focused financial regression tests and the session-priced billing rules on 2026-11-11 — `F-P2-04`, `ADR-0025`
 
@@ -1008,6 +1014,85 @@ reaches the hydrating render.
 **non-fatal** attribute-mismatch warning for it and leaves the attributes in place; an A/B probe
 showed `suppressHydrationWarning` on `<body>` changed neither the warning count nor the loop, so no
 defensive change was made. The warning is caused by the extension, not by the application.
+
+### 5.19 Session-scoped finance on 2026-11-13 - `ADR-0028`
+
+The manual ledger is no longer per-student. Teachers see, per session, the amount the session
+should produce (price × present/late marks) and the amount they actually recorded (session-linked,
+non-voided receipts). There is no outstanding, balance, credit, or per-student money figure
+anywhere in the product, and the parent/student portals carry no payment data at all.
+
+**What changed**
+
+- Money is computed from session receipts only: `expected = price_per_student_minor (or the
+  group's default) × count(mark in present, late)` for non-cancelled sessions; `collected` is
+  the sum of non-voided, session-linked receipts. The ledger header nets refunds
+  (`collected = gross − Σ refund adjustments`); per-session summaries show gross.
+  Adjustments remain append-only and signed, linked to receipts.
+- `balances` report replaced by `sessionRevenue` end-to-end (service, repository, schemas,
+  exports with `expectedEgp` / `collectedEgp` headers in both locales, `reports-client`).
+- Per-student fee rules removed for new rules (group-only); `attendance_mark.payment_verified`
+  dropped by migration `20261113000002_session_scoped_finance`; `payment.student_id` and
+  `payment_adjustment.student_id` nullable with `payment_session_required_check`
+  (`student_id IS NOT NULL OR session_id IS NOT NULL`); partial index
+  `payment(workspace_id, session_id) WHERE session_id IS NOT NULL` (non-unique by design).
+- Student-profile Payments tab removed; student profile exposes no money surface.
+- Parent/student portal payloads contain **no `payments` key at all** (previously a `null`
+  placeholder); `portals-access` integration test asserts `not.toHaveProperty("payments")`.
+- Export column `balanceImpactEgp` display renamed to `Adjustment impact (EGP)` /
+  `أثر التعديل (جنيه)`; the dead `Payments.balanceImpactEgp` message key was removed from both
+  catalogues (en/ar key parity re-verified: 1987 = 1987, no diff).
+
+**Schema/DB drift found and fixed.** The migration had dropped `attendance_mark.payment_verified`
+but `prisma/schema.prisma` still declared it — every `attendance_mark` read would have failed at
+runtime. The field was removed and the client regenerated; zero code references remain.
+
+**Verification (NILE demo workspace, local)**
+
+- Sign-in `200`; `GET /api/payments` `200`: 89 sessions, 11 receipts (+1 legacy voided,
+  session-linked); totals gross 1,435,000 / refunded 10,000 / collected 1,425,000 minor =
+  14,250 EGP.
+- `GET /api/sessions/{id}/revenue`: the deliberately unreceipted latest completed session returns
+  `expected 90000 (2 present × 45,000), collected 0`; a receipted session returns
+  `expected/collected 100000`.
+- Direct DB (`withScope`): all 11 active receipts equal attended × price for their session; none
+  is student-linked.
+- `/en/app/payments` and `/ar/app/payments` return `200` and render only the new tiles and
+  session-revenue table. Forbidden-label scan on the fetched HTML — EN: `Outstanding` 0,
+  `Balance` 0, `Credit` 1 (Assessments catalogue `extraCreditAllowance`, unrelated), `Expected`
+  9, `Collected` 10; AR: `المستحق` 0, `الرصيد` 0, `المتوقع` 8, `المحصّل` 9.
+- Demo re-seed (`db:seed`, `db:seed:demo`) run after the change; demo receipts seeded one per
+  qualifying session, the latest completed session per group intentionally left unreceipted.
+
+**Gate**
+
+- `lint` ✓, `typecheck` ✓ (exit 0), unit `423/423` + UI `21/21` ✓, `build` ✓ (exit 0).
+- Integration: **19/19 files pass (123/123 tests)** — remediated on 2026-11-13 by the
+  dedicated fixture-isolation change documented in §5.9. The suite had been at 14/19 files
+  (98/123 tests); all 25 failing tests were `AppError: CONFLICT` plan-cap rejections in
+  NILE (`planGroupLimitReached` / `planStudentLimitReached`), the same §5.9 fixture
+  contamination. Fixtures now live in a disposable `integration-fixtures` workspace
+  archived back to a zero-cap baseline per test file; NILE was not reset, its
+  `planLimitOverrides` were not raised, no rows were deleted, and no test was weakened.
+  Nothing finance-related was failing before or after.
+
+**Environment notes (do not "fix" by hand)**
+
+- `prisma migrate status` reports `20261113000002_session_scoped_finance` as not applied while
+  `prisma migrate deploy` reports nothing to apply; a direct `_prisma_migrations` query shows
+  `finished=true`, and `information_schema` shows the expected columns, CHECK, and index. The
+  database is the authority; the migration is applied.
+- `.next/standalone` is locked while the standalone server is running (`EBUSY` on rmdir during
+  `npm run build`): stop the local verification server before rebuilding. Port 3000 belongs to a
+  pre-existing process; do not stop it. The payments page HTML fetch under PowerShell
+  `Invoke-WebRequest` intermittently hangs on this URL; the identical fetch via Node completes in
+  milliseconds and the server logs no error — treated as a client-side quirk, not an app defect
+  (both locales verified this way after a clean server restart).
+
+**Not done here**
+
+- Commit/push awaits owner direction; the change is uncommitted in the working tree.
+- `.vitest/` reporter output was produced during verification and is now git-ignored.
 
 ## 6. Implementation plan
 

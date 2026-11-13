@@ -5,10 +5,11 @@
  * Input amounts are always in minor currency units (piastres for EGP).
  *
  * Separation of concerns (NF-1 — no fabricated statistics):
- *   - expectedRevenue: what SHOULD be collected if all eligible students pay
+ *   - expectedRevenue: what SHOULD be collected if all present/late students pay
  *   - collectedRevenue: what HAS been received (non-voided payments)
- *   - outstandingRevenue: the gap between expected and collected
  *
+ * The session-scoped model (ADR-0028) shows ONLY expected and collected — it
+ * never reports an outstanding/balance/credit figure.
  * The system must NEVER report expected revenue as collected cash.
  */
 
@@ -20,61 +21,6 @@ export type PaymentForRevenue = {
   amountMinor: number;
   voidedAt: Date | string | null;
 };
-
-/** A session row sufficient to derive the per-student session price. */
-export type PricedSession = {
-  id: string;
-  groupId: string;
-  pricePerStudentMinor: number | null;
-  group: { defaultPricePerStudentMinor: number | null } | null;
-};
-
-/** A present/late attendance mark on a non-cancelled session. */
-export type ChargedAttendanceMark = {
-  studentId: string;
-  sessionId: string;
-};
-
-export type SessionChargeResult = {
-  charges: Array<{ studentId: string; amountMinor: number }>;
-  sessionPricedGroupIds: string[];
-};
-
-/**
- * Build per-student session charges from real attendance.
- *
- * A present/late mark on a session that resolves to a positive price charges
- * that student exactly that price. A group whose `defaultPricePerStudentMinor`
- * is set is session-priced: its monthly group fee must not also accrue.
- *
- * `extraSessionPricedGroupIds` lets a caller include cross-season groups that
- * are otherwise missing from the session list.
- */
-export function buildSessionCharges(
-  sessions: PricedSession[],
-  marks: ChargedAttendanceMark[],
-  extraSessionPricedGroupIds: Iterable<string> = [],
-): SessionChargeResult {
-  const priceBySessionId = new Map<string, number | null>();
-  const sessionPricedGroupIds = new Set<string>(extraSessionPricedGroupIds);
-  for (const session of sessions) {
-    const price =
-      session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
-    priceBySessionId.set(session.id, price);
-    if (price != null && price > 0) {
-      sessionPricedGroupIds.add(session.groupId);
-    }
-  }
-
-  const charges: Array<{ studentId: string; amountMinor: number }> = [];
-  for (const mark of marks) {
-    const price = priceBySessionId.get(mark.sessionId);
-    if (price == null || price <= 0) continue;
-    charges.push({ studentId: mark.studentId, amountMinor: price });
-  }
-
-  return { charges, sessionPricedGroupIds: [...sessionPricedGroupIds] };
-}
 
 /**
  * Calculate how much revenue a session is expected to generate.
@@ -109,31 +55,6 @@ export function calculateSessionCollectedRevenue(payments: PaymentForRevenue[]):
   }, 0);
 }
 
-/**
- * Calculate how much revenue is still outstanding for a session.
- *
- * Outstanding = expected − collected.
- * Returns null when expected revenue is unknown (no price configured).
- * A negative value means overpayment (collected > expected).
- */
-export function calculateSessionOutstanding(
-  expectedRevenueMinor: number | null,
-  collectedRevenueMinor: number,
-): number | null {
-  if (expectedRevenueMinor == null) return null;
-  return expectedRevenueMinor - collectedRevenueMinor;
-}
-
-/** Payment collection rate as a 0–1 fraction, or null when expected is unknown. */
-export function calculatePaymentCollectionRate(
-  expectedRevenueMinor: number | null,
-  collectedRevenueMinor: number,
-): number | null {
-  if (expectedRevenueMinor == null) return null;
-  if (expectedRevenueMinor === 0) return collectedRevenueMinor === 0 ? 1 : null;
-  return collectedRevenueMinor / expectedRevenueMinor;
-}
-
 export interface SessionRevenueSummary {
   /** Price set on the session (or inherited from group). Null = not configured. */
   pricePerStudentMinor: number | null;
@@ -143,10 +64,6 @@ export interface SessionRevenueSummary {
   expectedRevenueMinor: number | null;
   /** Actual sum of non-voided payments. */
   collectedRevenueMinor: number;
-  /** Outstanding balance. Null when no price is set. */
-  outstandingRevenueMinor: number | null;
-  /** 0–1 collection rate. Null when no price is set or expected is 0 but collected > 0. */
-  collectionRate: number | null;
 }
 
 /** Build a full revenue summary for a session from raw inputs. */
@@ -160,20 +77,10 @@ export function buildSessionRevenueSummary(
     eligibleAttendanceCount,
   );
   const collectedRevenueMinor = calculateSessionCollectedRevenue(payments);
-  const outstandingRevenueMinor = calculateSessionOutstanding(
-    expectedRevenueMinor,
-    collectedRevenueMinor,
-  );
-  const collectionRate = calculatePaymentCollectionRate(
-    expectedRevenueMinor,
-    collectedRevenueMinor,
-  );
   return {
     pricePerStudentMinor: pricePerStudentMinor ?? null,
-    eligibleAttendanceCount,
     expectedRevenueMinor,
+    eligibleAttendanceCount,
     collectedRevenueMinor,
-    outstandingRevenueMinor,
-    collectionRate,
   };
 }

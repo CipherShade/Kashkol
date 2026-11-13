@@ -44,7 +44,6 @@ export type AttendanceRosterStudent = {
   mark: AttendanceMarkValue | null;
   source: "manual" | "qr" | null;
   recordedAt: string | null;
-  paymentVerified?: boolean;
   isCrossSeason?: boolean;
   primaryGroupId?: string | null;
   primaryGroupName?: string | null;
@@ -179,37 +178,6 @@ export function SessionAttendanceClient({
     return counts;
   }, [roster]);
 
-  const payTogglesEnabled = canSeeFinancials && !!revenue && revenue.pricePerStudentMinor != null;
-
-  const togglePayment = useCallback(
-    async (student: AttendanceRosterStudent) => {
-      const newVerified = !student.paymentVerified;
-      setRoster((prev) =>
-        prev.map((s) => (s.studentId === student.studentId ? { ...s, paymentVerified: newVerified } : s)),
-      );
-      try {
-        const res = await fetch(`/api/sessions/${session.id}/attendance/${student.studentId}/payment`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ verified: newVerified }),
-        });
-        if (!res.ok) throw new Error();
-        push({
-          title: newVerified ? t("paymentVerified") : t("paymentNotVerified"),
-          tone: "success",
-        });
-        await fetchRevenue();
-      } catch {
-        setRoster((prev) =>
-          prev.map((s) => (s.studentId === student.studentId ? { ...s, paymentVerified: !newVerified } : s)),
-        );
-        push({ title: t("paymentToggleFailed"), tone: "danger" });
-        await fetchRevenue();
-      }
-    },
-    [session.id, push, t, fetchRevenue],
-  );
-
   const toggleHomework = useCallback(
     async (student: AttendanceRosterStudent, status: "completed" | "not_completed") => {
       // One-tap yes/no against the latest active homework for this group,
@@ -236,7 +204,7 @@ export function SessionAttendanceClient({
   const handleScanSuccess = useCallback(
     (data: {
       student: { id: string; firstName: string; lastName: string };
-      mark: { id: string; mark: string; paymentVerified: boolean; isCrossSeason: boolean };
+      mark: { id: string; mark: string; isCrossSeason: boolean };
       isCrossSeason: boolean;
     }) => {
       setRoster((prev) => {
@@ -249,7 +217,6 @@ export function SessionAttendanceClient({
                   mark: data.mark.mark as AttendanceMarkValue,
                   source: "qr",
                   recordedAt: new Date().toISOString(),
-                  paymentVerified: data.mark.paymentVerified,
                   isCrossSeason: data.isCrossSeason,
                 }
               : s,
@@ -264,7 +231,6 @@ export function SessionAttendanceClient({
             mark: data.mark.mark as AttendanceMarkValue,
             source: "qr",
             recordedAt: new Date().toISOString(),
-            paymentVerified: data.mark.paymentVerified,
             isCrossSeason: true,
             primaryGroupId: null,
             primaryGroupName: null,
@@ -514,16 +480,13 @@ export function SessionAttendanceClient({
               )}
               {canSeeFinancials && !revenueLoading && !revenueError && revenue && revenue.pricePerStudentMinor != null && (
                 <div className="rounded-lg border bg-muted/40 p-3 space-y-2 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2 font-medium">
+                  <div className="flex flex-wrap items-center gap-2 border-b pb-2 font-medium">
                     <span className="flex items-center gap-1.5">
                       <Icon name="creditCard" size={16} />
                       {t("sessionPrice")}: {(revenue.pricePerStudentMinor / 100).toFixed(2)} {t("priceUnit")}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {roster.filter((s) => s.paymentVerified && (s.mark === "present" || s.mark === "late")).length} / {revenue.eligibleAttendanceCount} {t("paidStudentsCount")}
-                    </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
                     <div className="rounded bg-background p-2 border">
                       <div className="text-muted-foreground">{t("expectedRevenue")}</div>
                       <div className="font-semibold text-sm">{((revenue.expectedRevenueMinor ?? 0) / 100).toFixed(2)} {t("priceUnit")}</div>
@@ -531,10 +494,6 @@ export function SessionAttendanceClient({
                     <div className="rounded bg-background p-2 border">
                       <div className="text-muted-foreground">{t("collectedRevenue")}</div>
                       <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">{(revenue.collectedRevenueMinor / 100).toFixed(2)} {t("priceUnit")}</div>
-                    </div>
-                    <div className="rounded bg-background p-2 border">
-                      <div className="text-muted-foreground">{t("outstandingRevenue")}</div>
-                      <div className="font-semibold text-sm text-amber-600 dark:text-amber-400">{((revenue.outstandingRevenueMinor ?? 0) / 100).toFixed(2)} {t("priceUnit")}</div>
                     </div>
                   </div>
                 </div>
@@ -577,23 +536,6 @@ export function SessionAttendanceClient({
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {payTogglesEnabled && (
-                          <button
-                            type="button"
-                            disabled={!isOpen || busy}
-                            onClick={() => void togglePayment(student)}
-                            className={
-                              "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium border transition-colors " +
-                              (student.paymentVerified
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                                : "bg-muted/50 text-muted-foreground border-border hover:bg-muted")
-                            }
-                            title={student.paymentVerified ? t("paymentVerified") : t("paymentNotVerified")}
-                          >
-                            <Icon name={student.paymentVerified ? "checkCircle" : "creditCard"} size={14} />
-                            <span>{student.paymentVerified ? t("paid") : t("unpaid")}</span>
-                          </button>
-                        )}
                         <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label={t("rosterTitle")}>
                           {MARKS.map((mark) => (
                             <button

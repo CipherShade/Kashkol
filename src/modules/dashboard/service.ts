@@ -1,11 +1,9 @@
 import type { Scope } from "@/modules/tenancy/types";
 import { isAllowed } from "@/modules/tenancy/types";
 import {
-  calculateStudentBalances,
   currentDateInTimezone,
   currentMonthInTimezone,
 } from "@/modules/payments/calculations";
-import { buildSessionCharges } from "@/modules/payments/session-revenue";
 import { calculateFollowUpFlags } from "@/modules/followups/calculations";
 import { scorePercentage } from "@/modules/assessments/calculations";
 import { fetchDashboardRawData } from "./repository";
@@ -150,74 +148,36 @@ export async function getDashboardData(
   }
 
   // -------------------------------------------------------------------------
-  // 3. Balance Calculations
+  // 3. Session-scoped revenue (ADR-0028)
   // -------------------------------------------------------------------------
-  // Per-session billing (ADR-0025): a present/late mark on a non-cancelled
-  // session that has a price charges that student exactly that price.
-  const sessionChargesResult = buildSessionCharges(
-    raw.sessions.filter((session) => session.status !== "cancelled"),
-    raw.attendanceMarks
-      .filter(
-        (mark) =>
-          (mark.mark === "present" || mark.mark === "late") &&
-          mark.session.status !== "cancelled",
-      )
-      .map((mark) => ({ studentId: mark.studentId, sessionId: mark.sessionId })),
-    raw.groups
-      .filter((group) => (group.defaultPricePerStudentMinor ?? 0) > 0)
-      .map((group) => group.id),
-  );
-  const sessionCharges = sessionChargesResult.charges;
-  const sessionPricedGroupIds = new Set(sessionChargesResult.sessionPricedGroupIds);
-
-  const studentBalances = calculateStudentBalances({
-    students: raw.allStudents.map((s) => ({ id: s.id })),
-    enrollments: raw.enrollments.map((e) => ({
-      studentId: e.studentId,
-      groupId: e.groupId,
-      enrolledAt: e.enrolledAt,
-      leftAt: e.leftAt,
-    })),
-    feeRules: raw.feeRules.map((r) => ({
-      id: r.id,
-      studentId: r.studentId,
-      groupId: r.groupId,
-      amountMinor: r.amountMinor,
-      effectiveFrom: r.effectiveFrom,
-    })),
-    payments: raw.payments.map((p) => ({
-      studentId: p.studentId,
-      amountMinor: p.amountMinor,
-      voidedAt: p.voidedAt,
-    })),
-    adjustments: raw.adjustments.map((a) => ({
-      studentId: a.studentId,
-      amountMinor: a.amountMinor,
-      balanceImpact: a.balanceImpact,
-    })),
-    sessionCharges,
-    sessionPricedGroupIds: [...sessionPricedGroupIds],
-    asOfMonth: currentMonthInTimezone(now, timezone),
-    timezone,
-  });
-
-  const balanceMap = new Map(studentBalances.map((b) => [b.studentId, b]));
-
-  let totalOutstandingMinor = 0;
-  let totalExpectedMinor = 0;
-  let totalReceivedMinor = 0;
-  const hasPricing =
-    raw.feeRules.length > 0 || sessionPricedGroupIds.size > 0 || sessionCharges.length > 0;
-
-  for (const b of studentBalances) {
-    if (b.balanceMinor > 0) {
-      totalOutstandingMinor += b.balanceMinor;
-    }
-    totalExpectedMinor += b.expectedMinor;
-    totalReceivedMinor += b.receivedMinor;
+  // Expected revenue counts present/late marks on non-cancelled sessions that
+  // have a resolvable price (session price, else group default). Nothing
+  // per-student is computed: there is no balance, no outstanding, no credit.
+  const presentLateBySession = new Map<string, number>();
+  for (const mark of raw.attendanceMarks) {
+    if (mark.session.status === "cancelled") continue;
+    if (mark.mark !== "present" && mark.mark !== "late") continue;
+    presentLateBySession.set(mark.sessionId, (presentLateBySession.get(mark.sessionId) ?? 0) + 1);
   }
 
-  const effectiveExpectedMinor = hasPricing ? totalExpectedMinor : null;
+  function resolvablePrice(session: {
+    pricePerStudentMinor: number | null;
+    group: { defaultPricePerStudentMinor: number | null };
+  }): number | null {
+    const price = session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+    return price != null && price > 0 ? price : null;
+  }
+
+  // Expected revenue over the *current period* (symmetric with collected).
+  let periodExpectedMinor: number | null = null;
+  for (const session of raw.sessions) {
+    if (session.status === "cancelled") continue;
+    if (session.startsAt < start || session.startsAt > end) continue;
+    const price = resolvablePrice(session);
+    if (price == null) continue;
+    const attended = presentLateBySession.get(session.id) ?? 0;
+    periodExpectedMinor = (periodExpectedMinor ?? 0) + price * attended;
+  }
 
   // -------------------------------------------------------------------------
   // 4. Section 1: Global Overview Metrics
@@ -457,29 +417,6 @@ export async function getDashboardData(
     }
   }
 
-  // Add students with outstanding payments
-  for (const student of raw.allStudents) {
-    if (student.archivedAt) continue;
-    const balance = balanceMap.get(student.id);
-    if (balance && balance.balanceMinor > 0) {
-      const studentInfo = primaryEnrollmentByStudent.get(student.id) ?? {
-        groupId: "",
-        groupName: "—",
-      };
-      attentionStudents.push({
-        studentId: student.id,
-        studentName: `${student.firstName} ${student.lastName}`,
-        groupId: studentInfo.groupId,
-        groupName: studentInfo.groupName,
-        category: "payments",
-        reason: "outstanding_balance",
-        severity: balance.balanceMinor >= 50000 ? "danger" : "warn", // >= 500 EGP
-        supportingInfo: `${(balance.balanceMinor / 100).toFixed(0)} ${currency} unpaid`,
-        lastActivityDate: null,
-      });
-    }
-  }
-
   // Build compact alerts
   const alerts: DashboardAlert[] = [];
   if (awaitingAttendanceTodayCount > 0) {
@@ -505,17 +442,6 @@ export async function getDashboardData(
       link: "/app/students",
     });
   }
-  const unpaidCount = attentionStudents.filter((s) => s.category === "payments").length;
-  if (unpaidCount > 0) {
-    alerts.push({
-      id: "alert-unpaid-balances",
-      type: "payment",
-      tone: "neutral",
-      title: "Outstanding Payments",
-      message: `${unpaidCount} student(s) have outstanding ledger balances`,
-      link: "/app/payments",
-    });
-  }
 
   // -------------------------------------------------------------------------
   // 7. Section 4: Financial Overview
@@ -523,12 +449,13 @@ export async function getDashboardData(
   let financialOverview: DashboardData["financialOverview"] = null;
 
   if (canSeeFinancials) {
-    // Revenue by group
+    // Revenue by group: session receipts are attributed via the session's group
+    // (ADR-0028). Receipts not linked to a session are excluded from the group chart.
     const revenueByGroupMap = new Map<string, number>();
     for (const payment of raw.payments) {
       if (payment.voidedAt) continue;
-      const enrolledGroup = primaryEnrollmentByStudent.get(payment.studentId);
-      const groupId = enrolledGroup?.groupId ?? "unassigned";
+      const groupId = payment.session?.groupId ?? null;
+      if (groupId == null) continue;
       revenueByGroupMap.set(
         groupId,
         (revenueByGroupMap.get(groupId) ?? 0) + payment.amountMinor,
@@ -565,23 +492,20 @@ export async function getDashboardData(
     const recentPayments = raw.payments.slice(0, 5).map((p) => ({
       id: p.id,
       studentId: p.studentId,
-      studentName: p.student ? `${p.student.firstName} ${p.student.lastName}` : "—",
+      studentName: p.student
+        ? `${p.student.firstName} ${p.student.lastName}`
+        : p.session
+          ? `${p.session.group.name} · ${p.session.startsAt.toISOString().slice(0, 10)}`
+          : "—",
       amountMinor: p.amountMinor,
       paidOn: p.paidOn.toISOString().slice(0, 10),
       method: p.method,
     }));
 
-    const collectionRate =
-      effectiveExpectedMinor && effectiveExpectedMinor > 0
-        ? Math.min(100, Math.round((totalReceivedMinor / effectiveExpectedMinor) * 100))
-        : null;
-
     financialOverview = {
       totalRevenueMinor: periodCollectedMinor,
       currency,
-      expectedRevenueMinor: effectiveExpectedMinor,
-      outstandingBalanceMinor: totalOutstandingMinor,
-      collectionRate,
+      expectedRevenueMinor: periodExpectedMinor,
       revenueByGroup,
       revenueTrend,
       recentPayments,
@@ -798,8 +722,7 @@ export async function getDashboardData(
       },
       revenue: {
         collectedMinor: periodCollectedMinor,
-        outstandingMinor: totalOutstandingMinor,
-        expectedMinor: effectiveExpectedMinor,
+        expectedMinor: periodExpectedMinor,
         currency,
         priorPeriodChangePercent: revenueChangePercent,
       },

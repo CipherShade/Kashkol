@@ -14,13 +14,13 @@ import {
   setStudentPortalAccessStatus,
 } from "@/modules/portals";
 import {
-  assistantScope,
+  fixtureAssistantScope,
+  fixturesScope,
   DELTA,
   DELTA_OWNER,
-  NILE,
-  NILE_ASSISTANT_MEMBER,
-  NILE_ASSISTANT,
-  ownerScope,
+  FIXTURES,
+  FIXTURE_ASSISTANT_MEMBER,
+  FIXTURE_ASSISTANT,
 } from "./helpers";
 import type {
   Permission,
@@ -49,12 +49,12 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  // Remove the grants this test created for the seeded assistant member.
+  // Remove the grants this test created for the fixture assistant member.
   for (const grant of tempAssistantGrants.splice(0)) {
-    await withScope({ workspaceId: NILE }, (tx) =>
+    await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.permissionGrant.deleteMany({
         where: {
-          workspaceId: NILE,
+          workspaceId: FIXTURES,
           memberId: grant.memberId,
           resource: grant.resource,
           action: grant.action,
@@ -126,7 +126,7 @@ async function createStudentAs(scope: Scope, phone: string | null) {
 describe("student portal credentials against PostgreSQL", () => {
   it("owner-created student receives a one-time credential that resolves sign-in", async () => {
     const phone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
 
     expect(created.portalCredential).not.toBeNull();
     expect(created.portalCredential?.username).toBe(phone);
@@ -146,7 +146,7 @@ describe("student portal credentials against PostgreSQL", () => {
 
   it("the permanent password works across repeated sign-ins (not single-use)", async () => {
     const phone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
     const password = created.portalCredential!.password;
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -158,12 +158,12 @@ describe("student portal credentials against PostgreSQL", () => {
 
   it("does not leak the password into any stored record", async () => {
     const phone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
     const password = created.portalCredential!.password;
 
-    const grants = await withScope({ workspaceId: NILE }, (tx) =>
+    const grants = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.portalGrant.findMany({
-        where: { workspaceId: NILE, studentId: created.student.id },
+        where: { workspaceId: FIXTURES, studentId: created.student.id },
         select: { portalUserId: true },
       }),
     );
@@ -180,14 +180,14 @@ describe("student portal credentials against PostgreSQL", () => {
   });
 
   it("assistant without portal_access gets no credential; explicit provision is denied", async () => {
-    const scope = await assistantScope();
+    const scope = await fixtureAssistantScope();
     const phone = freshPhone();
     const created = await createStudentAs(scope, phone);
 
     expect(created.portalCredential).toBeNull();
     expect(
       await withScope(scope, (tx) => tx.portalGrant.count({
-        where: { workspaceId: NILE, studentId: created.student.id },
+        where: { workspaceId: FIXTURES, studentId: created.student.id },
       })),
     ).toBe(0);
 
@@ -195,31 +195,31 @@ describe("student portal credentials against PostgreSQL", () => {
       provisionStudentPortalAccess(scope, created.student.id, { requestId: randomUUID() }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-    const ownerState = await getPortalCredentialState(ownerScope(), created.student.id);
+    const ownerState = await getPortalCredentialState(fixturesScope(), created.student.id);
     expect(ownerState).toMatchObject({ canProvision: true, credential: null });
   });
 
   it("assistant explicitly granted portal_access provisions and resets a credential", async () => {
-    // Grant the seeded assistant membership portal_access:write for this test only.
-    await withScope({ workspaceId: NILE }, async (tx) => {
+    // Grant the fixture assistant membership portal_access:write for this test only.
+    await withScope({ workspaceId: FIXTURES }, async (tx) => {
       await tx.permissionGrant.create({
         data: {
-          workspaceId: NILE,
-          memberId: NILE_ASSISTANT_MEMBER,
+          workspaceId: FIXTURES,
+          memberId: FIXTURE_ASSISTANT_MEMBER,
           resource: "portal_access",
           action: "write",
         },
       });
     });
     tempAssistantGrants.push({
-      memberId: NILE_ASSISTANT_MEMBER,
+      memberId: FIXTURE_ASSISTANT_MEMBER,
       resource: "portal_access",
       action: "write",
     });
 
     const scope: Scope = {
-      workspaceId: NILE,
-      actorUserId: NILE_ASSISTANT,
+      workspaceId: FIXTURES,
+      actorUserId: FIXTURE_ASSISTANT,
       actorDisplayName: "Omar",
       role: "assistant",
       permissions: new Set<Permission>([
@@ -246,13 +246,13 @@ describe("student portal credentials against PostgreSQL", () => {
 
   it("regeneration invalidates the old password immediately and kills sessions", async () => {
     const phone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
     const password = created.portalCredential!.password;
 
     // Simulate an active session for the credential account.
-    const grant = await withScope({ workspaceId: NILE }, (tx) =>
+    const grant = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.portalGrant.findFirstOrThrow({
-        where: { workspaceId: NILE, studentId: created.student.id },
+        where: { workspaceId: FIXTURES, studentId: created.student.id },
         select: { portalUserId: true },
       }),
     );
@@ -266,7 +266,7 @@ describe("student portal credentials against PostgreSQL", () => {
     });
 
     const regenerated = await regenerateStudentPortalCredential(
-      ownerScope(),
+      fixturesScope(),
       created.student.id,
       { requestId: randomUUID() },
     );
@@ -288,10 +288,10 @@ describe("student portal credentials against PostgreSQL", () => {
 
   it("disabling blocks sign-in; re-enabling restores it", async () => {
     const phone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
     const password = created.portalCredential!.password;
 
-    await setStudentPortalAccessStatus(ownerScope(), created.student.id, false, {
+    await setStudentPortalAccessStatus(fixturesScope(), created.student.id, false, {
       requestId: randomUUID(),
     });
 
@@ -299,7 +299,7 @@ describe("student portal credentials against PostgreSQL", () => {
       resolveStudentPortalSignIn({ phone, password }),
     ).rejects.toMatchObject({ code: "FORBIDDEN", messageKey: "errors.portalAccessDisabled" });
 
-    await setStudentPortalAccessStatus(ownerScope(), created.student.id, true, {
+    await setStudentPortalAccessStatus(fixturesScope(), created.student.id, true, {
       requestId: randomUUID(),
     });
 
@@ -312,16 +312,16 @@ describe("student portal credentials against PostgreSQL", () => {
     // phone is only possible across workspaces. The global login lookup must
     // still disambiguate by password.
     const sharedPhone = freshPhone();
-    const first = await createStudentAs(ownerScope(), sharedPhone);
+    const first = await createStudentAs(fixturesScope(), sharedPhone);
     const second = await createStudentAs(DELTA_OWNER_SCOPE, sharedPhone);
 
     expect(first.portalCredential!.username).toBe(sharedPhone);
     expect(second.portalCredential!.username).toBe(sharedPhone);
     expect(first.portalCredential!.password).not.toBe(second.portalCredential!.password);
 
-    const nileGrant = await withScope({ workspaceId: NILE }, (tx) =>
+    const fixtureGrant = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.portalGrant.findFirstOrThrow({
-        where: { workspaceId: NILE, studentId: first.student.id },
+        where: { workspaceId: FIXTURES, studentId: first.student.id },
         select: { portalUserId: true },
       }),
     );
@@ -331,7 +331,7 @@ describe("student portal credentials against PostgreSQL", () => {
         select: { portalUserId: true },
       }),
     );
-    expect(nileGrant.portalUserId).not.toBe(deltaGrant.portalUserId);
+    expect(fixtureGrant.portalUserId).not.toBe(deltaGrant.portalUserId);
 
     const resolvedFirst = await resolveStudentPortalSignIn({
       phone: sharedPhone,
@@ -342,18 +342,18 @@ describe("student portal credentials against PostgreSQL", () => {
       password: second.portalCredential!.password,
     });
 
-    expect(resolvedFirst.userId).toBe(nileGrant.portalUserId);
+    expect(resolvedFirst.userId).toBe(fixtureGrant.portalUserId);
     expect(resolvedSecond.userId).toBe(deltaGrant.portalUserId);
   });
 
   it("changing the student's phone re-points the username; the old phone stops working", async () => {
     const phone = freshPhone();
     const newPhone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
     const password = created.portalCredential!.password;
 
     await updateStudent(
-      ownerScope(),
+      fixturesScope(),
       {
         id: created.student.id,
         firstName: "Portal",
@@ -378,9 +378,9 @@ describe("student portal credentials against PostgreSQL", () => {
   });
 
   it("an assistant without portal_access cannot move a credential onto another phone", async () => {
-    const scope = await assistantScope();
+    const scope = await fixtureAssistantScope();
     const phone = freshPhone();
-    const created = await createStudentAs(ownerScope(), phone);
+    const created = await createStudentAs(fixturesScope(), phone);
 
     await expect(
       updateStudent(

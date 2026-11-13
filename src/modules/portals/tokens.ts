@@ -12,7 +12,6 @@ export const DEFAULT_PARENT_PERMISSIONS: PortalPermissions = {
   showGrades: true,
   showHomework: true,
   showResources: true,
-  showPayments: false,
   showSchedule: true,
   showNotifications: true,
 };
@@ -22,7 +21,6 @@ export const DEFAULT_STUDENT_PERMISSIONS: PortalPermissions = {
   showGrades: true,
   showHomework: true,
   showResources: true,
-  showPayments: false,
   showSchedule: true,
   showNotifications: true,
 };
@@ -46,8 +44,9 @@ export function portalInvitationExpiresAt(now: Date = new Date()): Date {
 
 /**
  * Resolve effective portal permissions for a grant or invitation.
- * Students are never allowed payment/balance access (`showPayments: false`),
- * even if a caller passes `showPayments: true`.
+ * The payment ledger is never exposed to portals (ADR-0028); there is no
+ * permission that grants it, and previously stored `showPayments` values in
+ * persisted grant JSON are stripped by the schema parse.
  */
 export function resolvePortalPermissions(
   kind: "parent" | "student",
@@ -59,14 +58,8 @@ export function resolvePortalPermissions(
       ? portalPermissionsSchema.partial().safeParse(raw)
       : { success: false as const };
 
-  const merged: PortalPermissions = {
+  return {
     ...base,
     ...(parsed.success ? parsed.data : {}),
   };
-
-  if (kind === "student") {
-    merged.showPayments = false;
-  }
-
-  return merged;
 }

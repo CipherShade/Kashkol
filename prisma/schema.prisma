@@ -1164,7 +1164,6 @@ model AttendanceMark {
   deviceId    String?             @map("device_id")
   recordedBy  String              @map("recorded_by")
   recordedAt  DateTime            @default(now()) @map("recorded_at") @db.Timestamptz(6)
-  paymentVerified Boolean         @default(false) @map("payment_verified")
   isCrossSeason   Boolean         @default(false) @map("is_cross_season")
   primaryGroupId  String?         @map("primary_group_id") @db.Uuid
   createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1433,7 +1432,7 @@ model StudentFollowUpEvent {
 model Payment {
   id          String        @id @default(uuid(7)) @db.Uuid
   workspaceId String        @map("workspace_id") @db.Uuid
-  studentId   String        @map("student_id") @db.Uuid
+  studentId   String?       @map("student_id") @db.Uuid
   sessionId   String?       @map("session_id") @db.Uuid
   period      String?
   amountMinor Int           @map("amount_minor")
@@ -1452,7 +1451,7 @@ model Payment {
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  student   Student           @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student?          @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
   session   TeachingSession?  @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
   revisions PaymentRevision[]
   adjustments PaymentAdjustment[]
@@ -1470,7 +1469,7 @@ model Payment {
 model PaymentAdjustment {
   id             String                @id @default(uuid(7)) @db.Uuid
   workspaceId    String                @map("workspace_id") @db.Uuid
-  studentId      String                @map("student_id") @db.Uuid
+  studentId      String?               @map("student_id") @db.Uuid
   paymentId      String?               @map("payment_id") @db.Uuid
   kind           PaymentAdjustmentKind
   amountMinor    Int                   @map("amount_minor")
@@ -1483,7 +1482,7 @@ model PaymentAdjustment {
   createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  student   Student?  @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
   payment   Payment?  @relation(fields: [workspaceId, paymentId, studentId], references: [workspaceId, id, studentId], onDelete: Restrict)
 
   @@unique([workspaceId, id])

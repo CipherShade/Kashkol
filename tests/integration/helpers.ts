@@ -2,11 +2,18 @@ import { randomUUID } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { getDb } from "@/lib/db/client";
 import { withScope } from "@/lib/db/scope";
-import type { Permission, Scope } from "@/modules/tenancy/types";
+import type { Permission, PermissionAction, PermissionResource, Scope } from "@/modules/tenancy/types";
 import { permissionKey } from "@/modules/tenancy/types";
 
 export const NILE = "00000000-0000-4000-8000-000000000001";
 export const DELTA = "00000000-0000-4000-8000-000000000002";
+// The sanctioned isolation boundary for integration fixtures (docs/STATUS.md
+// §5.9). A dedicated, disposable workspace that the seeded tenants' data never
+// enters; each test file re-asserts it exists and archives every active
+// fixture so plan-cap counts start from zero without deleting any record.
+export const FIXTURES = "00000000-0000-4000-8000-000000000099";
+export const FIXTURE_OWNER = "10000000-0000-4000-8000-000000000099";
+export const FIXTURE_ASSISTANT = "10000000-0000-4000-8000-000000000098";
 
 export const NILE_OWNER = "10000000-0000-4000-8000-000000000001";
 export const NILE_ASSISTANT = "10000000-0000-4000-8000-000000000002";
@@ -14,6 +21,8 @@ export const DELTA_OWNER = "10000000-0000-4000-8000-000000000003";
 
 export const NILE_OWNER_MEMBER = "20000000-0000-4000-8000-000000000001";
 export const NILE_ASSISTANT_MEMBER = "20000000-0000-4000-8000-000000000002";
+export const FIXTURE_OWNER_MEMBER = "20000000-0000-4000-8000-000000000099";
+export const FIXTURE_ASSISTANT_MEMBER = "20000000-0000-4000-8000-000000000098";
 
 export const TEST_PASSWORD = "KashkolDev!2026";
 
@@ -64,6 +73,158 @@ export function ownerScope(displayName = "Mona"): Scope {
     role: "owner",
     permissions: new Set<Permission>(),
   };
+}
+
+export function fixturesScope(displayName = "Integration"): Scope {
+  return {
+    workspaceId: FIXTURES,
+    actorUserId: FIXTURE_OWNER,
+    actorDisplayName: displayName,
+    role: "owner",
+    permissions: new Set<Permission>(),
+  };
+}
+
+export async function fixtureAssistantScope(): Promise<Scope> {
+  const grants = await withScope({ workspaceId: FIXTURES }, (tx) =>
+    tx.permissionGrant.findMany({
+      where: { workspaceId: FIXTURES, memberId: FIXTURE_ASSISTANT_MEMBER },
+      select: { resource: true, action: true },
+    }),
+  );
+  return {
+    workspaceId: FIXTURES,
+    actorUserId: FIXTURE_ASSISTANT,
+    actorDisplayName: "Integration Assistant",
+    role: "assistant",
+    permissions: new Set<Permission>(
+      grants.map((grant) => permissionKey(grant.resource, grant.action)),
+    ),
+  };
+}
+
+/**
+ * Idempotently create the disposable fixture workspace (and its owner and
+ * assistant members) and archive every active fixture student and group in
+ * it. Archiving preserves all append-only history and requires no delete
+ * privilege; the plan-cap counts that scope to `archivedAt IS NULL` start
+ * from zero for every test file. The seeded tenants are never touched.
+ *
+ * Called from `tests/integration/setup.ts`, which runs once per test file.
+ */
+export async function ensureIntegrationFixtures(): Promise<void> {
+  const db = getDb();
+  await db.user.upsert({
+    where: { id: FIXTURE_OWNER },
+    create: {
+      id: FIXTURE_OWNER,
+      name: "Integration Fixtures Owner",
+      email: "fixtures.owner@kashkol.test",
+      emailVerified: true,
+    },
+    update: {},
+  });
+  await db.user.upsert({
+    where: { id: FIXTURE_ASSISTANT },
+    create: {
+      id: FIXTURE_ASSISTANT,
+      name: "Integration Fixtures Assistant",
+      email: "fixtures.assistant@kashkol.test",
+      emailVerified: true,
+    },
+    update: {},
+  });
+
+  await withScope({ workspaceId: FIXTURES }, async (tx) => {
+    await tx.workspace.upsert({
+      where: { id: FIXTURES },
+      create: {
+        id: FIXTURES,
+        name: "Integration Fixtures",
+        slug: "integration-fixtures",
+        teachingName: "Integration Fixtures",
+        primarySubject: null,
+        gradesTaught: [],
+        status: "active",
+        planTier: "pilot",
+        planStatus: "pilot_active",
+      },
+      update: {},
+    });
+    await tx.workspaceSettings.upsert({
+      where: { workspaceId: FIXTURES },
+      create: {
+        workspaceId: FIXTURES,
+        atRiskAfter: 2,
+        inactiveAfter: 4,
+        locale: "en",
+        theme: "system",
+        timezone: "Africa/Cairo",
+        currency: "EGP",
+      },
+      update: {},
+    });
+    await tx.workspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId: FIXTURES, userId: FIXTURE_OWNER } },
+      create: {
+        id: FIXTURE_OWNER_MEMBER,
+        workspaceId: FIXTURES,
+        userId: FIXTURE_OWNER,
+        role: "owner",
+        status: "active",
+      },
+      update: {},
+    });
+    await tx.workspaceMember.upsert({
+      where: { workspaceId_userId: { workspaceId: FIXTURES, userId: FIXTURE_ASSISTANT } },
+      create: {
+        id: FIXTURE_ASSISTANT_MEMBER,
+        workspaceId: FIXTURES,
+        userId: FIXTURE_ASSISTANT,
+        role: "assistant",
+        status: "active",
+      },
+      update: {},
+    });
+    // Mirror the seeded NILE assistant's grant set (students, grades,
+    // attendance, homework, files read, messages) — deliberately no
+    // portal_access. Grants are mutable configuration, not append-only
+    // records, so the fixture assistant's grants are reconciled to exactly
+    // this baseline on every run; a crashed file cannot leak into the next.
+    await tx.permissionGrant.deleteMany({
+      where: { workspaceId: FIXTURES, memberId: FIXTURE_ASSISTANT_MEMBER },
+    });
+    const standardGrants: Array<[PermissionResource, PermissionAction]> = [
+      ["students", "read"],
+      ["students", "write"],
+      ["grades", "read"],
+      ["grades", "write"],
+      ["attendance", "read"],
+      ["attendance", "write"],
+      ["homework", "read"],
+      ["homework", "write"],
+      ["files", "read"],
+      ["messages", "read"],
+      ["messages", "write"],
+    ];
+    await tx.permissionGrant.createMany({
+      data: standardGrants.map(([resource, action]) => ({
+        workspaceId: FIXTURES,
+        memberId: FIXTURE_ASSISTANT_MEMBER,
+        resource,
+        action,
+      })),
+    });
+    const now = new Date();
+    await tx.student.updateMany({
+      where: { workspaceId: FIXTURES, archivedAt: null },
+      data: { archivedAt: now },
+    });
+    await tx.group.updateMany({
+      where: { workspaceId: FIXTURES, archivedAt: null },
+      data: { archivedAt: now },
+    });
+  });
 }
 
 export async function assistantScope(): Promise<Scope> {

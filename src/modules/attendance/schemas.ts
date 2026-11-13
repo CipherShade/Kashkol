@@ -19,7 +19,6 @@ export const markAttendanceSchema = z.object({
   studentId: z.string().uuid({ message: "invalidStudentId" }),
   mark: attendanceMarkValueSchema,
   reason: z.string().trim().max(500).optional().nullable(),
-  paymentVerified: z.boolean().optional(),
 });
 
 export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
@@ -31,7 +30,6 @@ export const bulkMarkAttendanceSchema = z.object({
       z.object({
         studentId: z.string().uuid({ message: "invalidStudentId" }),
         mark: attendanceMarkValueSchema,
-        paymentVerified: z.boolean().optional(),
       }),
     )
     .min(1, { message: "noMarks" }),
@@ -101,18 +99,9 @@ export const rotateQrTokenSchema = z.object({
 
 export type RotateQrTokenInput = z.infer<typeof rotateQrTokenSchema>;
 
-export const verifyPaymentSchema = z.object({
-  sessionId: z.string().uuid({ message: "invalidSessionId" }),
-  studentId: z.string().uuid({ message: "invalidStudentId" }),
-  verified: z.boolean(),
-});
-
-export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
-
 export const scanStudentQrSchema = z.object({
   qrToken: z.string().min(1, { message: "qrTokenRequired" }),
   sessionId: z.string().uuid({ message: "invalidSessionId" }),
-  paymentVerified: z.boolean().optional().default(false),
   markLate: z.boolean().optional().default(false),
 });
 

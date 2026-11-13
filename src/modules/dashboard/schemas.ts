@@ -39,7 +39,7 @@ export type AttentionStudent = {
   studentName: string;
   groupName: string;
   groupId: string;
-  category: "absences" | "grades" | "homework" | "payments";
+  category: "absences" | "grades" | "homework";
   reason: string;
   severity: "danger" | "warn";
   supportingInfo: string;
@@ -59,8 +59,6 @@ export type FinancialSummary = {
   totalRevenueMinor: number;
   currency: string;
   expectedRevenueMinor: number | null;
-  outstandingBalanceMinor: number;
-  collectionRate: number | null;
   revenueByGroup: Array<{
     groupId: string;
     groupName: string;
@@ -73,7 +71,7 @@ export type FinancialSummary = {
   }>;
   recentPayments: Array<{
     id: string;
-    studentId: string;
+    studentId: string | null;
     studentName: string;
     amountMinor: number;
     paidOn: string;
@@ -167,7 +165,6 @@ export type DashboardData = {
     };
     revenue: {
       collectedMinor: number;
-      outstandingMinor: number;
       expectedMinor: number | null;
       currency: string;
       priorPeriodChangePercent: number | null;

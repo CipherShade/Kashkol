@@ -93,7 +93,6 @@ export function StudentPortalAccessPanel({
     showGrades: true,
     showHomework: true,
     showResources: true,
-    showPayments: false,
     showSchedule: true,
     showNotifications: true,
   });
@@ -310,11 +309,7 @@ export function StudentPortalAccessPanel({
               inviteKind === "parent" && selectedGuardianId
                 ? selectedGuardianId
                 : null,
-            permissions: {
-              ...permissions,
-              showPayments:
-                inviteKind === "parent" ? permissions.showPayments : false,
-            },
+            permissions,
           }),
         },
       );
@@ -647,9 +642,6 @@ export function StudentPortalAccessPanel({
                     "showHomework",
                     "showResources",
                     "showNotifications",
-                    ...(inviteKind === "parent"
-                      ? (["showPayments"] as const)
-                      : []),
                   ] as Array<keyof PortalPermissions>
                 ).map((permKey) => (
                   <label
@@ -793,9 +785,6 @@ export function StudentPortalAccessPanel({
                           "showHomework",
                           "showResources",
                           "showNotifications",
-                          ...(grant.kind === "parent"
-                            ? (["showPayments"] as const)
-                            : []),
                         ] as Array<keyof PortalPermissions>
                       ).map((permKey) => (
                         <label

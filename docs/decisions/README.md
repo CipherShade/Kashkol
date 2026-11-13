@@ -40,8 +40,8 @@ Every ADR uses the same sections:
 | [0015](0015-shared-zod-validation-schemas.md) | Shared Zod validation schemas | Accepted | M0–M3 |
 | [0016](0016-spreadsheet-library-exceljs.md) | Spreadsheet processing with exceljs | Accepted | M1–M3 |
 | [0017](0017-clamav-and-learning-materials.md) | ClamAV scanning and the learning-materials library | Accepted | M1 |
-| [0018](0018-monthly-fees-and-cancelled-sessions.md) | Period-based fees and session cancellation | Accepted (partially superseded by ADR-0025) | M2 |
-| [0025](0025-per-session-attendance-billing.md) | Per-session attendance-based billing | Accepted | M2 |
+| [0018](0018-monthly-fees-and-cancelled-sessions.md) | Period-based fees and session cancellation | Accepted (partially superseded by ADR-0025 and ADR-0028) | M2 |
+| [0025](0025-per-session-attendance-billing.md) | Per-session attendance-based billing | Accepted (partially superseded by ADR-0028) | M2 |
 | [0020](0020-qr-rendering-library.md) | QR rendering uses `qrcode-generator`, pinned | Accepted | M2 |
 | [0021](0021-forms-foundation.md) | Relational forms foundation with server-side conditional logic | Accepted (partially superseded by ADR-0022) | M3a |
 | [0022](0022-forms-visual-builder.md) | Forms visual builder supersedes revision deferral | Accepted (approved 2026-11-04) | M4 / extension |
@@ -49,6 +49,7 @@ Every ADR uses the same sections:
 | [0024](0024-worker-cross-workspace-enumeration.md) | Worker workspace enumeration via a `SECURITY DEFINER` function | Accepted | M0–M3 |
 | [0026](0026-student-portal-credentials.md) | Teacher-generated student portal credentials | Accepted (partially superseded by ADR-0027) | M2 |
 | [0027](0027-student-qr-attendance-only.md) | Student QR codes are attendance identification only | Accepted | M2 |
+| [0028](0028-session-scoped-finance.md) | Session-scoped finance (replaces per-student ledger) | Accepted (approved 2026-11-13) | M2 |
 
 ## Conventions
 
@@ -97,3 +98,4 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0024 | `F-P2-07`, `F-P2-10`, `R-01`, `NF-9` |
 | 0026 | `F-P2-03`, `R-01`, `R-06`, `NF-1`, `NF-9`, `A-18`, `A-19`, `A-20`, `OQ-03`, `OQ-21` |
 | 0027 | `F-P2-03`, `F-P2-05`, `R-01`, `R-06`, `NF-1`, `NF-9`, `A-21`, `OQ-22` |
+| 0028 | `F-P2-04`, `D-14`, `R-02`, `NF-1`, `NF-2`, `ADR-0025` |

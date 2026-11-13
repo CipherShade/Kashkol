@@ -83,7 +83,6 @@ function makeMark(
     mark,
     recordedBy: "teacher-1",
     recordedAt: new Date(recordedAt),
-    paymentVerified: false,
     isCrossSeason: false,
     session: {
       startsAt: session.startsAt,

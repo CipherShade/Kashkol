@@ -250,12 +250,11 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
 
       const scope = ownerScope();
 
-      // Issue parent invitations for Child 1 (with payments enabled) and Child 2 (payments disabled)
+      // Issue parent invitations for Child 1 and Child 2
       const inviteChild1 = await issuePortalInvitation(scope, {
         studentId: child1Id,
         kind: "parent",
         email: parentUser.email,
-        permissions: { showPayments: true },
       });
       const token1 = inviteChild1.verificationPath.split("/").pop()!;
 
@@ -263,7 +262,6 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
         studentId: child2Id,
         kind: "parent",
         email: parentUser.email,
-        permissions: { showPayments: false },
       });
       const token2 = inviteChild2.verificationPath.split("/").pop()!;
 
@@ -318,18 +316,18 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
       // Only clean shared file appears; teacher_only and pending-scan files are absent
       expect(detail1.resources).toHaveLength(1);
       expect(detail1.resources?.[0].title).toBe("Clean Revision Sheet");
-      // Approved payments appear for Child 1
-      expect(detail1.payments?.balance.receivedMinor).toBe(35000);
+      // Approved payments never appear in any portal payload (ADR-0028)
+      expect(detail1).not.toHaveProperty("payments");
 
       // Verify zero leakage of private notes across the entire serialized payload
       const serializedParent = JSON.stringify(parentOverview);
       expect(serializedParent).not.toContain("CONFIDENTIAL_");
       expect(serializedParent).not.toContain(NILE);
 
-      // Parent switches to Child 2 -> payments are null because showPayments is false
+      // Parent switches to Child 2 -> payments are not exposed either
       const detail2 = await getParentChildPortalView(parentContext, child2Id);
       expect(detail2.student.id).toBe(child2Id);
-      expect(detail2.payments).toBeNull();
+      expect(detail2).not.toHaveProperty("payments");
 
       // Parent attempting direct access to unlinked student in same workspace -> 403 FORBIDDEN
       await expect(

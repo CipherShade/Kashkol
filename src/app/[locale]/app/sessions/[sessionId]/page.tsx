@@ -70,7 +70,6 @@ export default async function SessionDetailPage({
     mark: r.mark,
     source: r.source,
     recordedAt: r.recordedAt ? r.recordedAt.toISOString() : null,
-    paymentVerified: r.paymentVerified,
     isCrossSeason: r.isCrossSeason,
     primaryGroupId: r.primaryGroupId,
     primaryGroupName: r.primaryGroupName,

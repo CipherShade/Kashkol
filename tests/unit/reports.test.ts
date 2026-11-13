@@ -58,6 +58,7 @@ describe("report filters and CSV security", () => {
       to: "2026-10-29",
       from: "2026-10-01",
     }).success).toBe(false);
+    expect(reportQuerySchema.safeParse({ type: "sessionRevenue" }).success).toBe(true);
   });
 
   it("passes the selected date, group, and student filters to the report query", async () => {
@@ -144,22 +145,21 @@ describe("report filters and CSV security", () => {
     expect(loadReport).not.toHaveBeenCalled();
   });
 
-  it("reports filtered student balances as an as-of snapshot using integer EGP amounts", async () => {
+  it("reports session revenue as expected vs collected using integer EGP amounts", async () => {
     loadReport.mockResolvedValue({
       timezone: "Africa/Cairo",
       total: 1,
       items: [{
-        asOf: "2026-10-29",
-        student: "A",
+        date: new Date("2026-10-20T14:00:00.000Z"),
         group: "Physics",
+        priceMinor: 10_000,
+        attended: 1,
         expectedMinor: 10_000,
-        receivedMinor: 2_500,
-        adjustmentsMinor: -500,
-        balanceMinor: 7_000,
+        collectedMinor: 2_500,
       }],
     });
     const query = reportQuerySchema.parse({
-      type: "balances",
+      type: "sessionRevenue",
       to: "2026-10-29",
       groupId: "00000000-0000-4000-8000-000000000010",
       studentId: "00000000-0000-4000-8000-000000000020",
@@ -170,7 +170,7 @@ describe("report filters and CSV security", () => {
     expect(loadReport).toHaveBeenCalledWith(
       owner,
       expect.objectContaining({
-        type: "balances",
+        type: "sessionRevenue",
         to: "2026-10-29",
         groupId: query.groupId,
         studentId: query.studentId,
@@ -178,29 +178,30 @@ describe("report filters and CSV security", () => {
       expect.objectContaining({ toExclusive: expect.any(Date) }),
     );
     expect(result.items[0]).toMatchObject({
+      priceEgp: "100.00",
+      attended: 1,
       expectedEgp: "100.00",
-      receivedEgp: "25.00",
-      adjustmentsEgp: "-5.00",
-      balanceEgp: "70.00",
+      collectedEgp: "25.00",
     });
+    expect(result.items[0]).not.toHaveProperty("balanceEgp");
+    expect(result.items[0]).not.toHaveProperty("collectionRate");
   });
 
-  it("exports balance snapshots with the selected as-of, group, and student filters", async () => {
+  it("exports session revenue rows with the selected date, group, and student filters", async () => {
     loadReport.mockResolvedValue({
       timezone: "Africa/Cairo",
       total: 1,
       items: [{
-        asOf: "2026-10-29",
-        student: "+=IMPORT",
-        group: "Physics",
+        date: new Date("2026-10-20T14:00:00.000Z"),
+        group: "+=IMPORT",
+        priceMinor: 10_000,
+        attended: 1,
         expectedMinor: 10_000,
-        receivedMinor: 2_500,
-        adjustmentsMinor: 0,
-        balanceMinor: 7_500,
+        collectedMinor: 7_500,
       }],
     });
     const query = reportExportSchema.parse({
-      type: "balances",
+      type: "sessionRevenue",
       to: "2026-10-29",
       groupId: "00000000-0000-4000-8000-000000000010",
       studentId: "00000000-0000-4000-8000-000000000020",
@@ -210,12 +211,12 @@ describe("report filters and CSV security", () => {
 
     const csv = await exportReport(owner, query);
 
-    expect(csv).toContain('"Balance as of"');
+    expect(csv).toContain('"Collected (EGP)"');
     expect(csv).toContain("'+=IMPORT");
     expect(loadReport).toHaveBeenCalledWith(
       owner,
       expect.objectContaining({
-        type: "balances",
+        type: "sessionRevenue",
         to: "2026-10-29",
         groupId: query.groupId,
         studentId: query.studentId,

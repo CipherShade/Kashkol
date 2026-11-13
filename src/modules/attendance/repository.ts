@@ -12,7 +12,6 @@ export type RosterStudent = {
   source: "manual" | "qr" | null;
   recordedAt: Date | null;
   recordedBy: string | null;
-  paymentVerified: boolean;
   isCrossSeason: boolean;
   primaryGroupId: string | null;
   primaryGroupName: string | null;
@@ -81,7 +80,6 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
         source: m ? m.source : null,
         recordedAt: m ? m.recordedAt : null,
         recordedBy: m ? m.recordedBy : null,
-        paymentVerified: m?.paymentVerified ?? false,
         isCrossSeason: m?.isCrossSeason ?? false,
         primaryGroupId: m?.primaryGroupId ?? null,
         primaryGroupName: m?.primaryGroup?.name ?? null,
@@ -101,7 +99,6 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
           source: m.source,
           recordedAt: m.recordedAt,
           recordedBy: m.recordedBy,
-          paymentVerified: m.paymentVerified,
           isCrossSeason: true,
           primaryGroupId: m.primaryGroupId,
           primaryGroupName: m.primaryGroup?.name ?? null,
@@ -143,7 +140,6 @@ export async function upsertAttendanceMarkTx(
     mark: "present" | "absent" | "late" | "excused";
     source?: "manual" | "qr";
     deviceId?: string | null;
-    paymentVerified?: boolean;
     isCrossSeason?: boolean;
     primaryGroupId?: string | null;
   },
@@ -157,16 +153,7 @@ export async function upsertAttendanceMarkTx(
   });
 
   if (existing) {
-    const paymentVerifiedUpdate =
-      data.paymentVerified !== undefined ? { paymentVerified: data.paymentVerified } : {};
-
     if (existing.mark === data.mark) {
-      if (data.paymentVerified !== undefined && data.paymentVerified !== existing.paymentVerified) {
-        return tx.attendanceMark.update({
-          where: { id: existing.id },
-          data: paymentVerifiedUpdate,
-        });
-      }
       return existing;
     }
     // Create revision
@@ -191,7 +178,6 @@ export async function upsertAttendanceMarkTx(
         deviceId: data.deviceId ?? existing.deviceId,
         recordedBy: scope.actorUserId,
         recordedAt: new Date(),
-        ...paymentVerifiedUpdate,
       },
     });
   } else {
@@ -205,7 +191,6 @@ export async function upsertAttendanceMarkTx(
         source: data.source ?? "manual",
         deviceId: data.deviceId ?? null,
         recordedBy: scope.actorUserId,
-        paymentVerified: data.paymentVerified ?? false,
         isCrossSeason: data.isCrossSeason ?? false,
         primaryGroupId: data.primaryGroupId ?? null,
       },
@@ -305,25 +290,6 @@ export async function getActiveEnrollmentForStudent(
       group: { select: { id: true, name: true } },
     },
     orderBy: { enrolledAt: "desc" },
-  });
-}
-
-export async function setPaymentVerifiedTx(
-  tx: Prisma.TransactionClient,
-  workspaceId: string,
-  sessionId: string,
-  studentId: string,
-  verified: boolean,
-) {
-  const existing = await tx.attendanceMark.findFirst({
-    where: { workspaceId, sessionId, studentId },
-  });
-  if (!existing) {
-    throw new Error("NOT_FOUND");
-  }
-  return tx.attendanceMark.update({
-    where: { id: existing.id },
-    data: { paymentVerified: verified },
   });
 }
 

@@ -3,9 +3,18 @@ import { z } from "zod";
 const uuid = z.string().uuid();
 const date = z.iso.date();
 
+const reportType = z.enum([
+  "attendance",
+  "enrollment",
+  "academics",
+  "homework",
+  "payments",
+  "sessionRevenue",
+]);
+
 export const reportQuerySchema = z
   .object({
-    type: z.enum(["attendance", "enrollment", "academics", "homework", "payments", "balances"]),
+    type: reportType,
     from: date.optional(),
     to: date.optional(),
     groupId: uuid.optional(),
@@ -17,10 +26,6 @@ export const reportQuerySchema = z
     path: ["to"],
     message: "dateRangeInvalid",
   })
-  .refine((value) => value.type !== "balances" || (!value.from && Boolean(value.to)), {
-    path: ["to"],
-    message: "balanceAsOfDateRequired",
-  })
   .refine((value) => value.page * value.pageSize <= 5000, {
     path: ["pageSize"],
     message: "reportPageLimitExceeded",
@@ -28,7 +33,7 @@ export const reportQuerySchema = z
 
 export const reportExportSchema = z
   .object({
-    type: z.enum(["attendance", "enrollment", "academics", "homework", "payments", "balances"]),
+    type: reportType,
     from: date.optional(),
     to: date.optional(),
     groupId: uuid.optional(),
@@ -39,10 +44,6 @@ export const reportExportSchema = z
   .refine((value) => !value.from || !value.to || value.from <= value.to, {
     path: ["to"],
     message: "dateRangeInvalid",
-  })
-  .refine((value) => value.type !== "balances" || (!value.from && Boolean(value.to)), {
-    path: ["to"],
-    message: "balanceAsOfDateRequired",
   });
 
 export type ReportQuery = z.infer<typeof reportQuerySchema>;

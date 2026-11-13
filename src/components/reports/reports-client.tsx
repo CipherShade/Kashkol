@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/form";
 
-type ReportType = "attendance" | "enrollment" | "academics" | "homework" | "payments" | "balances";
+type ReportType = "attendance" | "enrollment" | "academics" | "homework" | "payments" | "sessionRevenue";
 type ReportResult = {
   type: ReportType;
   items: Array<Record<string, string | number | null>>;
@@ -31,14 +31,13 @@ const columns: Record<ReportType, string[]> = {
     "balanceImpactEgp",
     "status",
   ],
-  balances: [
-    "asOf",
-    "student",
+  sessionRevenue: [
+    "date",
     "group",
+    "priceEgp",
+    "attended",
     "expectedEgp",
-    "receivedEgp",
-    "adjustmentsEgp",
-    "balanceEgp",
+    "collectedEgp",
   ],
 };
 
@@ -76,7 +75,7 @@ export function ReportsClient({
 
   function params(nextPage: number, exportLimit?: boolean) {
     const values = new URLSearchParams({ type });
-    if (from && type !== "balances") values.set("from", from);
+    if (from) values.set("from", from);
     if (to) values.set("to", to);
     if (groupId) values.set("groupId", groupId);
     if (studentId) values.set("studentId", studentId);
@@ -191,14 +190,12 @@ export function ReportsClient({
                 ))}
               </Select>
             </label>
-            {type !== "balances" ? (
-              <label className="grid gap-1 text-sm">
-                <span>{t("from")}</span>
-                <Input type="date" value={from} onChange={(event) => setFrom(event.currentTarget.value)} />
-              </label>
-            ) : null}
             <label className="grid gap-1 text-sm">
-              <span>{t(type === "balances" ? "asOf" : "to")}</span>
+              <span>{t("from")}</span>
+              <Input type="date" value={from} onChange={(event) => setFrom(event.currentTarget.value)} />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>{t("to")}</span>
               <Input type="date" value={to} onChange={(event) => setTo(event.currentTarget.value)} />
             </label>
             <label className="grid gap-1 text-sm">
@@ -283,7 +280,7 @@ export function ReportsClient({
                   </thead>
                   <tbody>
                     {result.items.map((row, index) => (
-                      <tr key={`${index}-${String(row.student ?? "")}`} className="border-t border-border">
+                      <tr key={`${index}-${String(row.student ?? row.group ?? "")}`} className="border-t border-border">
                         {fields.map((field) => (
                           <td key={field} className="max-w-64 p-2 align-top">
                             {row[field] === null || row[field] === "" ? "—" : String(row[field])}

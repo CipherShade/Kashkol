@@ -16,13 +16,13 @@ import { resolvePortalStudent, type PortalContext } from "@/modules/identity/ses
 import {
   DELTA,
   DELTA_OWNER,
-  NILE,
-  NILE_OWNER,
+  FIXTURES,
+  FIXTURE_OWNER,
   createStudent,
   createTestUser,
   deleteStudent,
   deleteTestUser,
-  ownerScope,
+  fixturesScope,
   type TestUser,
 } from "./helpers";
 import type { Scope } from "@/modules/tenancy/types";
@@ -38,8 +38,8 @@ const DELTA_OWNER_SCOPE: Scope = {
 // An assistant scope with no grants at all: `attendance:write` is required to
 // scan a QR roster, so every scan attempt must fail closed with 403.
 const NO_PERMISSION_ASSISTANT: Scope = {
-  workspaceId: NILE,
-  actorUserId: NILE_OWNER,
+  workspaceId: FIXTURES,
+  actorUserId: FIXTURE_OWNER,
   actorDisplayName: "Unprivileged Assistant",
   role: "assistant",
   permissions: new Set(),
@@ -63,7 +63,7 @@ afterEach(async () => {
   // not roll back the rest.
   const bestEffort = (promise: Promise<unknown>) => promise.catch(() => undefined);
   for (const [workspaceId, sessions] of [
-    [NILE, () => SESSIONS],
+    [FIXTURES, () => SESSIONS],
     [DELTA, () => DELTA_SESSIONS],
   ] as const) {
     for (const sessionId of sessions()) {
@@ -75,7 +75,7 @@ afterEach(async () => {
     }
   }
   for (const [workspaceId, sessions] of [
-    [NILE, () => SESSIONS],
+    [FIXTURES, () => SESSIONS],
     [DELTA, () => DELTA_SESSIONS],
   ] as const) {
     for (const sessionId of sessions()) {
@@ -88,13 +88,13 @@ afterEach(async () => {
   }
   for (const groupId of GROUPS) {
     await bestEffort(
-      withScope({ workspaceId: NILE }, (tx) =>
-        tx.enrollment.deleteMany({ where: { workspaceId: NILE, groupId } }),
+      withScope({ workspaceId: FIXTURES }, (tx) =>
+        tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId } }),
       ),
     );
     await bestEffort(
-      withScope({ workspaceId: NILE }, (tx) =>
-        tx.group.deleteMany({ where: { workspaceId: NILE, id: groupId } }),
+      withScope({ workspaceId: FIXTURES }, (tx) =>
+        tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: groupId } }),
       ),
     );
   }
@@ -110,7 +110,7 @@ afterEach(async () => {
       ),
     );
   }
-  for (const studentId of STUDENTS) await deleteStudent(NILE, studentId);
+  for (const studentId of STUDENTS) await deleteStudent(FIXTURES, studentId);
   for (const studentId of DELTA_STUDENTS) await deleteStudent(DELTA, studentId);
   for (const user of CREATED_USERS) await deleteTestUser(user);
   GROUPS.length = 0;
@@ -130,7 +130,7 @@ function freshPhone(): string {
 
 async function createServiceStudent(phone: string | null = null) {
   const result = await createStudentService(
-    ownerScope(),
+    fixturesScope(),
     {
       firstName: "Qr",
       lastName: randomUUID().slice(0, 8),
@@ -166,7 +166,7 @@ async function createGroupWithSession(
       },
     }),
   );
-  if (workspaceId === NILE) GROUPS.push(group.id);
+  if (workspaceId === FIXTURES) GROUPS.push(group.id);
   else DELTA_GROUPS.push(group.id);
 
   const session = await withScope({ workspaceId }, (tx) =>
@@ -180,7 +180,7 @@ async function createGroupWithSession(
       },
     }),
   );
-  if (workspaceId === NILE) SESSIONS.push(session.id);
+  if (workspaceId === FIXTURES) SESSIONS.push(session.id);
   else DELTA_SESSIONS.push(session.id);
   return { group, session };
 }
@@ -189,19 +189,19 @@ describe("student attendance QR against PostgreSQL", () => {
   it("student creation auto-generates the attendance QR identity", async () => {
     const { student } = await createServiceStudent();
 
-    const raw = await withScope({ workspaceId: NILE }, (tx) =>
+    const raw = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.student.findFirst({
-        where: { workspaceId: NILE, id: student.id },
+        where: { workspaceId: FIXTURES, id: student.id },
         select: { qrTokenHash: true },
       }),
     );
     // Stored as `nonce:sha256(token)` — never the raw token.
     expect(raw?.qrTokenHash).toMatch(/^[A-Za-z0-9_-]+:[0-9a-f]{64}$/);
 
-    const audits = await withScope({ workspaceId: NILE }, (tx) =>
+    const audits = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.auditEvent.findMany({
         where: {
-          workspaceId: NILE,
+          workspaceId: FIXTURES,
           entityType: "student",
           entityId: student.id,
           action: "student.qr_generated",
@@ -210,12 +210,12 @@ describe("student attendance QR against PostgreSQL", () => {
     );
     expect(audits.length).toBeGreaterThanOrEqual(1);
 
-    const { token } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
     expect(token.startsWith(`kqr_v1.${student.id}.`)).toBe(true);
     // Re-reading the same student returns the same persistent token, not a new one.
-    const again = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const again = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
     expect(again.token).toBe(token);
@@ -223,21 +223,21 @@ describe("student attendance QR against PostgreSQL", () => {
 
   it("scans identify the student for attendance and record a qr-sourced mark", async () => {
     const { student } = await createServiceStudent();
-    const { group, session } = await createGroupWithSession(NILE, "started");
-    await enrollStudentInGroup(ownerScope(), { groupId: group.id, studentId: student.id });
+    const { group, session } = await createGroupWithSession(FIXTURES, "started");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
 
-    const { token } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
     await scanStudentQrCode(
-      ownerScope(),
-      { qrToken: token, sessionId: session.id, paymentVerified: false, markLate: false },
+      fixturesScope(),
+      { qrToken: token, sessionId: session.id, markLate: false },
       { requestId: randomUUID() },
     );
 
-    const mark = await withScope({ workspaceId: NILE }, (tx) =>
+    const mark = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.attendanceMark.findFirst({
-        where: { workspaceId: NILE, sessionId: session.id, studentId: student.id },
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
       }),
     );
     expect(mark).not.toBeNull();
@@ -250,7 +250,7 @@ describe("student attendance QR against PostgreSQL", () => {
     const { student, portalCredential } = await createServiceStudent(phone);
     expect(portalCredential).not.toBeNull();
 
-    const { token: qrToken } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token: qrToken } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
 
@@ -271,21 +271,21 @@ describe("student attendance QR against PostgreSQL", () => {
 
   it("re-issuing the QR immediately invalidates the previous token", async () => {
     const { student } = await createServiceStudent();
-    const { token: oldToken } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token: oldToken } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
-    const { group, session } = await createGroupWithSession(NILE, "started");
-    await enrollStudentInGroup(ownerScope(), { groupId: group.id, studentId: student.id });
+    const { group, session } = await createGroupWithSession(FIXTURES, "started");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
 
-    const { token: newToken } = await rotateStudentQrToken(ownerScope(), student.id, {
+    const { token: newToken } = await rotateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
     expect(newToken).not.toBe(oldToken);
 
     await expect(
       scanStudentQrCode(
-        ownerScope(),
-        { qrToken: oldToken, sessionId: session.id, paymentVerified: false, markLate: false },
+        fixturesScope(),
+        { qrToken: oldToken, sessionId: session.id, markLate: false },
         { requestId: randomUUID() },
       ),
     ).rejects.toMatchObject({
@@ -295,13 +295,13 @@ describe("student attendance QR against PostgreSQL", () => {
 
     // The new token is the only one that scans.
     await scanStudentQrCode(
-      ownerScope(),
-      { qrToken: newToken, sessionId: session.id, paymentVerified: false, markLate: false },
+      fixturesScope(),
+      { qrToken: newToken, sessionId: session.id, markLate: false },
       { requestId: randomUUID() },
     );
-    const mark = await withScope({ workspaceId: NILE }, (tx) =>
+    const mark = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.attendanceMark.findFirst({
-        where: { workspaceId: NILE, sessionId: session.id, studentId: student.id },
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
       }),
     );
     expect(mark?.source).toBe("qr");
@@ -309,18 +309,18 @@ describe("student attendance QR against PostgreSQL", () => {
 
   it("revoking the QR rejects scans until it is re-issued", async () => {
     const { student } = await createServiceStudent();
-    const { token } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
-    const { group, session } = await createGroupWithSession(NILE, "started");
-    await enrollStudentInGroup(ownerScope(), { groupId: group.id, studentId: student.id });
+    const { group, session } = await createGroupWithSession(FIXTURES, "started");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
 
-    await revokeStudentQrToken(ownerScope(), student.id, { requestId: randomUUID() });
+    await revokeStudentQrToken(fixturesScope(), student.id, { requestId: randomUUID() });
 
     await expect(
       scanStudentQrCode(
-        ownerScope(),
-        { qrToken: token, sessionId: session.id, paymentVerified: false, markLate: false },
+        fixturesScope(),
+        { qrToken: token, sessionId: session.id, markLate: false },
         { requestId: randomUUID() },
       ),
     ).rejects.toMatchObject({
@@ -331,12 +331,12 @@ describe("student attendance QR against PostgreSQL", () => {
 
   it("a QR issued in one workspace is rejected in another", async () => {
     const { student } = await createServiceStudent();
-    const { token } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
     const { session: foreignSession } = await createGroupWithSession(DELTA, "started");
 
-    // The DELTA owner scans the NILE student's token: the student does not
+    // The DELTA owner scans the FIXTURES student's token: the student does not
     // exist in the DELTA workspace, so the scan fails closed.
     await expect(
       scanStudentQrCode(
@@ -344,7 +344,6 @@ describe("student attendance QR against PostgreSQL", () => {
         {
           qrToken: token,
           sessionId: foreignSession.id,
-          paymentVerified: false,
           markLate: false,
         },
         { requestId: randomUUID() },
@@ -364,22 +363,22 @@ describe("student attendance QR against PostgreSQL", () => {
 
   it("a duplicate scan for the same session is rejected without corrupting the mark", async () => {
     const { student } = await createServiceStudent();
-    const { group, session } = await createGroupWithSession(NILE, "started");
-    await enrollStudentInGroup(ownerScope(), { groupId: group.id, studentId: student.id });
+    const { group, session } = await createGroupWithSession(FIXTURES, "started");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
 
-    const { token } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
     await scanStudentQrCode(
-      ownerScope(),
-      { qrToken: token, sessionId: session.id, paymentVerified: false, markLate: false },
+      fixturesScope(),
+      { qrToken: token, sessionId: session.id, markLate: false },
       { requestId: randomUUID() },
     );
 
     await expect(
       scanStudentQrCode(
-        ownerScope(),
-        { qrToken: token, sessionId: session.id, paymentVerified: false, markLate: false },
+        fixturesScope(),
+        { qrToken: token, sessionId: session.id, markLate: false },
         { requestId: randomUUID() },
       ),
     ).rejects.toMatchObject({
@@ -387,9 +386,9 @@ describe("student attendance QR against PostgreSQL", () => {
       messageKey: "attendance.errors.alreadyScanned",
     });
 
-    const count = await withScope({ workspaceId: NILE }, (tx) =>
+    const count = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.attendanceMark.count({
-        where: { workspaceId: NILE, sessionId: session.id, studentId: student.id },
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
       }),
     );
     expect(count).toBe(1);
@@ -397,44 +396,44 @@ describe("student attendance QR against PostgreSQL", () => {
 
   it("an assistant without attendance:write cannot scan a roster", async () => {
     const { student } = await createServiceStudent();
-    const { session } = await createGroupWithSession(NILE, "started");
-    const { token } = await getOrGenerateStudentQrToken(ownerScope(), student.id, {
+    const { session } = await createGroupWithSession(FIXTURES, "started");
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
     });
 
     await expect(
       scanStudentQrCode(
         NO_PERMISSION_ASSISTANT,
-        { qrToken: token, sessionId: session.id, paymentVerified: false, markLate: false },
+        { qrToken: token, sessionId: session.id, markLate: false },
         { requestId: randomUUID() },
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-    const mark = await withScope({ workspaceId: NILE }, (tx) =>
+    const mark = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.attendanceMark.findFirst({
-        where: { workspaceId: NILE, sessionId: session.id, studentId: student.id },
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
       }),
     );
     expect(mark).toBeNull();
   });
 
   it("a student portal user cannot read another student's portal record", async () => {
-    const studentA = await createStudent(NILE, "QrIsolationA");
-    const studentB = await createStudent(NILE, "QrIsolationB");
+    const studentA = await createStudent(FIXTURES, "QrIsolationA");
+    const studentB = await createStudent(FIXTURES, "QrIsolationB");
     STUDENTS.push(studentA, studentB);
     const portalUser = await createTestUser("student-qr-portal");
     CREATED_USERS.push(portalUser);
 
     const grantId = randomUUID();
-    await withScope({ workspaceId: NILE }, (tx) =>
+    await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.portalGrant.create({
         data: {
           id: grantId,
-          workspaceId: NILE,
+          workspaceId: FIXTURES,
           portalUserId: portalUser.id,
           studentId: studentA,
           kind: "student",
-          issuedBy: NILE_OWNER,
+          issuedBy: FIXTURE_OWNER,
         },
       }),
     );
@@ -459,8 +458,8 @@ describe("student attendance QR against PostgreSQL", () => {
         resolvePortalStudent(portal, randomUUID(), "student"),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
     } finally {
-      await withScope({ workspaceId: NILE }, (tx) =>
-        tx.portalGrant.deleteMany({ where: { workspaceId: NILE, portalUserId: portalUser.id } }),
+      await withScope({ workspaceId: FIXTURES }, (tx) =>
+        tx.portalGrant.deleteMany({ where: { workspaceId: FIXTURES, portalUserId: portalUser.id } }),
       );
     }
   });

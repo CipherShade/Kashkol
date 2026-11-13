@@ -76,10 +76,9 @@ export async function countStudentLinkedRecords(scope: Scope, studentId: string)
 export async function findStudentProfile(
   scope: Scope,
   studentId: string,
-  includePayments: boolean,
 ) {
   return withScope(scope, async (tx) => {
-    const [student, settings, attendanceMarks, assessmentScores, payments, enrollments, files, notes] =
+    const [student, settings, attendanceMarks, assessmentScores, enrollments, files, notes] =
       await Promise.all([
         tx.student.findFirst({
           where: { id: studentId, workspaceId: scope.workspaceId },
@@ -122,12 +121,6 @@ export async function findStudentProfile(
           },
           orderBy: { assessment: { date: "desc" } },
         }),
-        includePayments
-          ? tx.payment.findMany({
-              where: { workspaceId: scope.workspaceId, studentId },
-              orderBy: { paidOn: "desc" },
-            })
-          : Promise.resolve([]),
         tx.enrollment.findMany({
           where: { workspaceId: scope.workspaceId, studentId },
           include: {
@@ -223,7 +216,6 @@ export async function findStudentProfile(
       pastEnrollments: enrollments.filter((e) => !!e.leftAt),
       attendanceMarks,
       assessmentScores,
-      payments,
       files,
       notes,
     };

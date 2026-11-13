@@ -19,16 +19,17 @@ const egpAmount = z
   .refine((value) => value !== "0" && !/^0(?:\.0{1,2})?$/.test(value), "amountMustBePositive");
 
 export const paymentQuerySchema = z.object({
-  studentId: uuid.optional(),
+  sessionId: uuid.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 export const recordPaymentSchema = z
   .object({
-    studentId: uuid,
-    /** Optional: links this payment to a specific session. */
-    sessionId: uuid.optional(),
+    /** Optional: links this payment to a student (nullable in the session-scoped model). */
+    studentId: uuid.optional(),
+    /** Required: session-scoped receipts are always tied to a session. */
+    sessionId: uuid,
     amount: egpAmount,
     period: z.string().trim().max(80).optional(),
     purpose: z.string().trim().max(160).optional(),
@@ -51,7 +52,8 @@ export const recordPaymentSchema = z
 export const createAdjustmentSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("discount"),
-    studentId: uuid,
+    /** Optional: adjustments hang off a session-linked payment. */
+    studentId: uuid.optional(),
     paymentId: uuid.optional(),
     amount: egpAmount,
     paidOn: z.iso.date(),
@@ -60,7 +62,7 @@ export const createAdjustmentSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("refund"),
-    studentId: uuid,
+    studentId: uuid.optional(),
     paymentId: uuid,
     amount: egpAmount,
     paidOn: z.iso.date(),
@@ -69,7 +71,7 @@ export const createAdjustmentSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("correction"),
-    studentId: uuid,
+    studentId: uuid.optional(),
     paymentId: uuid.optional(),
     amount: egpAmount,
     direction: z.enum(["increase_due", "decrease_due"]),
@@ -79,17 +81,13 @@ export const createAdjustmentSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-export const createFeeRuleSchema = z
-  .object({
-    studentId: uuid.optional(),
-    groupId: uuid.optional(),
-    amount: egpAmount,
-    effectiveFrom: month,
-    purpose: z.string().trim().min(1).max(160),
-  })
-  .refine((value) => Boolean(value.studentId) !== Boolean(value.groupId), {
-    message: "chooseOneFeeTarget",
-  });
+export const createFeeRuleSchema = z.object({
+  /** Fee rules attach to a group only (ADR-0028: per-student fee rules are deprecated). */
+  groupId: uuid,
+  amount: egpAmount,
+  effectiveFrom: month,
+  purpose: z.string().trim().min(1).max(160),
+});
 
 export type PaymentQuery = z.infer<typeof paymentQuerySchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;

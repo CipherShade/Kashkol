@@ -38,24 +38,17 @@ export default async function PaymentsPage({
       <PageHeader title={t("title")} description={t("subtitle")} />
       <PaymentsClient
         initialData={{
-          students: data.students,
           groups: data.groups,
-          balances: data.balances,
+          sessions: data.sessions,
           payments: data.payments.map((payment) => ({
             ...payment,
             paidOn: payment.paidOn.toISOString().slice(0, 10),
-            createdAt: payment.createdAt.toISOString(),
             voidedAt: payment.voidedAt?.toISOString() ?? null,
           })),
           adjustments: data.adjustments.map((adjustment) => ({
             ...adjustment,
             paidOn: adjustment.paidOn.toISOString().slice(0, 10),
             createdAt: adjustment.createdAt.toISOString(),
-          })),
-          feeRules: data.feeRules.map((rule) => ({
-            ...rule,
-            effectiveFrom: rule.effectiveFrom.toISOString().slice(0, 7),
-            createdAt: rule.createdAt.toISOString(),
           })),
           totals: data.totals,
           pagination: data.pagination,

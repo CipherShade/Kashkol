@@ -4,11 +4,7 @@ import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { authorize, type Scope } from "@/modules/tenancy/types";
-import {
-  calculateStudentBalances,
-  currentDateInTimezone,
-  currentMonthInTimezone,
-} from "./calculations";
+import { currentDateInTimezone } from "./calculations";
 import {
   createAdjustmentTx,
   createFeeRuleTx,
@@ -16,7 +12,7 @@ import {
   getSessionRevenueDataTx,
   loadPaymentDashboard,
 } from "./repository";
-import { buildSessionCharges, buildSessionRevenueSummary } from "./session-revenue";
+import { buildSessionRevenueSummary } from "./session-revenue";
 import { egpToMinorUnits } from "./schemas";
 import type {
   CreateAdjustmentInput,
@@ -45,69 +41,44 @@ function safeSum(values: number[]): number {
 export async function getPayments(scope: Scope, query: PaymentQuery, now = new Date()) {
   authorize(scope, "payments", "read");
   const data = await loadPaymentDashboard(scope, query);
-  if (query.studentId && !data.students.some((student) => student.id === query.studentId)) {
-    throw new AppError("NOT_FOUND");
+
+  const presentClBySession = new Map<string, number>();
+  for (const mark of data.attendanceRows) {
+    presentClBySession.set(mark.sessionId, (presentClBySession.get(mark.sessionId) ?? 0) + 1);
+  }
+  const collectedBySession = new Map<string, number>();
+  for (const row of data.collectedBySession) {
+    if (row.sessionId) collectedBySession.set(row.sessionId, row._sum.amountMinor ?? 0);
   }
 
-  const sessionCharges = buildSessionCharges(
-    data.sessionRows,
-    data.attendanceRows,
-    data.groups
-      .filter((group) => (group.defaultPricePerStudentMinor ?? 0) > 0)
-      .map((group) => group.id),
-  );
-
-  const balances = calculateStudentBalances({
-    students: data.students,
-    feeRules: data.feeRules,
-    enrollments: data.enrollments,
-    payments: data.paymentTotals.map((row) => ({
-      studentId: row.studentId,
-      amountMinor: row._sum.amountMinor ?? 0,
-      voidedAt: null,
-    })),
-    adjustments: data.adjustmentTotals.map((row) => ({
-      studentId: row.studentId,
-      amountMinor: row._sum.amountMinor ?? 0,
-      balanceImpact: row.balanceImpact,
-    })),
-    sessionCharges: sessionCharges.charges,
-    sessionPricedGroupIds: sessionCharges.sessionPricedGroupIds,
-    asOfMonth: currentMonthInTimezone(now, data.timezone),
-    timezone: data.timezone,
+  const sessions = data.sessionRows.map((session) => {
+    const price =
+      session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+    const presentCount = presentClBySession.get(session.id) ?? 0;
+    return {
+      id: session.id,
+      groupId: session.groupId,
+      groupName: session.group.name,
+      startsAt: session.startsAt.toISOString(),
+      pricePerStudentMinor: price,
+      presentCount,
+      expectedRevenueMinor: price == null ? null : price * presentCount,
+      collectedRevenueMinor: collectedBySession.get(session.id) ?? 0,
+    };
   });
 
-  const studentById = new Map(data.students.map((student) => [student.id, student]));
-  const balancesWithNames = balances
-    .flatMap((balance) => {
-      const student = studentById.get(balance.studentId);
-      return student ? [{ ...balance, student }] : [];
-    })
-    .filter((balance) => !query.studentId || balance.studentId === query.studentId)
-    .sort((left, right) => right.balanceMinor - left.balanceMinor);
-
-  const grossCollectedMinor = safeSum(
-    data.paymentTotals.map((row) => row._sum.amountMinor ?? 0),
-  );
+  const grossCollectedMinor = data.collectedTotal._sum.amountMinor ?? 0;
   const refundedMinor = safeSum(
     data.adjustmentTotals
       .filter((row) => row.kind === "refund")
       .map((row) => row._sum.amountMinor ?? 0),
   );
-  const outstandingMinor = safeSum(
-    balancesWithNames.filter((balance) => balance.balanceMinor > 0).map((balance) => balance.balanceMinor),
-  );
-  const creditMinor = safeSum(
-    balancesWithNames.filter((balance) => balance.balanceMinor < 0).map((balance) => -balance.balanceMinor),
-  );
 
   return {
     timezone: data.timezone,
     today: currentDateInTimezone(now, data.timezone),
-    students: data.students,
     groups: data.groups,
-    balances: balancesWithNames,
-    feeRules: data.feeRules,
+    sessions,
     payments: data.paymentRows,
     adjustments: data.adjustmentRows,
     pagination: {
@@ -120,8 +91,6 @@ export async function getPayments(scope: Scope, query: PaymentQuery, now = new D
       grossCollectedMinor,
       refundedMinor,
       collectedMinor: grossCollectedMinor - refundedMinor,
-      outstandingMinor,
-      creditMinor,
     },
   };
 }
@@ -215,7 +184,7 @@ export async function createPaymentAdjustment(
     const saved = await createAdjustmentTx(tx, {
       id: newUuidV7(),
       workspaceId: scope.workspaceId,
-      studentId: input.studentId,
+      studentId: input.studentId ?? null,
       paymentId: input.paymentId ?? null,
       kind: input.kind,
       amountMinor: egpToMinorUnits(input.amount),
@@ -271,8 +240,8 @@ export async function createFeeRule(
     const saved = await createFeeRuleTx(tx, {
       id: newUuidV7(),
       workspaceId: scope.workspaceId,
-      studentId: input.studentId ?? null,
-      groupId: input.groupId ?? null,
+      studentId: null, // per-student fee rules are deprecated (ADR-0028)
+      groupId: input.groupId,
       amountMinor: egpToMinorUnits(input.amount),
       effectiveFrom,
       purpose: input.purpose,
@@ -291,8 +260,7 @@ export async function createFeeRule(
       entityId: saved.rule.id,
       action: "payment.fee_rule_recorded",
       diff: {
-        studentId: input.studentId ?? null,
-        groupId: input.groupId ?? null,
+        groupId: input.groupId,
         amountMinor: saved.rule.amountMinor,
         effectiveFrom: input.effectiveFrom,
       },

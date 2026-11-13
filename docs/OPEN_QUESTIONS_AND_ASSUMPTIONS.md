@@ -1,7 +1,8 @@
 # Kashkol — Open Questions and Assumptions
 
-**Status:** Draft v0.2 · **Date:** 2026-11-11 · **Owner:** Product
+**Status:** Draft v0.3 · **Date:** 2026-11-13 · **Owner:** Product
 **Change:** `OQ-20` added on 2026-11-11 to record that the direct student-level fee rule vs. group monthly fee interaction in `ADR-0025` is an **open product decision**; the implementation's behaviour is recorded as the default until decided, not as a decided rule.
+**Change:** `OQ-20` marked **superseded by `ADR-0028`** on 2026-11-13; student-level fee rules no longer exist, so the question can no longer arise. `F-P2-04` and `D-14` are likewise superseded by `ADR-0028`.
 **Companions:** `PRODUCT_REQUIREMENTS.md`, `USER_FLOWS.md`, `RELEASE_PLAN.md`
 
 > **Nothing in this document blocks the build.** Every open question below already carries a
@@ -48,7 +49,7 @@
 |---|---|---|
 | M0 | `OQ-01` (team), `OQ-18` (audit visibility), `OQ-10` (retention) | all others |
 | M1 | `OQ-07` (search scope), `OQ-14` (offline), `OQ-12` (file limits) | portal, payments, QR, video, billing questions |
-| M2 | `OQ-02` (parent linking), `OQ-03` (student auth), `OQ-05` (QR capture), `OQ-06` (notes to parents), `OQ-09` (OTP provider), `OQ-20` (direct student fee rule versus group monthly fee interaction, `F-P2-04`) | video, billing, exam-bank questions |
+| M2 | `OQ-02` (parent linking), `OQ-03` (student auth), `OQ-05` (QR capture), `OQ-06` (notes to parents), `OQ-09` (OTP provider) | `OQ-20` moot (superseded by `ADR-0028`); video, billing, exam-bank questions |
 | M3 | `OQ-04` (pricing), `OQ-08` (video provider), `OQ-11` (question source) | — |
 
 ---
@@ -127,7 +128,7 @@ of each answer, and the deadline. No question blocks the build.
 | **OQ-08** | Which external provider delivers recorded video? | (a) a managed video platform (e.g. a hosted player with a signed URL); (b) object storage plus a player component; (c) YouTube/Vimeo unlisted embeds | **No video hosting or protected playback is enabled or claimed until a provider is selected, configured, and tested.** | Provider selection, playback authorization, storage, and egress limits must be validated before the feature is enabled. | Before M3b starts |
 | **OQ-12** | Should files be shareable outside Kashkol (a public link)? | (a) no — internal only; (b) yes, expiring public link; (c) yes, per-file password | **(a)** — internal only, scoped to teacher-only / selected groups / selected students. | (b)/(c) create a public surface for children's material; each needs expiry, revocation, watermarking, and an abuse process. | Before M2 scope freeze |
 | **OQ-13** | Does the teacher need to record attendance from a shared device or a teacher's own tablet? | (a) teacher's own device only; (b) any device via sign-in; (c) shared classroom device with a PIN | **(a)**, with sign-in supported on any personal device. | (c) raises the authentication bar for a shared classroom tablet; a short-lived session PIN is a possible later addition. | Before M1 scope freeze |
-| **OQ-20** | When a student has a **direct student-level fee rule** effective in a month *and* is simultaneously enrolled in a group that has a group-level fee rule for that same month, should the group-level monthly fee still accrue on top of the direct fee, or does the direct fee fully replace it? | (a) direct fee fully replaces the group monthly fee for that month; (b) direct fee and group monthly fee both accrue; (c) per-student choice at the fee-rule level | **(a), as observed** — the implementation resolves the combination as "direct fee applies, group monthly fee suppressed for that month". This is **not a decided product rule**. | (b) doubles billing for negotiated-down students. (c) is more code and a migration, at marginal product value until a pilot teacher reports the split need. Recording the observation as an open question rather than writing it down as a business rule, pending product decision. | Before M2 scope freeze (`F-P2-04`) |
+| **OQ-20** | When a student has a **direct student-level fee rule** effective in a month *and* is simultaneously enrolled in a group that has a group-level fee rule for that same month, should the group-level monthly fee still accrue on top of the direct fee, or does the direct fee fully replace it? | (a) direct fee fully replaces the group monthly fee for that month; (b) direct fee and group monthly fee both accrue; (c) per-student choice at the fee-rule level | **Superseded by `ADR-0028`** (2026-11-13). Direct student-level fee rules are removed: fee rules are group-scoped only, and money is session-scoped, so the interaction can no longer arise. | The question and its default are moot. Existing direct-fee rows, if any, remain readable but are never applied (ADR-0028). | Moot (`ADR-0028`) |
 | **OQ-22** | Should the attendance QR support scanning with the student's own phone? | (a) teacher-only scans; (b) assistant scans too, under role permission; (c) student scans own code under an active session check | **(b)** — the attendance permission resource (`attendance:write`) covers teacher and assistant scanning alike; a student scanning their own code is not yet a requirement and is not implemented. | (c) would require a student-facing attendance self-mark flow with device/context checks, a different consent model, and an explicit `F-P2-05` amendment; not built or claimed today. | Before M2 scope freeze |
 
 ### 4.4 Platform and legal
@@ -239,6 +240,6 @@ they gate milestones.
 | `OQ-17` | `F-P2-01`, `F-P2-04` | Open question |
 | `OQ-18` | `F-P0-07`, `F-P3-03` | Open question |
 | `OQ-19` | `F-P0-08` | Open question |
-| `OQ-20` | `F-P2-04`, `ADR-0025` | Open question |
+| `OQ-20` | `F-P2-04`, `ADR-0025` | Superseded by `ADR-0028` |
 | `OQ-21` | `F-P2-11`, `ADR-0026` | Open question |
 | `OQ-22` | `F-P2-05`, `F20`, `ADR-0027` | Open question |

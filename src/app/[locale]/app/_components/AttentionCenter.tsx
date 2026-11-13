@@ -23,7 +23,6 @@ export function AttentionCenter({ students, alerts }: AttentionCenterProps) {
     { key: "absences", label: t("attentionCategoryAbsences") },
     { key: "grades", label: t("attentionCategoryGrades") },
     { key: "homework", label: t("attentionCategoryHomework") },
-    { key: "payments", label: t("attentionCategoryPayments") },
   ];
 
   const filteredStudents =
@@ -35,7 +34,6 @@ export function AttentionCenter({ students, alerts }: AttentionCenterProps) {
     absences: "clock",
     grades: "bar",
     homework: "book",
-    payments: "creditCard",
   };
 
   return (

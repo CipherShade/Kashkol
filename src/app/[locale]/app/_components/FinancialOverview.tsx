@@ -3,7 +3,6 @@ import { Link } from "@/i18n/navigation";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
-import { Progress } from "@/components/ui/stat";
 import { TrendLineChart } from "./charts/TrendLineChart";
 import { BarChart } from "./charts/BarChart";
 import type { FinancialSummary } from "@/modules/dashboard/schemas";
@@ -38,11 +37,6 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
   }
 
   const formattedCollected = (data.totalRevenueMinor / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-
-  const formattedOutstanding = (data.outstandingBalanceMinor / 100).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
@@ -130,29 +124,6 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
             }}
           >
             <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 500 }}>
-              {t("financialOutstandingLabel")}
-            </span>
-            <div
-              style={{
-                fontSize: "1.375rem",
-                fontWeight: 700,
-                color: data.outstandingBalanceMinor > 0 ? "var(--danger)" : "var(--ink)",
-                marginTop: "4px",
-              }}
-            >
-              {formattedOutstanding} <span style={{ fontSize: "0.875rem", fontWeight: 500 }}>{currency}</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "16px",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--surface-2)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 500 }}>
               {t("financialExpectedLabel")}
             </span>
             <div style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--ink)", marginTop: "4px" }}>
@@ -168,31 +139,6 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
             </div>
           </div>
 
-          <div
-            style={{
-              padding: "16px",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-              <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 500 }}>
-                {t("financialCollectionRateLabel")}
-              </span>
-              <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--ink)" }}>
-                {data.collectionRate !== null ? `${data.collectionRate}%` : "—"}
-              </span>
-            </div>
-            {data.collectionRate !== null ? (
-              <Progress value={data.collectionRate} tone="primary" />
-            ) : (
-              <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{t("financialCollectionRateNoTarget")}</span>
-            )}
-          </div>
         </div>
 
         {/* Charts Grid */}
@@ -290,7 +236,7 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
                       <Icon name="checkCircle" size={16} />
                     </span>
                     <Link
-                      href={`/app/students/${p.studentId}`}
+                      href={p.studentId ? `/app/students/${p.studentId}` : "/app/payments"}
                       style={{ fontWeight: 600, color: "var(--ink)", textDecoration: "none" }}
                     >
                       {p.studentName}

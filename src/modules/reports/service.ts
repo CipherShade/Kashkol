@@ -27,7 +27,7 @@ const REPORT_PERMISSION = {
   academics: ["grades", "read"],
   homework: ["homework", "read"],
   payments: ["payments", "read"],
-  balances: ["payments", "read"],
+  sessionRevenue: ["payments", "read"],
 } as const;
 
 const HEADERS = {
@@ -54,12 +54,11 @@ const HEADERS = {
     referenceNumber: "Receipt number",
     reason: "Reason",
     amountEgp: "Amount (EGP)",
-    balanceImpactEgp: "Balance impact (EGP)",
-    asOf: "Balance as of",
+    balanceImpactEgp: "Adjustment impact (EGP)",
+    priceEgp: "Session price (EGP)",
+    attended: "Present/late",
     expectedEgp: "Expected (EGP)",
-    receivedEgp: "Received (EGP)",
-    adjustmentsEgp: "Adjustments (EGP)",
-    balanceEgp: "Balance (EGP)",
+    collectedEgp: "Collected (EGP)",
   },
   ar: {
     date: "التاريخ",
@@ -84,12 +83,11 @@ const HEADERS = {
     referenceNumber: "رقم الإيصال",
     reason: "السبب",
     amountEgp: "المبلغ (جنيه)",
-    balanceImpactEgp: "تأثير الرصيد (جنيه)",
-    asOf: "الرصيد حتى",
-    expectedEgp: "المستحق (جنيه)",
-    receivedEgp: "المستلم (جنيه)",
-    adjustmentsEgp: "التسويات (جنيه)",
-    balanceEgp: "الرصيد (جنيه)",
+    balanceImpactEgp: "أثر التعديل (جنيه)",
+    priceEgp: "سعر الجلسة (جنيه)",
+    attended: "الحاضرون والمتأخرون",
+    expectedEgp: "المتوقع (جنيه)",
+    collectedEgp: "المحصّل (جنيه)",
   },
 } as const;
 
@@ -218,13 +216,14 @@ function serializeMoneyRow(
       balanceImpactEgp: minorUnitsToEgp(amountMinor * balanceImpact),
     };
   }
-  if (type === "balances") {
+  if (type === "sessionRevenue") {
     return {
       ...row,
-      expectedEgp: minorUnitsToEgp(Number(row.expectedMinor)),
-      receivedEgp: minorUnitsToEgp(Number(row.receivedMinor)),
-      adjustmentsEgp: minorUnitsToEgp(Number(row.adjustmentsMinor)),
-      balanceEgp: minorUnitsToEgp(Number(row.balanceMinor)),
+      priceEgp:
+        row.priceMinor === null ? null : minorUnitsToEgp(Number(row.priceMinor)),
+      expectedEgp:
+        row.expectedMinor === null ? null : minorUnitsToEgp(Number(row.expectedMinor)),
+      collectedEgp: minorUnitsToEgp(Number(row.collectedMinor)),
     };
   }
   return row;
@@ -277,14 +276,13 @@ async function generateReportCsv(
       "balanceImpactEgp",
       "status",
     ],
-    balances: [
-      "asOf",
-      "student",
+    sessionRevenue: [
+      "date",
       "group",
+      "priceEgp",
+      "attended",
       "expectedEgp",
-      "receivedEgp",
-      "adjustmentsEgp",
-      "balanceEgp",
+      "collectedEgp",
     ],
   } as const;
   const headers: readonly string[] = columns[query.type];

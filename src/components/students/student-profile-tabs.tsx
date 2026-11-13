@@ -5,7 +5,6 @@ import { createStudentNoteAction } from "@/app/actions/students";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { minorUnitsToEgp } from "@/modules/payments/schemas";
 import { EmptyState } from "@/components/ui/feedback";
 import { FormField, Textarea } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
@@ -71,17 +70,6 @@ type AssessmentScoreData = {
   };
 };
 
-type PaymentData = {
-  id: string;
-  period: string | null;
-  amountMinor: number;
-  currency: string;
-  method: string;
-  paidOn: string;
-  voidedAt: string | null;
-  note: string | null;
-};
-
 type StudentNoteData = { id: string; body: string; createdAt: string };
 
 type StudentProfileTabId =
@@ -89,7 +77,6 @@ type StudentProfileTabId =
   | "attendance"
   | "assessments"
   | "homework"
-  | "payments"
   | "notes"
   | "portal";
 
@@ -102,8 +89,6 @@ export function StudentProfileTabs({
   pastEnrollments,
   attendanceMarks,
   assessmentScores,
-  payments,
-  canViewPayments,
   notes: initialNotes,
   locale,
   initialTab = "overview",
@@ -116,8 +101,6 @@ export function StudentProfileTabs({
   pastEnrollments: EnrollmentData[];
   attendanceMarks: AttendanceMarkData[];
   assessmentScores: AssessmentScoreData[];
-  payments: PaymentData[];
-  canViewPayments: boolean;
   notes: StudentNoteData[];
   locale: string;
   initialTab?: StudentProfileTabId;
@@ -197,20 +180,6 @@ export function StudentProfileTabs({
         >
           {isAr ? "الواجبات" : "Homework"}
         </button>
-
-        {canViewPayments ? (
-          <button
-            type="button"
-            onClick={() => setActiveTab("payments")}
-            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === "payments"
-                ? "border-indigo-600 text-indigo-600 font-semibold"
-                : "border-transparent text-muted hover:text-foreground"
-            }`}
-          >
-            {isAr ? `سجل المدفوعات (${payments.length})` : `Payments (${payments.length})`}
-          </button>
-        ) : null}
 
         <button
           type="button"
@@ -494,50 +463,6 @@ export function StudentProfileTabs({
                   : "Prepared timeline for homework assignments and submissions linked with teaching sessions."
               }
             />
-          </CardBody>
-        </Card>
-      )}
-
-      {/* PAYMENTS TAB */}
-      {canViewPayments && activeTab === "payments" && (
-        <Card>
-          <CardBody className="p-4">
-            {payments.length === 0 ? (
-              <EmptyState
-                icon="creditCard"
-                title={isAr ? "لا توجد مدفوعات مسجلة" : "No recorded payments yet."}
-                description={
-                  isAr
-                    ? "سجل المدفوعات اليدوي يحفظ كل عملية تسديد نقدية أو تحويل بالجنيه المصري."
-                    : "The payments ledger records manual cash or transfer transactions in Egyptian Pounds."
-                }
-              />
-            ) : (
-              <div className="divide-y divide-[var(--color-border)]">
-                {payments.map((p) => (
-                  <div key={p.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-sm">
-                        {minorUnitsToEgp(p.amountMinor)} {p.currency}
-                      </div>
-                      <div className="text-xs text-muted">
-                        {isAr ? "الشهر/الفترة: " : "Period: "}
-                        {p.period} · {isAr ? "طريقة الدفع: " : "Method: "}
-                        {p.method} · {p.paidOn}
-                      </div>
-                      {p.note && <div className="text-xs text-muted italic mt-0.5">{p.note}</div>}
-                    </div>
-                    <div>
-                      {p.voidedAt ? (
-                        <Badge tone="danger">{isAr ? "ملغي" : "Voided"}</Badge>
-                      ) : (
-                        <Badge tone="success">{isAr ? "مدفوع" : "Paid"}</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </CardBody>
         </Card>
       )}

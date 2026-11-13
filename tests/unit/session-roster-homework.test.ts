@@ -29,7 +29,6 @@ const fakeRosterStudent = {
   source: null,
   recordedAt: null,
   recordedBy: null,
-  paymentVerified: false,
   isCrossSeason: false,
   primaryGroupId: null,
   primaryGroupName: null,

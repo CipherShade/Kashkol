@@ -4,19 +4,14 @@ import type { Scope } from "@/modules/tenancy/types";
 
 export async function loadPaymentDashboard(
   scope: Scope,
-  query: { studentId?: string; page: number; pageSize: number },
+  query: { sessionId?: string; page: number; pageSize: number },
 ) {
   return withScope(scope, async (tx) => {
-    const [settings, students, groups, feeRules, enrollments, sessionRows, attendanceRows, paymentRows, adjustmentRows, paymentCount, adjustmentCount, paymentTotals, adjustmentTotals] =
+    const [settings, groups, feeRules, sessionRows, attendanceRows, paymentRows, adjustmentRows, paymentCount, adjustmentCount, collectedTotal, adjustmentTotals, collectedBySession] =
       await Promise.all([
         tx.workspaceSettings.findUnique({
           where: { workspaceId: scope.workspaceId },
           select: { timezone: true },
-        }),
-        tx.student.findMany({
-          where: { workspaceId: scope.workspaceId, archivedAt: null },
-          select: { id: true, firstName: true, lastName: true },
-          orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
         }),
         tx.group.findMany({
           where: { workspaceId: scope.workspaceId, archivedAt: null },
@@ -27,18 +22,16 @@ export async function loadPaymentDashboard(
           where: { workspaceId: scope.workspaceId },
           orderBy: { effectiveFrom: "asc" },
         }),
-        tx.enrollment.findMany({
-          where: { workspaceId: scope.workspaceId },
-          select: { studentId: true, groupId: true, enrolledAt: true, leftAt: true },
-        }),
         tx.teachingSession.findMany({
           where: { workspaceId: scope.workspaceId, status: { not: "cancelled" } },
           select: {
             id: true,
             groupId: true,
+            startsAt: true,
             pricePerStudentMinor: true,
-            group: { select: { defaultPricePerStudentMinor: true } },
+            group: { select: { name: true, defaultPricePerStudentMinor: true } },
           },
+          orderBy: { startsAt: "desc" },
         }),
         tx.attendanceMark.findMany({
           where: {
@@ -49,47 +42,49 @@ export async function loadPaymentDashboard(
           select: { studentId: true, sessionId: true },
         }),
         tx.payment.findMany({
-          where: { workspaceId: scope.workspaceId, studentId: query.studentId },
+          where: { workspaceId: scope.workspaceId, ...(query.sessionId ? { sessionId: query.sessionId } : {}), voidedAt: null },
           orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
           skip: (query.page - 1) * query.pageSize,
           take: query.pageSize,
+          select: { id: true, amountMinor: true, voidedAt: true, sessionId: true, purpose: true, method: true, methodLabel: true, paidOn: true, referenceNumber: true, note: true, createdBy: true, session: { select: { id: true, startsAt: true, pricePerStudentMinor: true, group: { select: { id: true, name: true, defaultPricePerStudentMinor: true } } } } },
         }),
         tx.paymentAdjustment.findMany({
-          where: { workspaceId: scope.workspaceId, studentId: query.studentId },
+          where: { workspaceId: scope.workspaceId },
           orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
           skip: (query.page - 1) * query.pageSize,
           take: query.pageSize,
         }),
-        tx.payment.count({ where: { workspaceId: scope.workspaceId, studentId: query.studentId } }),
-        tx.paymentAdjustment.count({
-          where: { workspaceId: scope.workspaceId, studentId: query.studentId },
-        }),
-        tx.payment.groupBy({
-          by: ["studentId"],
-          where: { workspaceId: scope.workspaceId, studentId: query.studentId, voidedAt: null },
+        tx.payment.count({ where: { workspaceId: scope.workspaceId, ...(query.sessionId ? { sessionId: query.sessionId } : {}), voidedAt: null } }),
+        tx.paymentAdjustment.count({ where: { workspaceId: scope.workspaceId } }),
+        tx.payment.aggregate({
+          where: { workspaceId: scope.workspaceId, ...(query.sessionId ? { sessionId: query.sessionId } : {}), voidedAt: null },
           _sum: { amountMinor: true },
         }),
         tx.paymentAdjustment.groupBy({
-          by: ["studentId", "balanceImpact", "kind"],
-          where: { workspaceId: scope.workspaceId, studentId: query.studentId },
+          by: ["kind"],
+          where: { workspaceId: scope.workspaceId },
+          _sum: { amountMinor: true },
+        }),
+        tx.payment.groupBy({
+          by: ["sessionId"],
+          where: { workspaceId: scope.workspaceId, voidedAt: null, sessionId: { not: null } },
           _sum: { amountMinor: true },
         }),
       ]);
 
     return {
       timezone: settings?.timezone ?? "Africa/Cairo",
-      students,
       groups,
       feeRules,
-      enrollments,
       sessionRows,
       attendanceRows,
       paymentRows,
       adjustmentRows,
       paymentCount,
       adjustmentCount,
-      paymentTotals,
+      collectedTotal,
       adjustmentTotals,
+      collectedBySession,
     };
   });
 }
@@ -112,15 +107,14 @@ export async function findSessionForPaymentTx(
   });
 }
 
-/** Every payment linked to a (session, student) pair, including voided ones. */
+/** Every non-voided payment linked to a session, including voided ones. */
 export async function findSessionLinkedPaymentsTx(
   tx: Prisma.TransactionClient,
   workspaceId: string,
   sessionId: string,
-  studentId: string,
 ) {
   return tx.payment.findMany({
-    where: { workspaceId, sessionId, studentId },
+    where: { workspaceId, sessionId },
     select: { id: true, voidedAt: true, amountMinor: true },
   });
 }
@@ -183,8 +177,9 @@ export async function createPaymentTx(
   input: {
     id: string;
     workspaceId: string;
-    studentId: string;
-    sessionId?: string | null;
+    /** Optional for session-scoped receipts (ADR-0028). */
+    studentId?: string | null;
+    sessionId: string;
     amountMinor: number;
     period: string | null;
     purpose: string | null;
@@ -202,19 +197,21 @@ export async function createPaymentTx(
   });
   if (prior) return { payment: prior, duplicate: true, matches: paymentMatches(prior, input) };
 
-  const student = await tx.student.findFirst({
-    where: { id: input.studentId, workspaceId: input.workspaceId, archivedAt: null },
-    select: { id: true },
-  });
-  if (!student) return null;
+  if (input.studentId != null) {
+    const student = await tx.student.findFirst({
+      where: { id: input.studentId, workspaceId: input.workspaceId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!student) return null;
+  }
 
   const { count } = await tx.payment.createMany({
     skipDuplicates: true,
     data: [{
       id: input.id,
       workspaceId: input.workspaceId,
-      studentId: input.studentId,
-      sessionId: input.sessionId ?? null,
+      studentId: input.studentId ?? null,
+      sessionId: input.sessionId,
       period: input.period,
       purpose: input.purpose,
       amountMinor: input.amountMinor,
@@ -237,8 +234,8 @@ export async function createPaymentTx(
 
 function paymentMatches(
   payment: {
-    studentId: string;
-    sessionId?: string | null;
+    studentId: string | null;
+    sessionId: string | null;
     amountMinor: number;
     period: string | null;
     purpose: string | null;
@@ -249,8 +246,8 @@ function paymentMatches(
     note: string | null;
   },
   input: {
-    studentId: string;
-    sessionId?: string | null;
+    studentId?: string | null;
+    sessionId: string;
     amountMinor: number;
     period: string | null;
     purpose: string | null;
@@ -262,8 +259,8 @@ function paymentMatches(
   },
 ) {
   return (
-    payment.studentId === input.studentId &&
-    payment.sessionId === (input.sessionId ?? null) &&
+    payment.studentId === (input.studentId ?? null) &&
+    payment.sessionId === input.sessionId &&
     payment.amountMinor === input.amountMinor &&
     payment.period === input.period &&
     payment.purpose === input.purpose &&
@@ -280,7 +277,7 @@ export async function createAdjustmentTx(
   input: {
     id: string;
     workspaceId: string;
-    studentId: string;
+    studentId: string | null;
     paymentId: string | null;
     kind: "discount" | "refund" | "correction";
     amountMinor: number;
@@ -296,11 +293,13 @@ export async function createAdjustmentTx(
   });
   if (prior) return { adjustment: prior, duplicate: true, matches: adjustmentMatches(prior, input) };
 
-  const student = await tx.student.findFirst({
-    where: { id: input.studentId, workspaceId: input.workspaceId, archivedAt: null },
-    select: { id: true },
-  });
-  if (!student) return null;
+  if (input.studentId != null) {
+    const student = await tx.student.findFirst({
+      where: { id: input.studentId, workspaceId: input.workspaceId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!student) return null;
+  }
   if (input.paymentId) {
     await tx.$queryRaw<Array<{ acquired: boolean }>>`
       SELECT pg_advisory_xact_lock(
@@ -311,7 +310,7 @@ export async function createAdjustmentTx(
       where: {
         id: input.paymentId,
         workspaceId: input.workspaceId,
-        studentId: input.studentId,
+        ...(input.studentId != null ? { studentId: input.studentId } : {}),
       },
       select: { id: true, amountMinor: true },
     });
@@ -346,7 +345,7 @@ export async function createAdjustmentTx(
     data: [{
       id: input.id,
       workspaceId: input.workspaceId,
-      studentId: input.studentId,
+      studentId: input.studentId ?? null,
       paymentId: input.paymentId,
       kind: input.kind,
       amountMinor: input.amountMinor,
@@ -367,7 +366,7 @@ export async function createAdjustmentTx(
 
 function adjustmentMatches(
   adjustment: {
-    studentId: string;
+    studentId: string | null;
     paymentId: string | null;
     kind: string;
     amountMinor: number;
@@ -376,7 +375,7 @@ function adjustmentMatches(
     reason: string;
   },
   input: {
-    studentId: string;
+    studentId: string | null;
     paymentId: string | null;
     kind: "discount" | "refund" | "correction";
     amountMinor: number;
@@ -386,7 +385,7 @@ function adjustmentMatches(
   },
 ) {
   return (
-    adjustment.studentId === input.studentId &&
+    adjustment.studentId === (input.studentId ?? null) &&
     adjustment.paymentId === input.paymentId &&
     adjustment.kind === input.kind &&
     adjustment.amountMinor === input.amountMinor &&

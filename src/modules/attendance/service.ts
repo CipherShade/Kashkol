@@ -14,15 +14,8 @@ import {
   getEnrollmentForStudent,
   getRosterForSession,
   getSessionWithGroup,
-  setPaymentVerifiedTx,
   upsertAttendanceMarkTx,
 } from "./repository";
-import {
-  createPaymentTx,
-  findSessionForPaymentTx,
-  findSessionLinkedPaymentsTx,
-  voidPaymentTx,
-} from "@/modules/payments/repository";
 import {
   verifyStudentQrTokenSignature,
   validateStudentQrAgainstRecord,
@@ -42,7 +35,6 @@ import type {
   RotateQrTokenInput,
   ScanQrInput,
   ScanStudentQrInput,
-  VerifyPaymentInput,
 } from "./schemas";
 
 export type RequestContext = {
@@ -124,7 +116,6 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
       studentId: input.studentId,
       mark: input.mark,
       source: "manual",
-      paymentVerified: input.paymentVerified,
       isCrossSeason,
       primaryGroupId,
     });
@@ -143,7 +134,6 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
         mark: input.mark,
         source: "manual",
         isCrossSeason,
-        paymentVerified: m.paymentVerified,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
@@ -197,7 +187,6 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
         studentId: m.studentId,
         mark: m.mark,
         source: "manual",
-        paymentVerified: m.paymentVerified,
         isCrossSeason,
         primaryGroupId,
       });
@@ -661,153 +650,6 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
 }
 
 /**
- * Verify or unverify payment for a student at a session.
- * Used by assistants/teachers on the attendance screen.
- *
- * Verifying records (or keeps) a real session-linked ledger payment at the
- * session's per-student price; unverifying voids the non-voided session-linked
- * payment(s) with an audited reason. Payments are append-only: nothing is
- * deleted, and the ledger, revenue summary, balances, and this toggle always
- * agree. If no price is configured for the session, verification is rejected.
- */
-export async function verifySessionPayment(
-  scope: Scope,
-  input: VerifyPaymentInput,
-  reqCtx?: RequestContext,
-) {
-  authorize(scope, "attendance", "write");
-  if (!scope.actorUserId) throw new AppError("FORBIDDEN");
-  const ctx = context(reqCtx);
-
-  return withScope(scope, async (tx) => {
-    // Serialize concurrent toggles for this (session, student) pair so a
-    // double-click cannot create two ledger payments.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${scope.workspaceId}:${input.sessionId}:${input.studentId}`}, 0))`;
-
-    const session = await findSessionForPaymentTx(tx, scope.workspaceId, input.sessionId);
-    if (!session) throw new AppError("NOT_FOUND");
-    const price = session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
-
-    const existingMark = await tx.attendanceMark.findFirst({
-      where: { workspaceId: scope.workspaceId, sessionId: input.sessionId, studentId: input.studentId },
-    });
-    if (!existingMark) throw new AppError("NOT_FOUND");
-
-    if (input.verified) {
-      if (price == null || price <= 0) {
-        throw new AppError("VALIDATION_FAILED", {
-          messageKey: "payments.errors.sessionPriceMissing",
-        });
-      }
-      const linked = await findSessionLinkedPaymentsTx(
-        tx,
-        scope.workspaceId,
-        input.sessionId,
-        input.studentId,
-      );
-      const hasActivePayment = linked.some((payment) => payment.voidedAt === null);
-      if (!hasActivePayment) {
-        const nowUtcDate = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
-        const saved = await createPaymentTx(tx, {
-          id: newUuidV7(),
-          workspaceId: scope.workspaceId,
-          studentId: input.studentId,
-          sessionId: input.sessionId,
-          amountMinor: price,
-          period: null,
-          purpose: "Session payment",
-          method: "other",
-          methodLabel: null,
-          paidOn: nowUtcDate,
-          referenceNumber: null,
-          note: null,
-          idempotencyKey: `session-payment:${newUuidV7()}`,
-          createdBy: scope.actorUserId,
-        });
-        if (saved && !saved.duplicate) {
-          await writeAuditEvent(tx, {
-            workspaceId: scope.workspaceId,
-            actorUserId: scope.actorUserId,
-            actorDisplayName: scope.actorDisplayName,
-            actorType: "user",
-            entityType: "payment",
-            entityId: saved.payment.id,
-            action: "payment.recorded",
-            diff: {
-              studentId: input.studentId,
-              sessionId: input.sessionId,
-              amountMinor: saved.payment.amountMinor,
-              source: "session_roster",
-            },
-            requestId: ctx.requestId,
-            ipHash: ctx.ipHash,
-          });
-        }
-      }
-    } else {
-      const linked = await findSessionLinkedPaymentsTx(
-        tx,
-        scope.workspaceId,
-        input.sessionId,
-        input.studentId,
-      );
-      for (const payment of linked) {
-        if (payment.voidedAt !== null) continue;
-        await voidPaymentTx(
-          tx,
-          scope.workspaceId,
-          payment.id,
-          "Marked as unpaid on the session roster.",
-        );
-        await writeAuditEvent(tx, {
-          workspaceId: scope.workspaceId,
-          actorUserId: scope.actorUserId,
-          actorDisplayName: scope.actorDisplayName,
-          actorType: "user",
-          entityType: "payment",
-          entityId: payment.id,
-          action: "payment.voided",
-          diff: {
-            studentId: input.studentId,
-            sessionId: input.sessionId,
-            source: "session_roster",
-          },
-          requestId: ctx.requestId,
-          ipHash: ctx.ipHash,
-        });
-      }
-    }
-
-    const updated = await setPaymentVerifiedTx(
-      tx,
-      scope.workspaceId,
-      input.sessionId,
-      input.studentId,
-      input.verified,
-    );
-
-    await writeAuditEvent(tx, {
-      workspaceId: scope.workspaceId,
-      actorUserId: scope.actorUserId,
-      actorDisplayName: scope.actorDisplayName,
-      actorType: "user",
-      entityType: "attendance_mark",
-      entityId: updated.id,
-      action: "attendance.payment_verified",
-      diff: {
-        sessionId: input.sessionId,
-        studentId: input.studentId,
-        paymentVerified: input.verified,
-      },
-      requestId: ctx.requestId,
-      ipHash: ctx.ipHash,
-    });
-
-    return updated;
-  });
-}
-
-/**
  * Scan a student's permanent QR code for session attendance.
  * Executed by the assistant/teacher using the camera scanner.
  * Supports cross-season attendance and duplicate scan protection.
@@ -896,7 +738,6 @@ export async function scanStudentQrCode(
       studentId: student.id,
       mark: markValue,
       source: "qr",
-      paymentVerified: input.paymentVerified,
       isCrossSeason,
       primaryGroupId,
     });
@@ -915,7 +756,6 @@ export async function scanStudentQrCode(
         mark: markValue,
         source: "qr",
         isCrossSeason,
-        paymentVerified: mark.paymentVerified,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,

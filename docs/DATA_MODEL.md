@@ -481,14 +481,15 @@ scope, not an implemented capability.
 
 | Column | Type | Notes |
 |---|---|---|
-| `workspace_id`, `student_id` | uuid | Composite tenant-scoped FKs |
+| `workspace_id`, `student_id` | uuid | Composite tenant-scoped FKs; `student_id` is **nullable** (ADR-0028) |
+| `session_id` | uuid nullable FK to `teaching_session` | A receipt usually references the session it was collected for; the CHECK constraint `payment_session_required_check` requires at least one of `student_id` / `session_id` |
 | `period` | text nullable | e.g. `2026-10` — the period covered |
 | `amount_minor` | int | Positive piastres; input is a decimal string and conversion uses integer math |
 | `currency` | text | Explicit on every amount; EGP only for this stage |
 | `method`, `method_label` | enum, nullable text | `cash` / `transfer` / `other`; custom label required for `other` |
 | `paid_on` | `date` | Date the teacher recorded as paid |
 | `purpose`, `reference_number`, `note` | nullable text | Purpose, optional receipt reference, and optional note |
-| `idempotency_key` | text | Unique per workspace; exact retries do not duplicate records |
+| `idempotency_key` | text, nullable | Unique per workspace; exact retries do not duplicate records |
 | `created_by` | text | Authenticated operator |
 | `voided_at`, `void_reason` | nullable | Legacy fields; the current ledger does not update payments to void them |
 
@@ -499,21 +500,22 @@ rows are append-only and cannot be amended or deleted.
 
 #### `fee_rule`
 
-An append-only per-student or per-group monthly convention: `amount_minor`, `effective_from`,
-`purpose`, and `created_by`. A rule has exactly one target. No invoice, tax, or accounting records
-are created.
+An append-only **group-only** monthly convention: `amount_minor`, `effective_from`, `purpose`, and
+`created_by`. The `student_id` column remains for reading historical rows only; new rules are
+created against a group (`ADR-0028`). No invoice, tax, or accounting records are created.
 
 #### `payment_adjustment`
 
-An append-only record with `student_id`, optional `payment_id`, `kind` (`discount`, `refund`,
-`correction`), positive `amount_minor`, signed `balance_impact`, `paid_on`, required `reason`,
-`idempotency_key`, and `created_by`. A refund tied to a receipt cannot exceed its remaining
-refundable amount. The adjustment and audit event are written in one transaction.
+An append-only record with nullable `student_id`, optional `payment_id`, `kind` (`discount`,
+`refund`, `correction`), positive `amount_minor`, signed `balance_impact`, `paid_on`, required
+`reason`, `idempotency_key`, and `created_by`. A refund tied to a receipt cannot exceed its
+remaining refundable amount. The adjustment and audit event are written in one transaction.
 
-Outstanding balance is **computed** in integer piastres from monthly fees accrued over active
-enrollment periods, non-voided payments, and signed adjustments. There is no stored balance.
-Attendance and session status do not create or remove a charge; cancelled and make-up sessions do
-not alter a monthly/group fee (`ADR-0018`).
+Money is **session-scoped** (`ADR-0028`): expected revenue is computed as session price × the
+number of present/late marks for non-cancelled sessions, and collected revenue as the sum of
+session-linked non-voided receipts (§7.5). There is **no stored balance** and no per-student
+outstanding figure. Monthly/group fee rules do not accrue per-student balances; they remain a
+group-level convention only.
 
 ### 5.7 Messaging
 
@@ -608,7 +610,8 @@ is reloaded through the tenant-scoped repository when the worker processes the r
 `workspace_id`, `portal_user_id` (a `user` row used for portal sessions), `student_id`,
 nullable `guardian_id` (composite FK to `student_guardian`), `kind` (`parent` / `student`),
 `permissions` jsonb (`showAttendance`, `showGrades`, `showHomework`, `showResources`,
-`showPayments`, `showSchedule`, `showNotifications`), `issued_by`, `issued_at`, `expires_at`,
+`showSchedule`, `showNotifications` — **no financial permission**; ADR-0028 removed `showPayments`),
+`issued_by`, `issued_at`, `expires_at`,
 `revoked_at`. Enforces tenant isolation RLS plus `portal_grant_self_read` (`portal_user_id = current_user_id()`).
 
 #### `portal_invitation` (M2)
@@ -806,19 +809,28 @@ WHERE workspace_id = $1 AND student_id = $2 AND score IS NOT NULL;
 
 Ungraded assessments are excluded, never counted as zero (`F-P1-09` AC-5).
 
-### 7.5 Outstanding balance
+### 7.5 Session revenue
 
 ```sql
-expected_piastre_fees
-+ COALESCE(sum(a.amount_minor * a.balance_impact), 0)
-- COALESCE(sum(p.amount_minor) FILTER (WHERE p.voided_at IS NULL), 0)
-WHERE workspace_id = $1 AND student_id = $2;
+expected_piastre
+= price_per_student_minor
+  × count(attendance_mark) FILTER (WHERE mark IN ('present', 'late'))
+WHERE workspace_id = $1 AND session_id = $2 AND session.status != 'cancelled';
+
+collected_piastre
+= COALESCE(sum(p.amount_minor) FILTER (WHERE p.voided_at IS NULL), 0)
+WHERE workspace_id = $1 AND p.session_id = $2;
 ```
 
-`expected_piastre_fees` is derived from effective fee rules and active enrollment periods. The
-payments screen and the separate balances report use the same integer-piastre calculation. A
-balances report is a snapshot through its required as-of date; group/student filters select the
-students, and the balance includes all applicable fee rules for those students.
+The ledger's headline total nets refunds from gross receipts
+(`collected = gross − Σ refund adjustments`); the per-session summary shows gross
+non-voided receipts for that session. Adjustments remain append-only and signed.
+
+Session revenue is **computed**, never stored. Expected revenue is derived from the session's
+`price_per_student_minor` (or the group's `default_price_per_student_minor`) and its present/late
+marks. Collected revenue is the sum of session-linked receipts. There is deliberately **no**
+outstanding/credit figure: the product does not compute a per-student or per-session balance, and
+no screen displays one (`ADR-0028`).
 
 ---
 
@@ -838,8 +850,8 @@ students, and the balance includes all applicable fee rules for those students.
 | `homework_resource` | `(workspace_id)` | Tenant-scoped permitted resources |
 | `student_follow_up` | `(workspace_id, status, due_at)` | Open tasks and due-date queue |
 | `student_follow_up_event` | `(follow_up_id, created_at)` | Ordered task history |
-| `payment` | `(student_id, period)`, `(workspace_id, voided_at)` | Balance, outstanding list |
-| `payment_adjustment` | `(workspace_id, student_id, paid_on)`, unique `(workspace_id, idempotency_key)` | Student ledger and safe retries |
+| `payment` | `(workspace_id, session_id)` partial where `session_id IS NOT NULL`, `(student_id, period)` (legacy), `(workspace_id, voided_at)` | Session receipts, legacy rows |
+| `payment_adjustment` | `(workspace_id, paid_on)`, `(workspace_id, student_id, paid_on)` (legacy), unique `(workspace_id, idempotency_key)` | Adjustment history and safe retries |
 | `fee_rule` | `(workspace_id, student_id, effective_from)`, `(workspace_id, group_id, effective_from)` | Effective fee convention lookup |
 | `report_export` | `(workspace_id, created_at)` | Tenant-scoped export history |
 | `report_export_queue` | `(status, created_at)` | Bounded worker polling |
@@ -950,7 +962,7 @@ consolidated form rather than one directory per row above:
 | `20261107130000_session_status_started` | Adds `started` to the `session_status` enum |
 | `20261107131000_teaching_session_schedule_fields` | Adds `room`, `location`, `notes`, `teacher_id`, `assistant_id`, `series_id`, `occurrence_no`, `started_at`, and `completed_at` to `teaching_session`, plus its `series_id` index |
 | `20261108000000_session_pricing` | Adds `default_price_per_student_minor` to `group`, `price_per_student_minor` to `teaching_session`, and `session_id` to `payment` |
-| `20261108000001_attendance_payment_verification` | Adds `payment_verified` boolean to `attendance_mark` |
+| `20261108000001_attendance_payment_verification` | Adds `payment_verified` boolean to `attendance_mark` (removed again by `20261113000002_session_scoped_finance`, ADR-0028) |
 | `20261108000002_cross_season_attendance` | Adds `is_cross_season` boolean and `primary_group_id` foreign key to `attendance_mark` |
 | `20261108000003_student_qr_identity` | Adds `qr_token_hash` persistent identity token hash to `student` |
 | `20261112000000_student_portal_credentials` | Adds `portal_login_status` enum, the global `portal_login` identity table, the `portal_access` permission resource, and application-role grants; no tenant link is stored on it (`F-P2-03` / `F18`) |
@@ -958,8 +970,10 @@ consolidated form rather than one directory per row above:
 | `20261108000004_homework_completion_marks` | Adds `homework_completion_status` enum and `homework_completion_mark` table with forced RLS and tenant indexes |
 | `20261110000000_worker_workspace_enumeration` | Adds `list_active_workspace_ids_for_worker()` (`SECURITY DEFINER`, `STABLE`) returning the ids of active non-deleted workspaces only, never any other tenant field; `GRANT EXECUTE` to `kashkol_app` only (`ADR-0024`) |
 | `20261111000000_expired_online_exam_attempt_status` | Adds `expired` to the `online_exam_attempt_status` enum (`F-P3-01`) |
+| `20261113000001_homework_completion_mark_grants` | Adds `homework_completion_mark` grants and RLS policy support, and application-role grants (`ADR-0021`) |
+| `20261113000002_session_scoped_finance` | `payment.student_id` and `payment_adjustment.student_id` become nullable; adds the `payment_session_required_check` CHECK constraint; drops `attendance_mark.payment_verified`; adds partial index `payment(workspace_id, session_id)` where `session_id IS NOT NULL` (`ADR-0028`) |
 
-The current local development database tracks all thirty-three migrations above (`prisma migrate status`). `student` and
+The current local development database tracks all thirty-five migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

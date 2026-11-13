@@ -19,6 +19,8 @@ describe("payment ledger tenant isolation", () => {
     const paymentId = randomUUID();
     const adjustmentId = randomUUID();
     const feeRuleId = randomUUID();
+    const groupId = randomUUID();
+    const sessionId = randomUUID();
     const requestId = newRequestId();
 
     await expect(
@@ -26,11 +28,29 @@ describe("payment ledger tenant isolation", () => {
         await tx.student.create({
           data: { id: studentId, workspaceId: NILE, firstName: "Ledger", lastName: "Isolation" },
         });
+        await tx.group.create({
+          data: {
+            id: groupId,
+            workspaceId: NILE,
+            name: "Isolation Group",
+            weekday: 1,
+            startTime: new Date("1970-01-01T16:00:00.000Z"),
+          },
+        });
+        await tx.teachingSession.create({
+          data: {
+            id: sessionId,
+            workspaceId: NILE,
+            groupId,
+            startsAt: new Date("2026-10-29T16:00:00.000Z"),
+            status: "completed",
+          },
+        });
         await tx.payment.create({
           data: {
             id: paymentId,
             workspaceId: NILE,
-            studentId,
+            sessionId,
             amountMinor: 1250,
             currency: "EGP",
             method: "cash",
@@ -44,7 +64,6 @@ describe("payment ledger tenant isolation", () => {
           data: {
             id: adjustmentId,
             workspaceId: NILE,
-            studentId,
             paymentId,
             kind: "refund",
             amountMinor: 250,
@@ -60,7 +79,7 @@ describe("payment ledger tenant isolation", () => {
           data: {
             id: feeRuleId,
             workspaceId: NILE,
-            studentId,
+            groupId,
             amountMinor: 5000,
             effectiveFrom: new Date("2026-10-01T00:00:00.000Z"),
             purpose: "monthly tuition",
@@ -100,6 +119,8 @@ describe("payment ledger tenant isolation", () => {
     const paymentKey = randomUUID();
     const refundKey = randomUUID();
     const correctionKey = randomUUID();
+    const groupId = randomUUID();
+    const sessionId = randomUUID();
     const paidOn = new Date("2026-10-29T00:00:00.000Z");
     const actorUserId = "10000000-0000-4000-8000-000000000001";
 
@@ -109,13 +130,32 @@ describe("payment ledger tenant isolation", () => {
         await tx.student.create({
           data: { id: studentId, workspaceId: NILE, firstName: "Ledger", lastName: "Retry" },
         });
+        await tx.group.create({
+          data: {
+            id: groupId,
+            workspaceId: NILE,
+            name: "Retry Group",
+            weekday: 1,
+            startTime: new Date("1970-01-01T16:00:00.000Z"),
+          },
+        });
+        await tx.teachingSession.create({
+          data: {
+            id: sessionId,
+            workspaceId: NILE,
+            groupId,
+            startsAt: new Date("2026-10-29T16:00:00.000Z"),
+            status: "completed",
+          },
+        });
         const paymentInput = {
           id: paymentId,
           workspaceId: NILE,
-          studentId,
+          studentId: null,
+          sessionId,
           amountMinor: 10_000,
           period: "2026-10",
-          purpose: "October tuition",
+          purpose: "Session receipt",
           method: "cash" as const,
           methodLabel: null,
           paidOn,
@@ -133,7 +173,7 @@ describe("payment ledger tenant isolation", () => {
         const refundInput = {
           id: randomUUID(),
           workspaceId: NILE,
-          studentId,
+          studentId: null,
           paymentId,
           kind: "refund" as const,
           amountMinor: 8_000,
@@ -169,9 +209,9 @@ describe("payment ledger tenant isolation", () => {
         expect(refundRetry).toMatchObject({ duplicate: true, matches: true });
         expect(excessRefund).toEqual({ refundExceedsReceived: true });
         expect(correction).toMatchObject({ duplicate: false, matches: true });
-        expect(await tx.payment.count({ where: { workspaceId: NILE, studentId } })).toBe(1);
+        expect(await tx.payment.count({ where: { workspaceId: NILE, sessionId } })).toBe(1);
         expect(
-          await tx.paymentAdjustment.count({ where: { workspaceId: NILE, studentId } }),
+          await tx.paymentAdjustment.count({ where: { workspaceId: NILE, paymentId } }),
         ).toBe(2);
         throw new RollbackFixture();
       });

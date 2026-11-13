@@ -35,7 +35,6 @@ export async function POST(
     const parsed = scanStudentQrSchema.safeParse({
       sessionId,
       qrToken: body.qrToken,
-      paymentVerified: body.paymentVerified,
       markLate: body.markLate,
     });
 

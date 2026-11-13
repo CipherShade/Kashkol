@@ -5,7 +5,6 @@ export const portalPermissionsSchema = z.object({
   showGrades: z.boolean().default(true),
   showHomework: z.boolean().default(true),
   showResources: z.boolean().default(true),
-  showPayments: z.boolean().default(false),
   showSchedule: z.boolean().default(true),
   showNotifications: z.boolean().default(true),
 });

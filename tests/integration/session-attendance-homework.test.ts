@@ -6,7 +6,7 @@ import {
 } from "@/modules/homework/service";
 import { getSessionRoster, markAttendance } from "@/modules/attendance/service";
 import { enrollStudentInGroup } from "@/modules/groups/service";
-import { NILE, ownerScope, createStudent, deleteStudent } from "./helpers";
+import { FIXTURES, fixturesScope, createStudent, deleteStudent } from "./helpers";
 import { withScope } from "@/lib/db/scope";
 import { disconnectDb } from "@/lib/db/client";
 
@@ -25,44 +25,44 @@ afterEach(async () => {
   // deleted; the first revision is kept by design. Each best-effort delete
   // runs in its own transaction so one blocked delete cannot roll back the
   // rest.
-  await withScope({ workspaceId: NILE }, async (tx) => {
+  await withScope({ workspaceId: FIXTURES }, async (tx) => {
     // homework_completion_mark FKs are ON DELETE RESTRICT, so marks must go
     // before the homework / session / student they reference.
     await tx.homeworkCompletionMark.deleteMany({
-      where: { workspaceId: NILE, homeworkId: { in: HOMEWORKS } },
+      where: { workspaceId: FIXTURES, homeworkId: { in: HOMEWORKS } },
     });
     await tx.homeworkSubmission.deleteMany({
-      where: { workspaceId: NILE, homeworkId: { in: HOMEWORKS } },
+      where: { workspaceId: FIXTURES, homeworkId: { in: HOMEWORKS } },
     });
     await tx.homeworkResource.deleteMany({
-      where: { workspaceId: NILE, homeworkId: { in: HOMEWORKS } },
+      where: { workspaceId: FIXTURES, homeworkId: { in: HOMEWORKS } },
     });
-    await tx.homework.deleteMany({ where: { workspaceId: NILE, id: { in: HOMEWORKS } } });
-    await tx.enrollment.deleteMany({ where: { workspaceId: NILE, groupId: { in: GROUPS } } });
+    await tx.homework.deleteMany({ where: { workspaceId: FIXTURES, id: { in: HOMEWORKS } } });
+    await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId: { in: GROUPS } } });
   });
   const bestEffort = (promise: Promise<unknown>) => promise.catch(() => undefined);
   await bestEffort(
-    withScope({ workspaceId: NILE }, (tx) =>
+    withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.attendanceMark.deleteMany({
-        where: { workspaceId: NILE, sessionId: { in: SESSIONS } },
+        where: { workspaceId: FIXTURES, sessionId: { in: SESSIONS } },
       }),
     ),
   );
   await bestEffort(
-    withScope({ workspaceId: NILE }, (tx) =>
+    withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.teachingSession.deleteMany({
-        where: { workspaceId: NILE, id: { in: SESSIONS } },
+        where: { workspaceId: FIXTURES, id: { in: SESSIONS } },
       }),
     ),
   );
   for (const groupId of GROUPS) {
     await bestEffort(
-      withScope({ workspaceId: NILE }, (tx) =>
-        tx.group.deleteMany({ where: { workspaceId: NILE, id: groupId } }),
+      withScope({ workspaceId: FIXTURES }, (tx) =>
+        tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: groupId } }),
       ),
     );
   }
-  for (const studentId of STUDENTS) await deleteStudent(NILE, studentId);
+  for (const studentId of STUDENTS) await deleteStudent(FIXTURES, studentId);
   GROUPS.length = 0;
   STUDENTS.length = 0;
   HOMEWORKS.length = 0;
@@ -70,11 +70,11 @@ afterEach(async () => {
 });
 
 async function createFixture() {
-  const scope = ownerScope();
+  const scope = fixturesScope();
   const group = await withScope(scope, (tx) =>
     tx.group.create({
       data: {
-        workspaceId: NILE,
+        workspaceId: FIXTURES,
         name: `Roster ${randomUUID()}`,
         color: "indigo",
         weekday: 6,
@@ -86,21 +86,21 @@ async function createFixture() {
   );
   GROUPS.push(group.id);
 
-  const studentId = await createStudent(NILE, "Homework", randomUUID().slice(0, 8));
+  const studentId = await createStudent(FIXTURES, "Homework", randomUUID().slice(0, 8));
   STUDENTS.push(studentId);
   await enrollStudentInGroup(scope, { groupId: group.id, studentId });
   return { scope, group, studentId };
 }
 
 async function createSession(
-  scope: ReturnType<typeof ownerScope>,
+  scope: ReturnType<typeof fixturesScope>,
   groupId: string,
   status: "scheduled" | "started",
 ) {
   const session = await withScope(scope, (tx) =>
     tx.teachingSession.create({
       data: {
-        workspaceId: NILE,
+        workspaceId: FIXTURES,
         groupId,
         status,
         startsAt: new Date("2026-11-10T14:00:00.000Z"),
@@ -194,7 +194,7 @@ describe("session attendance screen homework context", () => {
     const otherGroup = await withScope(scope, (tx) =>
       tx.group.create({
         data: {
-          workspaceId: NILE,
+          workspaceId: FIXTURES,
           name: `Other ${randomUUID()}`,
           color: "rose",
           weekday: 6,
@@ -206,7 +206,7 @@ describe("session attendance screen homework context", () => {
     );
     GROUPS.push(otherGroup.id);
 
-    const crossStudentId = await createStudent(NILE, "Cross", randomUUID().slice(0, 8));
+    const crossStudentId = await createStudent(FIXTURES, "Cross", randomUUID().slice(0, 8));
     STUDENTS.push(crossStudentId);
     await enrollStudentInGroup(scope, { groupId: otherGroup.id, studentId: crossStudentId });
 

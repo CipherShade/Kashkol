@@ -14,7 +14,7 @@ import { createHomework, listHomework } from "@/modules/homework/service";
 import { createFollowUp, getFollowUpDashboard, resolveFollowUp } from "@/modules/followups/service";
 import { createStudent } from "@/modules/students/service";
 import { homeworkQuerySchema } from "@/modules/homework/schemas";
-import { DELTA, NILE, ownerScope } from "./helpers";
+import { DELTA, FIXTURES, fixturesScope } from "./helpers";
 
 const groupIds: string[] = [];
 const studentIds: string[] = [];
@@ -27,25 +27,25 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
-  await withScope({ workspaceId: NILE }, async (tx) => {
+  await withScope({ workspaceId: FIXTURES }, async (tx) => {
     await tx.studentFollowUpEvent.deleteMany({
-      where: { workspaceId: NILE, followUpId: { in: followUpIds } },
+      where: { workspaceId: FIXTURES, followUpId: { in: followUpIds } },
     });
-    await tx.studentFollowUp.deleteMany({ where: { workspaceId: NILE, id: { in: followUpIds } } });
+    await tx.studentFollowUp.deleteMany({ where: { workspaceId: FIXTURES, id: { in: followUpIds } } });
     await tx.assessmentScore.deleteMany({
-      where: { workspaceId: NILE, assessmentId: { in: assessmentIds } },
+      where: { workspaceId: FIXTURES, assessmentId: { in: assessmentIds } },
     });
-    await tx.assessment.deleteMany({ where: { workspaceId: NILE, id: { in: assessmentIds } } });
+    await tx.assessment.deleteMany({ where: { workspaceId: FIXTURES, id: { in: assessmentIds } } });
     await tx.homeworkResource.deleteMany({
-      where: { workspaceId: NILE, homeworkId: { in: homeworkIds } },
+      where: { workspaceId: FIXTURES, homeworkId: { in: homeworkIds } },
     });
     await tx.homeworkSubmission.deleteMany({
-      where: { workspaceId: NILE, homeworkId: { in: homeworkIds } },
+      where: { workspaceId: FIXTURES, homeworkId: { in: homeworkIds } },
     });
-    await tx.homework.deleteMany({ where: { workspaceId: NILE, id: { in: homeworkIds } } });
-    await tx.enrollment.deleteMany({ where: { workspaceId: NILE, groupId: { in: groupIds } } });
-    await tx.group.deleteMany({ where: { workspaceId: NILE, id: { in: groupIds } } });
-    await tx.student.deleteMany({ where: { workspaceId: NILE, id: { in: studentIds } } });
+    await tx.homework.deleteMany({ where: { workspaceId: FIXTURES, id: { in: homeworkIds } } });
+    await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId: { in: groupIds } } });
+    await tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: { in: groupIds } } });
+    await tx.student.deleteMany({ where: { workspaceId: FIXTURES, id: { in: studentIds } } });
   });
   groupIds.length = 0;
   studentIds.length = 0;
@@ -55,11 +55,11 @@ afterEach(async () => {
 });
 
 async function createFixture() {
-  const scope = ownerScope();
+  const scope = fixturesScope();
   const group = await withScope(scope, (tx) =>
     tx.group.create({
       data: {
-        workspaceId: NILE,
+        workspaceId: FIXTURES,
         name: `Academic ${randomUUID()}`,
         color: "indigo",
         weekday: 0,
@@ -168,10 +168,10 @@ describe("tenant-scoped homework and assessment records", () => {
       }),
     ).rejects.toBeInstanceOf(AppError);
 
-    const events = await withScope({ workspaceId: NILE }, (tx) =>
+    const events = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.auditEvent.findMany({
         where: {
-          workspaceId: NILE,
+          workspaceId: FIXTURES,
           entityType: "assessment_score",
           action: { in: ["assessment.score_set", "assessment.score_changed"] },
           requestId: {
@@ -251,10 +251,10 @@ describe("tenant-scoped homework and assessment records", () => {
       { requestId: `${auditRunId}-correction` },
     );
 
-    const auditEvents = await withScope({ workspaceId: NILE }, (tx) =>
+    const auditEvents = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.auditEvent.findMany({
         where: {
-          workspaceId: NILE,
+          workspaceId: FIXTURES,
           entityType: "student_follow_up",
           entityId: followUp.id,
           requestId: {
@@ -284,9 +284,9 @@ describe("tenant-scoped homework and assessment records", () => {
     });
 
     // The task history preserves the same sequence with distinct actions.
-    const taskEvents = await withScope({ workspaceId: NILE }, (tx) =>
+    const taskEvents = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.studentFollowUpEvent.findMany({
-        where: { workspaceId: NILE, followUpId: followUp.id },
+        where: { workspaceId: FIXTURES, followUpId: followUp.id },
         orderBy: { createdAt: "asc" },
         select: { action: true, outcome: true },
       }),
@@ -305,9 +305,9 @@ describe("tenant-scoped homework and assessment records", () => {
       { outcome: "no_action" },
       { requestId: `${auditRunId}-identical-correction-retry` },
     );
-    const afterEvents = await withScope({ workspaceId: NILE }, (tx) =>
+    const afterEvents = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.studentFollowUpEvent.count({
-        where: { workspaceId: NILE, followUpId: followUp.id },
+        where: { workspaceId: FIXTURES, followUpId: followUp.id },
       }),
     );
     expect(afterEvents).toBe(beforeEvents);
@@ -339,9 +339,9 @@ describe("tenant-scoped homework and assessment records", () => {
     if (later.duplicateWarning) throw new Error("unexpected duplicate student");
     studentIds.push(later.student.id);
     await enrollStudentInGroup(scope, { groupId: group.id, studentId: later.student.id });
-    const rows = await withScope({ workspaceId: NILE }, (tx) =>
+    const rows = await withScope({ workspaceId: FIXTURES }, (tx) =>
       tx.homeworkSubmission.findMany({
-        where: { workspaceId: NILE, homeworkId: homework.id, studentId: later.student.id },
+        where: { workspaceId: FIXTURES, homeworkId: homework.id, studentId: later.student.id },
       }),
     );
     expect(rows).toHaveLength(1);

@@ -144,35 +144,50 @@ describe("portal tokens, schemas, and permission resolution", () => {
     expect(expires.getTime() - now.getTime()).toBe(PORTAL_INVITATION_TTL_MS);
   });
 
-  it("defaults showPayments to false for parents and strictly forbids showPayments for students", () => {
+  it("never exposes a payments permission for any portal role (ADR-0028)", () => {
     const parentDefault = resolvePortalPermissions("parent", undefined);
-    expect(parentDefault.showPayments).toBe(false);
     expect(parentDefault.showAttendance).toBe(true);
     expect(parentDefault.showGrades).toBe(true);
+    expect(parentDefault).not.toHaveProperty("showPayments");
 
-    const parentWithPayments = resolvePortalPermissions("parent", {
+    // A legacy grant JSON that still carries showPayments: true is stripped.
+    const parentLegacy = resolvePortalPermissions("parent", {
       showPayments: true,
     });
-    expect(parentWithPayments.showPayments).toBe(true);
+    expect(parentLegacy).not.toHaveProperty("showPayments");
+    expect(parentLegacy.showAttendance).toBe(true);
 
-    const studentAttemptedPayments = resolvePortalPermissions("student", {
+    const studentDefault = resolvePortalPermissions("student", {
       showPayments: true,
       showAttendance: false,
     });
-    expect(studentAttemptedPayments.showPayments).toBe(false);
-    expect(studentAttemptedPayments.showAttendance).toBe(false);
+    expect(studentDefault).not.toHaveProperty("showPayments");
+    expect(studentDefault.showAttendance).toBe(false);
   });
 
   it("validates invitation and push subscription schemas strictly", () => {
+    // Legacy payloads that still carry showPayments are stripped, not honored.
+    const legacyInvite = issuePortalInvitationSchema.safeParse({
+      studentId: CHILD_1,
+      kind: "parent",
+      email: "legacy@example.com",
+      permissions: { showPayments: true },
+    });
+    expect(legacyInvite.success).toBe(true);
+    if (legacyInvite.success) {
+      expect(legacyInvite.data.permissions).not.toHaveProperty("showPayments");
+    }
+
     const validInvite = issuePortalInvitationSchema.safeParse({
       studentId: CHILD_1,
       kind: "parent",
       email: "  Parent@Example.com ",
-      permissions: { showPayments: true },
+      permissions: { showGrades: false },
     });
     expect(validInvite.success).toBe(true);
     if (validInvite.success) {
       expect(validInvite.data.email).toBe("parent@example.com");
+      expect(validInvite.data.permissions?.showGrades).toBe(false);
     }
 
     const badToken = acceptPortalInvitationSchema.safeParse({ token: "short" });
@@ -307,7 +322,6 @@ describe("role boundaries, multi-child access, revoked links, and tenant isolati
             showGrades: true,
             showHomework: true,
             showResources: true,
-            showPayments: true,
             showSchedule: true,
             showNotifications: true,
           },
@@ -323,7 +337,6 @@ describe("role boundaries, multi-child access, revoked links, and tenant isolati
             showGrades: true,
             showHomework: true,
             showResources: true,
-            showPayments: false,
             showSchedule: true,
             showNotifications: true,
           },
@@ -421,25 +434,11 @@ describe("role boundaries, multi-child access, revoked links, and tenant isolati
       ],
       homework: [],
       resources: [],
-      payments:
-        grant.studentId === CHILD_1
-          ? {
-              currency: "EGP",
-              balance: {
-                expectedMinor: 40000,
-                receivedMinor: 40000,
-                adjustmentsMinor: 0,
-                balanceMinor: 0,
-              },
-              history: [],
-              adjustments: [],
-            }
-          : null,
       schedule: { upcomingSessions: [], recentChanges: [] },
       notifications: [],
     }));
 
-    // 1. Access Child 1 -> 200 OK with approved payments
+    // 1. Access Child 1 -> 200 OK; payment ledger is never exposed (ADR-0028)
     const child1Res = await getParentChild(
       new NextRequest(
         `http://localhost:3000/api/portal/parent/children/${CHILD_1}`,
@@ -449,11 +448,11 @@ describe("role boundaries, multi-child access, revoked links, and tenant isolati
     expect(child1Res.status).toBe(200);
     const child1Body = await child1Res.json();
     expect(child1Body.student.id).toBe(CHILD_1);
-    expect(child1Body.payments).not.toBeNull();
+    expect(child1Body).not.toHaveProperty("payments");
     expect(child1Body).not.toHaveProperty("workspaceId");
     expect(child1Body).not.toHaveProperty("notes");
 
-    // 2. Access Child 2 -> 200 OK with payments hidden (showPayments: false on Child 2 grant)
+    // 2. Access Child 2 -> 200 OK; payments still never exposed
     const child2Res = await getParentChild(
       new NextRequest(
         `http://localhost:3000/api/portal/parent/children/${CHILD_2}`,
@@ -463,7 +462,7 @@ describe("role boundaries, multi-child access, revoked links, and tenant isolati
     expect(child2Res.status).toBe(200);
     const child2Body = await child2Res.json();
     expect(child2Body.student.id).toBe(CHILD_2);
-    expect(child2Body.payments).toBeNull();
+    expect(child2Body).not.toHaveProperty("payments");
 
     // 3. Direct URL/API access to another student in the SAME workspace -> 403 FORBIDDEN
     const unlinkedRes = await getParentChild(

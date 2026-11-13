@@ -30,7 +30,7 @@ export default async function ReportsPage({ params }: { params: Promise<{ locale
     isAllowed(scope, "grades", "read") ? "academics" : null,
     isAllowed(scope, "homework", "read") ? "homework" : null,
     isAllowed(scope, "payments", "read") ? "payments" : null,
-    isAllowed(scope, "payments", "read") ? "balances" : null,
+    isAllowed(scope, "payments", "read") ? "sessionRevenue" : null,
   ].filter((type): type is ReportQuery["type"] => type !== null);
   if (availableTypes.length === 0) {
     return (
