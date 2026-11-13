@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   THEME_COOKIE,
   buildThemeScript,
+  initialThemePreference,
   isThemePreference,
   resolveTheme,
 } from "@/lib/theme";
@@ -40,6 +41,16 @@ describe("theme resolution", () => {
   it("does not interpolate a value that could break out of the script", () => {
     const script = buildThemeScript('</script><script>alert(1)</script>' as never);
     expect(script).not.toContain("</script><script>alert(1)</script>");
+  });
+
+  it("renders a preference the server knows before consulting the browser", () => {
+    // The first client render must equal the server markup. A value that only
+    // the browser can see (localStorage, resolved OS theme) must not leak into
+    // that render, or React discards the tree and the dev page reloads.
+    expect(initialThemePreference("dark")).toBe("dark");
+    expect(initialThemePreference("light")).toBe("light");
+    expect(initialThemePreference("system")).toBe("system");
+    expect(initialThemePreference(null)).toBe("system");
   });
 });
 

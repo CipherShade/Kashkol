@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { saveThemePreference } from "@/app/actions/preferences";
-import type { PreferredTheme } from "@/lib/theme";
+import { initialThemePreference, type PreferredTheme } from "@/lib/theme";
 import {
   applyThemePreference,
   initialThemeFromDocument,
+  subscribeThemeChanges,
   watchSystemTheme,
 } from "@/lib/theme-client";
 import { Icon, type IconName } from "./icon";
@@ -23,9 +24,30 @@ export function ThemeSwitch({ initialTheme }: { initialTheme: PreferredTheme }) 
   const t = useTranslations("Theme");
   const toast = useToast();
   const [, startTransition] = useTransition();
-  const [theme, setTheme] = useState<"light" | "dark" | "system">(() =>
-    initialThemeFromDocument(initialTheme),
+  // The theme picked in this session. It wins over the value only the browser
+  // can see, and it is the only state this control owns.
+  const [choice, setChoice] = useState<"light" | "dark" | "system" | null>(null);
+
+  // The server renders only the preference it knows; localStorage and the
+  // resolved OS theme are invisible to it. `useSyncExternalStore` renders the
+  // server snapshot while hydrating and the browser snapshot afterwards, so the
+  // first client render always equals the server markup. Reading the document
+  // during that first render instead made the server say "Theme: System" and
+  // the client say "Theme: Dark" — a fatal hydration error.
+  const getBrowserTheme = useCallback(
+    () => initialThemeFromDocument(initialTheme),
+    [initialTheme],
   );
+  const getServerTheme = useCallback(
+    () => initialThemePreference(initialTheme),
+    [initialTheme],
+  );
+  const browserTheme = useSyncExternalStore(
+    subscribeThemeChanges,
+    getBrowserTheme,
+    getServerTheme,
+  );
+  const theme = choice ?? browserTheme;
 
   useEffect(() => {
     if (theme !== "system") return;
@@ -36,7 +58,7 @@ export function ThemeSwitch({ initialTheme }: { initialTheme: PreferredTheme }) 
 
   function change(next: string) {
     if (next !== "light" && next !== "dark" && next !== "system") return;
-    setTheme(next);
+    setChoice(next);
     applyThemePreference(next);
     const label = t(next);
     startTransition(async () => {

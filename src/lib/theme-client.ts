@@ -36,6 +36,26 @@ export function applyThemePreference(mode: "light" | "dark" | "system"): Resolve
   return resolved;
 }
 
+/**
+ * Subscribe to the browser state that can change the displayed theme without a
+ * navigation: another tab writing the preference, or the OS scheme changing
+ * under `system`. Used with `useSyncExternalStore`, so the switch renders the
+ * server snapshot while hydrating and this browser snapshot afterwards.
+ */
+export function subscribeThemeChanges(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const query =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-color-scheme: dark)")
+      : null;
+  window.addEventListener("storage", onChange);
+  query?.addEventListener("change", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    query?.removeEventListener("change", onChange);
+  };
+}
+
 /** Re-apply the resolved theme when the OS preference changes under `system`. */
 export function watchSystemTheme(callback: () => void): () => void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {

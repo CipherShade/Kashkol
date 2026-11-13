@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-12 · **Status:** Student portal sign-in QR removed; student QR attendance-only (`ADR-0027`, partially superseding `ADR-0026`): permanent teacher-generated passwords (`KSH-XXXX-XXXX`), shared phones across workspaces, attendance QR auto-created on student creation, separated credential/QR operations in the Portal Access section · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-13 · **Status:** Theme-switch hydration loop on the public landing page fixed (§5.18); student portal sign-in QR removed; student QR attendance-only (`ADR-0027`, partially superseding `ADR-0026`): permanent teacher-generated passwords (`KSH-XXXX-XXXX`), shared phones across workspaces, attendance QR auto-created on student creation, separated credential/QR operations in the Portal Access section · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -968,6 +968,46 @@ on mutations, service-identical audit events for credential and QR operations.
 `Unauthorized`), and `.github/workflows/ci.yml` is test-and-build only with no deploy job. Item
 `0.20` in the plan below stays `◐`; a deploy must not be marked done until a health check passes
 on a real staging URL.
+
+### 5.18 Theme-switch hydration loop on the public landing page, fixed on 2026-11-13 — `F-P0-04`
+
+**Symptom.** While testing over a Cloudflare tunnel, the landing page (`/{locale}`) reloaded itself
+roughly every 2.5 seconds in development, alternating between the dark and the light theme. Signed-in
+surfaces were unaffected.
+
+**Root cause.** `ThemeSwitch` initialised its state by reading `document.documentElement` during the
+first client render (`initialThemeFromDocument`). The server cannot see localStorage or the resolved
+OS preference, so for an anonymous visitor it rendered `aria-label="Theme: System"`, while the client
+resolved the pre-paint script's `data-theme="dark"` and rendered `aria-label="Theme: Dark"`. React 19
+treats that mismatch as fatal: it discards the hydrated tree, and Next.js Fast Refresh reloads the
+document — the observed loop. Only the landing page passed `initialTheme={null}` (no session, no
+theme cookie), which is why `/ar` and `/en` showed it and `/app` did not.
+
+**Fix.** The switch no longer reads the document during render. `useSyncExternalStore` renders the
+server-known preference as the hydration snapshot (`initialThemePreference`, pure) and the
+browser-visible value afterwards (`initialThemeFromDocument`, through `subscribeThemeChanges`), so
+the first client render always equals the server markup. A session-local `choice` keeps the user's
+own selection responsive. No lint rule was disabled: `react-hooks/set-state-in-effect` is satisfied
+by construction.
+
+**Verification (headless Chrome over CDP, 20 s window, `--disable-extensions`).**
+
+| Case | Documents loaded | Fatal hydration errors | Final state |
+|---|---|---|---|
+| `/en`, OS dark, no cookie | 1 | 0 | `data-theme="dark"`, "Theme: Dark" |
+| `/en`, OS light, cookie `dark` | 1 | 0 | `data-theme="dark"`, "Theme: Dark" |
+| `/ar`, OS light, cookie `light` | 1 | 0 | `data-theme="light"`, "المظهر: فاتح" |
+| `/en`, OS dark, extensions enabled | 1 | 0 | `data-theme="dark"`, "Theme: Dark" |
+
+Before the fix the same probe recorded 8–9 documents and 7–8 fatal hydration errors per 20 s. A
+regression test (`tests/unit/theme.test.ts`) asserts that a preference only the browser can see never
+reaches the hydrating render.
+
+**Not claimed by this section.** A browser extension (Grammarly) still injects
+`data-new-gr-c-s-check-loaded` / `data-gr-ext-installed` into `<body>` before hydration. React logs a
+**non-fatal** attribute-mismatch warning for it and leaves the attributes in place; an A/B probe
+showed `suppressHydrationWarning` on `<body>` changed neither the warning count nor the loop, so no
+defensive change was made. The warning is caused by the extension, not by the application.
 
 ## 6. Implementation plan
 

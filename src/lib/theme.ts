@@ -10,6 +10,19 @@ export function isThemePreference(value: unknown): value is "light" | "dark" | "
   return value === "light" || value === "dark" || value === "system";
 }
 
+/**
+ * The preference the theme switch may render before the browser has been
+ * consulted. It must never read the document: the first client render has to
+ * match the server markup exactly, otherwise React discards the hydrated tree
+ * and — in development — the page reloads in a loop. A value only the browser
+ * can see is adopted after hydration by `initialThemeFromDocument`.
+ */
+export function initialThemePreference(
+  preference: PreferredTheme,
+): "light" | "dark" | "system" {
+  return isThemePreference(preference) ? preference : "system";
+}
+
 /** `system` follows the operating system; an explicit choice wins. */
 export function resolveTheme(
   preference: PreferredTheme,
