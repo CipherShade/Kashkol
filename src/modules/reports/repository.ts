@@ -49,7 +49,14 @@ export async function loadReport(
           where,
           include: {
             student: { select: { firstName: true, lastName: true } },
-            session: { select: { startsAt: true, status: true, group: { select: { name: true } } } },
+            session: {
+              select: {
+                startsAt: true,
+                status: true,
+                gradeLabel: true,
+                group: { select: { name: true } },
+              },
+            },
           },
           orderBy: [{ session: { startsAt: "desc" } }, { id: "desc" }],
           skip: exportLimit === undefined ? offset : 0,
@@ -63,7 +70,7 @@ export async function loadReport(
         items: rows.map(
           (row): ReportRow => ({
             date: row.session.startsAt,
-            group: row.session.group.name,
+            group: row.session.group?.name ?? row.session.gradeLabel ?? "—",
             student: `${row.student.firstName} ${row.student.lastName}`,
             attendance: row.mark,
             sessionStatus: row.session.status,
@@ -207,6 +214,7 @@ export async function loadReport(
           id: true,
           startsAt: true,
           pricePerStudentMinor: true,
+          gradeLabel: true,
           group: { select: { name: true, defaultPricePerStudentMinor: true } },
         },
         orderBy: { startsAt: "asc" },
@@ -246,11 +254,12 @@ export async function loadReport(
         collectedRows.map((row) => [row.sessionId, row._sum.amountMinor ?? 0]),
       );
       const rows = sessions.map((session): ReportRow => {
-        const price = session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+        const price =
+          session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
         const attended = attendedBySession.get(session.id) ?? 0;
         return {
           date: session.startsAt,
-          group: session.group.name,
+          group: session.group?.name ?? session.gradeLabel ?? "—",
           priceMinor: price,
           attended,
           expectedMinor: price != null ? price * attended : null,
@@ -295,7 +304,9 @@ export async function loadReport(
         where: paymentWhere,
         include: {
           student: { select: { firstName: true, lastName: true } },
-          session: { select: { startsAt: true, group: { select: { name: true } } } },
+          session: {
+            select: { startsAt: true, gradeLabel: true, group: { select: { name: true } } },
+          },
         },
         orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
         take,
@@ -306,7 +317,9 @@ export async function loadReport(
           student: { select: { firstName: true, lastName: true } },
           payment: {
             select: {
-              session: { select: { startsAt: true, group: { select: { name: true } } } },
+              session: {
+                select: { startsAt: true, gradeLabel: true, group: { select: { name: true } } },
+              },
             },
           },
         },
@@ -322,7 +335,7 @@ export async function loadReport(
         student: row.student
           ? `${row.student.firstName} ${row.student.lastName}`
           : row.session
-            ? `${row.session.group.name} · ${row.session.startsAt.toISOString().slice(0, 10)}`
+            ? `${row.session.group?.name ?? row.session.gradeLabel ?? "—"} · ${row.session.startsAt.toISOString().slice(0, 10)}`
             : "—",
         kind: "receipt",
         amountMinor: row.amountMinor,
@@ -341,7 +354,7 @@ export async function loadReport(
         student: row.student
           ? `${row.student.firstName} ${row.student.lastName}`
           : row.payment?.session
-            ? `${row.payment.session.group.name} · ${row.payment.session.startsAt.toISOString().slice(0, 10)}`
+            ? `${row.payment.session.group?.name ?? row.payment.session.gradeLabel ?? "—"} · ${row.payment.session.startsAt.toISOString().slice(0, 10)}`
             : "—",
         kind: row.kind,
         amountMinor: row.amountMinor,

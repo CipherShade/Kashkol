@@ -21,9 +21,40 @@ describe("student and group validation", () => {
     expect(createStudentNoteSchema.safeParse({ body: " " }).success).toBe(false);
   });
 
-  it("requires a group end time to follow its start time", () => {
-    const input = { name: "Physics", weekday: 0, startTime: "16:00", endTime: "15:30" };
+  it("requires a group slot end time to follow its start time", () => {
+    const input = {
+      name: "Physics",
+      slots: [{ weekday: 0, startTime: "16:00", endTime: "15:30" }],
+    };
     expect(createGroupSchema.safeParse(input).success).toBe(false);
+  });
+
+  it("requires at least one weekly slot", () => {
+    const input = { name: "Physics", slots: [] };
+    expect(createGroupSchema.safeParse(input).success).toBe(false);
+  });
+
+  it("rejects two slots of the same group overlapping on the same weekday", () => {
+    const input = {
+      name: "Physics",
+      slots: [
+        { weekday: 0, startTime: "16:00", endTime: "17:00" },
+        { weekday: 0, startTime: "16:30", endTime: "17:30" },
+      ],
+    };
+    const result = createGroupSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts multiple non-overlapping weekly slots", () => {
+    const input = {
+      name: "Physics",
+      slots: [
+        { weekday: 0, startTime: "16:00", endTime: "17:00", room: "قاعة أ", capacity: 20 },
+        { weekday: 3, startTime: "10:00", endTime: "12:00", room: "قاعة ب", capacity: 15 },
+      ],
+    };
+    expect(createGroupSchema.safeParse(input).success).toBe(true);
   });
 
   it("escapes spreadsheet formula prefixes", () => {

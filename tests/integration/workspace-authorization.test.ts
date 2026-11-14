@@ -221,10 +221,14 @@ describe("cross-tenant isolation on the core domain tables", () => {
             workspaceId: NILE,
             subjectId,
             name: "Group A",
-            weekday: 6,
-            startTime: new Date("1970-01-01T16:00:00.000Z"),
-            endTime: new Date("1970-01-01T18:00:00.000Z"),
             color: "indigo",
+            scheduleSlots: {
+              create: {
+                weekday: 6,
+                startTime: new Date("1970-01-01T16:00:00.000Z"),
+                endTime: new Date("1970-01-01T18:00:00.000Z"),
+              },
+            },
           },
         });
         await tx.enrollment.create({
@@ -326,6 +330,7 @@ describe("cross-tenant isolation on the core domain tables", () => {
         await tx.assessment.deleteMany({ where: { workspaceId: NILE, id: assessmentId } });
         await tx.teachingSession.deleteMany({ where: { workspaceId: NILE, id: sessionId } });
         await tx.enrollment.deleteMany({ where: { workspaceId: NILE, studentId } });
+        await tx.groupScheduleSlot.deleteMany({ where: { workspaceId: NILE, groupId } });
         await tx.group.deleteMany({ where: { workspaceId: NILE, id: groupId } });
         await tx.subject.deleteMany({ where: { workspaceId: NILE, id: subjectId } });
       });
@@ -930,9 +935,13 @@ describe("audit infrastructure", () => {
             id: groupId,
             workspaceId: NILE,
             name: "Revision Group",
-            weekday: 0,
-            startTime: new Date("1970-01-01T10:00:00.000Z"),
             color: "indigo",
+            scheduleSlots: {
+              create: {
+                weekday: 0,
+                startTime: new Date("1970-01-01T10:00:00.000Z"),
+              },
+            },
           },
         });
         await tx.teachingSession.create({

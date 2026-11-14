@@ -290,6 +290,20 @@ export const ROUTES: RouteEntry[] = [
     description: "Get session roster and manage attendance marks for a session.",
   },
   {
+    path: "/api/sessions/[sessionId]/attendees",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Add a student to the roster of a group-less session.",
+  },
+  {
+    path: "/api/sessions/[sessionId]/attendees",
+    methods: ["DELETE"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Remove a student from the roster of a group-less session.",
+  },
+  {
     path: "/api/sessions/[sessionId]/attendance/qr",
     methods: ["POST"],
     access: "workspace",

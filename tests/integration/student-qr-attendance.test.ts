@@ -4,7 +4,7 @@ import { disconnectDb } from "@/lib/db/client";
 import { withScope } from "@/lib/db/scope";
 import { createStudent as createStudentService } from "@/modules/students/service";
 import { enrollStudentInGroup } from "@/modules/groups/service";
-import { scanStudentQrCode } from "@/modules/attendance/service";
+import { scanStudentQrCode, markAttendance } from "@/modules/attendance/service";
 import {
   getOrGenerateStudentQrToken,
   rotateStudentQrToken,
@@ -94,6 +94,11 @@ afterEach(async () => {
     );
     await bestEffort(
       withScope({ workspaceId: FIXTURES }, (tx) =>
+        tx.groupScheduleSlot.deleteMany({ where: { workspaceId: FIXTURES, groupId } }),
+      ),
+    );
+    await bestEffort(
+      withScope({ workspaceId: FIXTURES }, (tx) =>
         tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: groupId } }),
       ),
     );
@@ -102,6 +107,11 @@ afterEach(async () => {
     await bestEffort(
       withScope({ workspaceId: DELTA }, (tx) =>
         tx.enrollment.deleteMany({ where: { workspaceId: DELTA, groupId } }),
+      ),
+    );
+    await bestEffort(
+      withScope({ workspaceId: DELTA }, (tx) =>
+        tx.groupScheduleSlot.deleteMany({ where: { workspaceId: DELTA, groupId } }),
       ),
     );
     await bestEffort(
@@ -151,7 +161,7 @@ async function createServiceStudent(phone: string | null = null) {
 
 async function createGroupWithSession(
   workspaceId: string,
-  status: "scheduled" | "started",
+  status: "scheduled" | "started" | "completed" | "cancelled",
 ) {
   const group = await withScope({ workspaceId }, (tx) =>
     tx.group.create({
@@ -159,10 +169,14 @@ async function createGroupWithSession(
         workspaceId,
         name: `Qr ${randomUUID().slice(0, 8)}`,
         color: "indigo",
-        weekday: 0,
-        startTime: new Date("1970-01-01T16:00:00.000Z"),
-        endTime: new Date("1970-01-01T17:00:00.000Z"),
-        capacity: 30,
+        scheduleSlots: {
+          create: {
+            weekday: 0,
+            startTime: new Date("1970-01-01T16:00:00.000Z"),
+            endTime: new Date("1970-01-01T17:00:00.000Z"),
+            capacity: 30,
+          },
+        },
       },
     }),
   );
@@ -415,6 +429,78 @@ describe("student attendance QR against PostgreSQL", () => {
       }),
     );
     expect(mark).toBeNull();
+  });
+
+  it("attendance can be recorded on a completed session (no time/status window)", async () => {
+    const { student } = await createServiceStudent();
+    const { group, session } = await createGroupWithSession(FIXTURES, "completed");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
+
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
+      requestId: randomUUID(),
+    });
+    await scanStudentQrCode(
+      fixturesScope(),
+      { qrToken: token, sessionId: session.id, markLate: false },
+      { requestId: randomUUID() },
+    );
+
+    const mark = await withScope({ workspaceId: FIXTURES }, (tx) =>
+      tx.attendanceMark.findFirst({
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
+      }),
+    );
+    expect(mark).not.toBeNull();
+    expect(mark?.mark).toBe("present");
+    expect(mark?.source).toBe("qr");
+  });
+
+  it("manual marks and corrections are still allowed on a completed session", async () => {
+    const { student } = await createServiceStudent();
+    const { group, session } = await createGroupWithSession(FIXTURES, "completed");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
+
+    await markAttendance(
+      fixturesScope(),
+      { sessionId: session.id, studentId: student.id, mark: "present" },
+      { requestId: randomUUID() },
+    );
+    await markAttendance(
+      fixturesScope(),
+      { sessionId: session.id, studentId: student.id, mark: "late" },
+      { requestId: randomUUID() },
+    );
+
+    const mark = await withScope({ workspaceId: FIXTURES }, (tx) =>
+      tx.attendanceMark.findFirst({
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
+      }),
+    );
+    expect(mark?.mark).toBe("late");
+  });
+
+  it("a cancelled session still rejects scans and marks", async () => {
+    const { student } = await createServiceStudent();
+    const { group, session } = await createGroupWithSession(FIXTURES, "cancelled");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
+
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
+      requestId: randomUUID(),
+    });
+    await expect(
+      scanStudentQrCode(
+        fixturesScope(),
+        { qrToken: token, sessionId: session.id, markLate: false },
+        { requestId: randomUUID() },
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(
+      markAttendance(
+        fixturesScope(),
+        { sessionId: session.id, studentId: student.id, mark: "present" },
+        { requestId: randomUUID() },
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("a student portal user cannot read another student's portal record", async () => {

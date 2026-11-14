@@ -77,23 +77,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check slot conflicts
+    // Check slot conflicts, one per requested slot
     const ignoreConflicts = body.ignoreConflicts === true;
     if (!ignoreConflicts) {
-      const conflicts = await checkGroupSlotConflicts(scope, {
-        weekday: parsed.data.weekday,
-        startTime: parsed.data.startTime,
-        endTime: parsed.data.endTime ?? null,
-      });
+      for (const slot of parsed.data.slots) {
+        const conflicts = await checkGroupSlotConflicts(scope, {
+          weekday: slot.weekday,
+          startTime: slot.startTime,
+          endTime: slot.endTime ?? null,
+        });
 
-      if (conflicts.length > 0) {
-        return NextResponse.json(
-          {
-            conflictWarning: true,
-            conflicts,
-          },
-          { status: 200, headers: { "x-request-id": requestId } },
-        );
+        if (conflicts.length > 0) {
+          return NextResponse.json(
+            {
+              conflictWarning: true,
+              conflicts,
+            },
+            { status: 200, headers: { "x-request-id": requestId } },
+          );
+        }
       }
     }
 

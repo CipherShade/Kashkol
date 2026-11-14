@@ -11,6 +11,14 @@ import { Icon } from "@/components/ui/icon";
 import { Link } from "@/i18n/navigation";
 import { StudentPortalAccessPanel } from "./student-portal-access-panel";
 
+const WEEKDAY_NAMES_AR = ["السبت", "الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
+const WEEKDAY_NAMES_EN = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+
+function formatSlotTime(value: Date | string): string {
+  if (typeof value === "string") return value.slice(0, 5);
+  return value.toISOString().slice(11, 16);
+}
+
 type StudentData = {
   id: string;
   firstName: string;
@@ -30,10 +38,14 @@ type EnrollmentData = {
     name: string;
     color: string;
     grade: string | null;
-    room: string | null;
-    weekday: number;
-    startTime: Date;
-    endTime: Date | null;
+    scheduleSlots: Array<{
+      id: string;
+      weekday: number;
+      startTime: Date | string;
+      endTime: Date | string | null;
+      room: string | null;
+      capacity: number | null;
+    }>;
   };
   enrolledAt: string;
   leftAt?: string | null;
@@ -47,7 +59,8 @@ type AttendanceMarkData = {
     id: string;
     startsAt: string;
     status: string;
-    group: { id: string; name: string; color: string };
+    gradeLabel?: string | null;
+    group: { id: string; name: string; color: string } | null;
   };
   revisions: Array<{
     id: string;
@@ -320,9 +333,25 @@ export function StudentProfileTabs({
                             {enr.group.name}
                           </Link>
                           <div className="text-xs text-muted">
-                            {enr.group.room ? `${enr.group.room} · ` : ""}
-                            {isAr ? "تاريخ الالتحاق: " : "Enrolled: "}
-                            {enr.enrolledAt.slice(0, 10)}
+                            {enr.group.scheduleSlots
+                              .slice()
+                              .sort((a, b) => a.weekday - b.weekday)
+                              .map((slot) => {
+                                const weekdayName = (isAr ? WEEKDAY_NAMES_AR : WEEKDAY_NAMES_EN)[slot.weekday] ?? "";
+                                const start = formatSlotTime(slot.startTime);
+                                const end = slot.endTime ? formatSlotTime(slot.endTime) : null;
+                                return (
+                                  <span key={slot.id} className="block">
+                                    {weekdayName} {start}
+                                    {end ? ` - ${end}` : ""}
+                                    {slot.room ? ` · ${slot.room}` : ""}
+                                  </span>
+                                );
+                              })}
+                            <span className="block">
+                              {isAr ? "تاريخ الالتحاق: " : "Enrolled: "}
+                              {enr.enrolledAt.slice(0, 10)}
+                            </span>
                           </div>
                         </div>
                         <Badge tone="neutral">{isAr ? "نشط" : "Active"}</Badge>
@@ -367,7 +396,11 @@ export function StudentProfileTabs({
                 {attendanceMarks.map((mark) => (
                   <div key={mark.id} className="py-3 flex items-center justify-between">
                     <div>
-                      <div className="font-semibold text-sm">{mark.session.group.name}</div>
+                      <div className="font-semibold text-sm">
+                        {mark.session.group?.name ??
+                          mark.session.gradeLabel ??
+                          (isAr ? "حصة مستقلة" : "Independent session")}
+                      </div>
                       <div className="text-xs text-muted">
                         {new Date(mark.session.startsAt).toLocaleDateString(isAr ? "ar-EG" : "en-US", {
                           weekday: "short",

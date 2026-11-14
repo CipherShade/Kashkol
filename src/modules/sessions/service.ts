@@ -67,16 +67,20 @@ export async function createOneOffSession(
   const startsAt = new Date(input.startsAt);
   const endsAt = input.endsAt ? new Date(input.endsAt) : null;
 
-  // Check conflicts
-  const conflicts = await findConflictingSessions(scope, input.groupId, startsAt, endsAt);
-  if (conflicts.length > 0) {
-    throw new AppError("CONFLICT");
+  // Conflict check applies to group sessions only: independent and
+  // grade-level sessions have no single group to double-book (ADR-0029).
+  if (input.groupId) {
+    const conflicts = await findConflictingSessions(scope, input.groupId, startsAt, endsAt);
+    if (conflicts.length > 0) {
+      throw new AppError("CONFLICT");
+    }
   }
 
   return withScope(scope, async (tx) => {
-    const session = await createOneOffSessionTx(tx, scope, {
+    const { session, rosterSize } = await createOneOffSessionTx(tx, scope, {
       id: sessionId,
       groupId: input.groupId,
+      gradeLabel: input.groupId ? null : input.gradeLabel,
       startsAt,
       endsAt,
       room: input.room,
@@ -96,13 +100,15 @@ export async function createOneOffSession(
       entityId: sessionId,
       action: "session.created",
       diff: {
-        groupId: input.groupId,
+        groupId: input.groupId ?? null,
+        gradeLabel: input.groupId ? null : (input.gradeLabel ?? null),
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         isOneOff: true,
         room: input.room,
         location: input.location,
         pricePerStudentMinor: session.pricePerStudentMinor,
+        rosterSize,
       },
       requestId: ctx.requestId,
       ipHash: ctx.ipHash,
@@ -171,10 +177,13 @@ export async function rescheduleSession(
   const startsAt = new Date(input.startsAt);
   const endsAt = input.endsAt ? new Date(input.endsAt) : null;
 
-  // Check conflicts
-  const conflicts = await findConflictingSessions(scope, existing.groupId, startsAt, endsAt, input.id);
-  if (conflicts.length > 0) {
-    throw new AppError("CONFLICT");
+  // Check conflicts only for group sessions — a session without a group has
+  // no group timeline to double-book (ADR-0029).
+  if (existing.groupId) {
+    const conflicts = await findConflictingSessions(scope, existing.groupId, startsAt, endsAt, input.id);
+    if (conflicts.length > 0) {
+      throw new AppError("CONFLICT");
+    }
   }
 
   return withScope(scope, async (tx) => {

@@ -39,7 +39,7 @@
 
 | Class | Count | Blocking? |
 |---|---|---|
-| Assumptions | 21 (`A-01`–`A-21`) | No — each has a default |
+| Assumptions | 22 (`A-01`–`A-22`) | No — each has a default |
 | Open questions | 22 (`OQ-01`–`OQ-22`) | No — each has a default and a decision deadline |
 | External dependencies tracked in §7 | 6 | Yes for the milestone that depends on them — see `RELEASE_PLAN.md` §9 |
 
@@ -89,6 +89,7 @@ what would invalidate it, and what it affects.
 | **A-19** | Phone disambiguation for student credentials. | A phone authenticates exactly one student **per workspace** (partial unique index `student_workspace_phone_unique`). The same phone may hold credentials in multiple workspaces; sign-in resolves by phone and the supplied password selects the account. | The candidate scan is bounded (a handful of accounts per phone in practice) and the password check is the discriminator; no tenant context exists at sign-in, so a global lookup is unavoidable. Rejecting cross-workspace reuse would contradict multi-workspace families. | A decision is made to enforce globally unique phones (would need a different username shape or phone portability rules). | `F-P2-03` |
 | **A-20** | ~~QR access for student portal sign-in.~~ **Superseded by A-21.** | The printed QR encoded `/{locale}/portal?t=<token>`, a 30-day opaque *prefill* token stored as SHA-256. It was not an authentication secret: the password was still required. Disabling, regenerating, or removing the phone invalidated the token. | Reusing the QR aesthetic (`OQ-05`) without creating a second bearer credential kept the minors-safety bar: the QR alone could never sign in, and revocation was tested. | Teachers require fully touchless sign-in; that is a new requirement with a different threat model, not an extension of this token. | `F-P2-03` |
 | **A-21** | Attendance QR is for identification only; portal sign-in is password-only. | The student's QR code is the signed attendance token (`kqr_v1.<studentId>.<nonce>.<signature>`, `student.qr_token_hash`). It never signs a student in, resets a password, or activates an account; scanning it records attendance and cannot authenticate anyone. The `/{locale}/portal?t=<token>` prefill token is removed entirely (`ADR-0027`). Teachers download/print the attendance QR on student creation; regeneration invalidates the old identifier; scanning runs under the same attendance authorization rules as manual marking. | Reusing the QR aesthetic without creating a second bearer credential keeps the minors-safety bar: the QR alone can never sign in, and revocation is tested. The phone-username password is the only portal credential. | Teachers require fully touchless sign-in; that would be a new requirement with a different threat model, not an extension of this token. | `F-P2-03` |
+| **A-22** | A grade-level session's roster is a **snapshot taken at creation**, not a live query. | The roster is materialised from every student currently enrolled in a non-archived group whose `grade` matches the session's `grade_label`. Later enrollment changes do not move it; only explicit teacher add/remove edits the roster, and a manual addition is recorded with `origin = manual`. | A live roster would change the meaning of recorded attendance after the fact: a student enrolled later would silently appear marked "not recorded" on a past session, and a student who left every group would silently vanish from one. Materialising the roster keeps every roster change a visible act and preserves unfalsifiable history. | Beta teachers expect grade sessions to follow enrollment changes live, or need to re-snapshot an existing session. | `F-P1-05`, `F-P1-06`, `F8`, `ADR-0029` |
 
 ---
 
@@ -221,6 +222,7 @@ they gate milestones.
 | `A-19` | `F-P2-03`, `F18`, `ADR-0026` | Assumption |
 | `A-20` | `F-P2-03`, `F18`, `ADR-0026`, `ADR-0027` | Assumption |
 | `A-21` | `F-P2-03`, `F18`, `ADR-0027` | Assumption |
+| `A-22` | `F-P1-05`, `F-P1-06`, `F8`, `ADR-0029` | Assumption |
 | `OQ-01` | `RELEASE_PLAN.md` §2 | Open question |
 | `OQ-02` | `F-P2-02`, `F17` | Open question |
 | `OQ-03` | `F-P2-03`, `F18` | Open question |

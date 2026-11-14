@@ -669,6 +669,7 @@
     "sessionStatus_started": "In progress",
     "sessionStatus_completed": "Completed",
     "sessionStatus_cancelled": "Cancelled",
+    "independentSession": "Independent session",
     "sessionEnrolledStudents": "{count} enrolled",
     "attendanceDone": "Attendance recorded",
     "attendancePending": "Attendance pending",
@@ -977,7 +978,13 @@
     "guardian": "Guardian",
     "grade": "Grade",
     "internalNotes": "Internal notes",
-    "openWhatsApp": "Open WhatsApp"
+    "openWhatsApp": "Open WhatsApp",
+    "slotsLabel": "Weekly slots",
+    "addSlot": "Add slot",
+    "removeSlot": "Remove slot",
+    "roomPlaceholder": "e.g. Room 3 - Main Hall",
+    "atLeastOneScheduleSlot": "Add at least one weekly slot.",
+    "slotOverlapsSameGroup": "Two slots overlap on the same day within the same group."
   },
   "Payments": {
     "title": "Payments",
@@ -989,6 +996,7 @@
     "filterSession": "Filter by session",
     "allSessions": "All sessions",
     "session": "Session",
+    "independentSession": "Independent session",
     "attended": "Present/late",
     "price": "Session price",
     "chooseSession": "Choose a session",
@@ -1455,6 +1463,17 @@
     "app": "Open the application",
     "note": "Nothing was changed. If you followed a link from inside the application, the page may be planned for a later milestone."
   },
+  "attendance": {
+    "errors": {
+      "sessionCancelled": "Attendance cannot be recorded on a cancelled session.",
+      "invalidQrCode": "This QR code is invalid or could not be verified.",
+      "alreadyScanned": "This student has already checked in for this session.",
+      "studentNotEnrolled": "This student is not on the roster for this session.",
+      "attendeeAlreadyOnRoster": "This student is already on the session roster.",
+      "attendeeHasMarks": "This student has attendance marks and cannot be removed from the roster.",
+      "groupSessionRosterFixed": "Group sessions use the group's enrollment roster."
+    }
+  },
   "errors": {
     "unauthorized": "You need to sign in to continue.",
     "forbidden": "You do not have permission to do that.",
@@ -1561,6 +1580,9 @@
     "today": "Today",
     "noSessions": "No sessions",
     "group": "Group",
+    "independent": "Independent (no group)",
+    "grade": "Grade",
+    "gradeLabel": "Grade label",
     "startsAt": "Start time",
     "endsAt": "End time",
     "reschedule": "Reschedule",
@@ -1598,6 +1620,7 @@
     "attendance": {
       "eyebrow": "Attendance",
       "pageTitle": "Session attendance",
+      "independentSession": "Independent session",
       "pageDescription": "Mark each student, review the summary, and close the session. Corrections after closing require a reason.",
       "rosterTitle": "Attendance roster",
       "refresh": "Refresh",
@@ -1607,6 +1630,8 @@
       "sessionClosed": "Session closed",
       "noStudents": "No enrolled students",
       "noStudentsHint": "Enroll students in the group to take attendance for this session.",
+      "noStudentsIndependent": "No students added to this session yet.",
+      "noStudentsIndependentHint": "Add students from the workspace roster to record attendance.",
       "sourceQr": "QR check-in",
       "sourceManual": "Marked by you",
       "unrecorded": "Unrecorded",
@@ -1628,7 +1653,7 @@
       "qrTitle": "QR check-in",
       "qrSessionLabel": "Valid for this session only",
       "qrNotAvailable": "Not available",
-      "qrNotAvailableHint": "QR check-in is available while the session is scheduled or started.",
+      "qrNotAvailableHint": "QR check-in is available unless the session is cancelled.",
       "qrIdleHint": "Display this code on your screen; enrolled students scan it with their own phone to mark themselves present.",
       "issueQr": "Show QR code",
       "qrIssuing": "Preparing…",
@@ -1664,7 +1689,16 @@
       "homeworkQuestion": "Did the student do the homework ({title})?",
       "homeworkYes": "Yes",
       "homeworkNo": "No",
-      "homeworkToggleFailed": "Couldn't save homework status. Please retry."
+      "homeworkToggleFailed": "Couldn't save homework status. Please retry.",
+      "addStudent": "Add student",
+      "addStudentPlaceholder": "Search student by name or phone…",
+      "addStudentSuccess": "Student added to session roster",
+      "removeStudent": "Remove student",
+      "removeStudentConfirm": "Remove this student from the session roster?",
+      "removeStudentSuccess": "Student removed from session roster",
+      "studentNotOnRoster": "Student not on session roster",
+      "studentHasMarks": "Student has attendance marks and cannot be removed",
+      "groupSessionRosterFixed": "Group sessions use the group's enrollment roster"
     }
   },
   "Portal": {

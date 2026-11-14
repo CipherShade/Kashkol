@@ -5,9 +5,12 @@ import { generateGroupUpcomingSessionsTx } from "@/modules/groups/repository";
 
 export type SessionListItem = {
   id: string;
-  groupId: string;
+  /** Null for independent and grade-level sessions (ADR-0029). */
+  groupId: string | null;
   groupName: string;
   groupColor: string;
+  /** The grade label a grade-level session was snapshotted from; null otherwise. */
+  gradeLabel: string | null;
   startsAt: Date;
   endsAt: Date | null;
   status: "scheduled" | "started" | "completed" | "cancelled";
@@ -54,8 +57,9 @@ export async function listSessions(scope: Scope, from: Date, to: Date, groupId?:
     return sessions.map((s): SessionListItem => ({
       id: s.id,
       groupId: s.groupId,
-      groupName: s.group.name,
-      groupColor: s.group.color,
+      groupName: s.group?.name ?? "",
+      groupColor: s.group?.color ?? "",
+      gradeLabel: s.gradeLabel,
       startsAt: s.startsAt,
       endsAt: s.endsAt,
       status: s.status,
@@ -86,9 +90,17 @@ export async function findSessionById(scope: Scope, sessionId: string) {
             id: true,
             name: true,
             color: true,
-            weekday: true,
-            startTime: true,
-            endTime: true,
+            scheduleSlots: {
+              orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+              select: {
+                id: true,
+                weekday: true,
+                startTime: true,
+                endTime: true,
+                room: true,
+                capacity: true,
+              },
+            },
           },
         },
         attendanceMarks: {
@@ -112,7 +124,10 @@ export async function createOneOffSessionTx(
   scope: Scope,
   data: {
     id: string;
-    groupId: string;
+    /** Null for independent and grade-level sessions (ADR-0029). */
+    groupId?: string | null;
+    /** The grade label a grade-level session snapshots its roster from. */
+    gradeLabel?: string | null;
     startsAt: Date;
     endsAt: Date | null;
     room?: string | null;
@@ -123,22 +138,25 @@ export async function createOneOffSessionTx(
     pricePerStudentMinor?: number | null;
   },
 ) {
-  // Verify group belongs to workspace
-  const group = await tx.group.findFirst({
-    where: { id: data.groupId, workspaceId: scope.workspaceId, archivedAt: null },
-  });
-  if (!group) throw new Error("NOT_FOUND");
+  // Group sessions keep the existing behaviour: the group must belong to the
+  // workspace and the session inherits its default price when none is given.
+  let effectivePrice: number | null = data.pricePerStudentMinor ?? null;
+  if (data.groupId) {
+    const group = await tx.group.findFirst({
+      where: { id: data.groupId, workspaceId: scope.workspaceId, archivedAt: null },
+    });
+    if (!group) throw new Error("NOT_FOUND");
+    if (data.pricePerStudentMinor === undefined) {
+      effectivePrice = group.defaultPricePerStudentMinor ?? null;
+    }
+  }
 
-  const effectivePrice =
-    data.pricePerStudentMinor !== undefined
-      ? data.pricePerStudentMinor
-      : (group.defaultPricePerStudentMinor ?? null);
-
-  return tx.teachingSession.create({
+  const session = await tx.teachingSession.create({
     data: {
       id: data.id,
       workspaceId: scope.workspaceId,
-      groupId: data.groupId,
+      groupId: data.groupId ?? null,
+      gradeLabel: data.groupId ? null : (data.gradeLabel ?? null),
       startsAt: data.startsAt,
       endsAt: data.endsAt,
       status: "scheduled",
@@ -151,6 +169,42 @@ export async function createOneOffSessionTx(
       pricePerStudentMinor: effectivePrice,
     },
   });
+
+  // Grade-level sessions materialise their roster at creation: every student
+  // currently enrolled (not yet left) in a non-archived group carrying the
+  // same grade label, deduplicated, is inserted with origin "grade". The
+  // snapshot does not move with later enrollment changes (ADR-0029).
+  let rosterSize = 0;
+  if (!data.groupId && data.gradeLabel) {
+    const gradeGroups = await tx.group.findMany({
+      where: { workspaceId: scope.workspaceId, archivedAt: null, grade: data.gradeLabel },
+      select: { id: true },
+    });
+    if (gradeGroups.length > 0) {
+      const enrollments = await tx.enrollment.findMany({
+        where: {
+          workspaceId: scope.workspaceId,
+          groupId: { in: gradeGroups.map((g) => g.id) },
+          leftAt: null,
+        },
+        select: { studentId: true },
+        distinct: ["studentId"],
+      });
+      if (enrollments.length > 0) {
+        await tx.sessionAttendee.createMany({
+          data: enrollments.map((e) => ({
+            workspaceId: scope.workspaceId,
+            sessionId: data.id,
+            studentId: e.studentId,
+            origin: "grade",
+          })),
+        });
+      }
+      rosterSize = enrollments.length;
+    }
+  }
+
+  return { session, rosterSize };
 }
 
 export async function updateSessionTx(
@@ -360,6 +414,9 @@ export async function generateSessionsForGroup(
   return withScope(scope, async (tx) => {
     const group = await tx.group.findFirst({
       where: { id: groupId, workspaceId: scope.workspaceId, archivedAt: null },
+      include: {
+        scheduleSlots: { orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
+      },
     });
     if (!group) throw new Error("NOT_FOUND");
 
@@ -368,18 +425,20 @@ export async function generateSessionsForGroup(
       return d.toISOString().slice(11, 16);
     };
 
-    const startTime = formatTime(group.startTime) ?? "16:00";
-    const endTime = formatTime(group.endTime);
+    for (const slot of group.scheduleSlots) {
+      const startTime = formatTime(slot.startTime) ?? "16:00";
+      const endTime = formatTime(slot.endTime);
 
-    await generateGroupUpcomingSessionsTx(
-      tx,
-      scope.workspaceId,
-      groupId,
-      group.weekday,
-      startTime,
-      endTime,
-      weeksAhead,
-    );
+      await generateGroupUpcomingSessionsTx(
+        tx,
+        scope.workspaceId,
+        groupId,
+        slot.weekday,
+        startTime,
+        endTime,
+        weeksAhead,
+      );
+    }
 
     return { generated: true };
   });

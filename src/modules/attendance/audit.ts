@@ -7,6 +7,8 @@ export const attendanceAuditActions = {
   qrTokenIssued: "attendance.qr_token_issued",
   qrTokenRotated: "attendance.qr_token_rotated",
   qrRejected: "attendance.qr_rejected",
+  attendeeAdded: "attendance.attendee_added",
+  attendeeRemoved: "attendance.attendee_removed",
 } as const;
 
 export type AttendanceAuditAction = (typeof attendanceAuditActions)[keyof typeof attendanceAuditActions];

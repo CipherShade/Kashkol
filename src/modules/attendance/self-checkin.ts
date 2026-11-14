@@ -6,6 +6,7 @@ import { writeAuditEvent } from "@/modules/audit/service";
 import {
   findActiveQrTokenByHash,
   getEnrollmentForStudent,
+  getSessionAttendeeTx,
   upsertAttendanceMarkTx,
   type AttendanceActor,
 } from "./repository";
@@ -68,7 +69,7 @@ export async function checkInWithQrToken(
 
     const { session } = found;
 
-    if (session.status === "completed" || session.status === "cancelled") {
+    if (session.status === "cancelled") {
       await writeAuditEvent(tx, {
         workspaceId: actor.workspaceId,
         actorUserId: actor.userId,
@@ -83,13 +84,22 @@ export async function checkInWithQrToken(
       throw new AppError("CONFLICT");
     }
 
-    const enrollment = await getEnrollmentForStudent(
-      tx,
-      actor.workspaceId,
-      session.groupId,
-      actor.studentId,
-    );
-    if (!enrollment) {
+    // The student must be on the session's roster: group sessions use the
+    // group's enrollment; group-less sessions use the attendee roster.
+    let onRoster = false;
+    if (session.groupId) {
+      const enrollment = await getEnrollmentForStudent(
+        tx,
+        actor.workspaceId,
+        session.groupId,
+        actor.studentId,
+      );
+      onRoster = Boolean(enrollment);
+    } else {
+      const attendee = await getSessionAttendeeTx(tx, actor.workspaceId, session.id, actor.studentId);
+      onRoster = Boolean(attendee);
+    }
+    if (!onRoster) {
       await writeAuditEvent(tx, {
         workspaceId: actor.workspaceId,
         actorUserId: actor.userId,

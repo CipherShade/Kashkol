@@ -50,6 +50,7 @@ Every ADR uses the same sections:
 | [0026](0026-student-portal-credentials.md) | Teacher-generated student portal credentials | Accepted (partially superseded by ADR-0027) | M2 |
 | [0027](0027-student-qr-attendance-only.md) | Student QR codes are attendance identification only | Accepted | M2 |
 | [0028](0028-session-scoped-finance.md) | Session-scoped finance (replaces per-student ledger) | Accepted (approved 2026-11-13) | M2 |
+| [0029](0029-group-slots-and-session-modes.md) | Multiple weekly slots per group, and sessions beyond a group | Accepted (approved 2026-11-14) | M1–M2 |
 
 ## Conventions
 
@@ -99,3 +100,4 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0026 | `F-P2-03`, `R-01`, `R-06`, `NF-1`, `NF-9`, `A-18`, `A-19`, `A-20`, `OQ-03`, `OQ-21` |
 | 0027 | `F-P2-03`, `F-P2-05`, `R-01`, `R-06`, `NF-1`, `NF-9`, `A-21`, `OQ-22` |
 | 0028 | `F-P2-04`, `D-14`, `R-02`, `NF-1`, `NF-2`, `ADR-0025` |
+| 0029 | `D-03`, `F-P1-04`, `F-P1-05`, `F-P1-06`, `F-P1-07`, `F-P2-05`, `R-01`, `R-02`, `NF-1`, `NF-5`, `A-22` |

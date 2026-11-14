@@ -24,7 +24,7 @@ not navigation sketches.
 | F1 | Create an account and a workspace | Teacher | P0 |
 | F2 | Sign in | Any user | P0 |
 | F3 | Choose language and theme | Any user | P0 |
-| F4 | Create a group and its weekly slot | Teacher | P1 |
+| F4 | Create a group and its weekly slots | Teacher | P1 |
 | F5 | Add a student | Teacher | P1 |
 | F6 | Import students from a spreadsheet | Teacher | P1 |
 | F7 | Review the dashboard | Teacher | P1 |
@@ -147,18 +147,20 @@ not navigation sketches.
 
 ---
 
-## F4 — Create a group and its weekly slot
+## F4 — Create a group and its weekly slots
 
 **Actor:** Teacher · **Tier:** P1 · **Preconditions:** signed in; workspace exists
 
 1. Teacher opens **Groups** and taps **"Create group"**.
 2. Teacher fills: name (pre-filled from subject + slot as a suggestion, fully editable), subject, grade,
-   room, colour, and weekly slot (weekday + start time + optional end time).
-3. The form validates: name required; times parse; end time (if present) is after start time.
-4. The form checks for a **slot conflict** against the teacher's other groups and shows a warning
+   colour, and **one or more weekly slots**. Each slot has a weekday, a start time, an optional end
+   time, an optional room, and an optional capacity (`ADR-0029`).
+3. The form validates: name required; at least one slot; times parse; end time (if present) is after
+   start time; capacity is between 1 and 500 when present.
+4. The form checks each slot for an **overlap** against the teacher's other groups and shows a warning
    banner: "This overlaps <Group X> on Saturdays at 4:00 PM." The teacher may continue anyway.
-5. **[WRITE]** The group is created with a `null` schedule and a generated set of sessions for the
-   next 4 weeks. Audit: `group.created`.
+5. **[WRITE]** The group and its slots are created, with a generated set of sessions for **each slot**
+   over the next 4 weeks. Audit: `group.created`.
 6. Teacher lands on the group detail page: roster (empty), upcoming sessions, and actions to enrol
    students and add a one-off session.
 
@@ -167,11 +169,13 @@ not navigation sketches.
 | Case | Behaviour |
 |---|---|
 | Duplicate group name | Allowed (names are not unique), but the list shows a "same name" hint. |
-| Slot conflict | Warning, not a block. |
+| Slot overlap | Warning, not a block. |
+| Two slots on the same weekday and time | Refused by validation; one meeting cannot be listed twice. |
+| Room or capacity omitted on a slot | Allowed; the slot inherits no room and no roster cap. |
 | Group with 0 students | Allowed. The group appears in pickers; sessions show "0 students expected". |
 | Group archived | Archived groups disappear from pickers but keep their history. |
 
-**AC:** F-P1-04, F-P1-05, F-P0-07
+**AC:** F-P1-04, F-P1-05, F-P0-07, `ADR-0029`
 
 ---
 
@@ -291,7 +295,7 @@ teacher is willing to let groups be created)
 
 ## F8 — Take attendance for a session
 
-**Actor:** Teacher · **Tier:** P1 · **Preconditions:** a session exists for a group
+**Actor:** Teacher · **Tier:** P1 · **Preconditions:** a session exists and is not cancelled
 
 **Layout**
 - Tablet/desktop: two panes — session picker (left, 320 px) and roster (right).
@@ -299,28 +303,36 @@ teacher is willing to let groups be created)
   with a back link.
 
 1. Teacher opens **Attendance**. The session picker lists sessions from 3 days ago forward (max 24
-   items), sorted by date then time, each showing: group colour dot, group name, date, time, and a
-   status indicator — a green check for **recorded**, a **Today** badge for today's, nothing otherwise.
+   items), sorted by date then time, each showing: group colour dot, group name (or grade label, or
+   "Independent session"), date, time, and a status indicator — a green check for **recorded**, a
+   **Today** badge for today's, nothing otherwise.
 2. Today's session is auto-selected on first load if one exists.
-3. The roster pane loads: the group's **enrolled students**, in enrolment order.
+3. The roster pane loads the session's **attendance set** (`ADR-0029`):
+   - **Group session:** the group's enrolled students, in enrolment order.
+   - **Grade-level session:** the snapshot materialised at creation, plus anyone the teacher added.
+   - **Independent session:** only the students the teacher has added; the screen offers a workspace
+     student search and a per-row add control. It never fills itself from the workspace.
    - **A student with no mark yet shows as "not recorded"** — visually distinct from "absent".
 4. Teacher marks each student with one of four buttons: **Present** / **Absent** / **Late** /
    **Excused**. The selected button takes the status colour. Only one mark per student is active at a
    time (radio semantics).
-5. The header shows a live summary: `12 marked · 3 not recorded` and the running attendance rate for
+5. On a group-less session the teacher can add or remove a student at any time while the session is
+   not cancelled. Removing a student who already has a mark is refused.
+6. The header shows a live summary: `12 marked · 3 not recorded` and the running attendance rate for
    the session.
-6. Teacher taps **"Mark all present"** → all unmarked rows become Present. The action is undoable
+7. Teacher taps **"Mark all present"** → all unmarked rows become Present. The action is undoable
    (a single "Undo" toast action).
-7. Teacher taps **"Save attendance"**.
-8. **[WRITE]** All marks for the session are written in **one atomic server-side transaction**:
+8. Teacher taps **"Save attendance"**.
+9. **[WRITE]** All marks for the session are written in **one atomic server-side transaction**:
    - Each mark creates or updates the attendance record and appends an **attendance revision**
      (F-P1-07) if the value changed.
-   - The session status becomes `completed`.
+   - The session status becomes `completed`. This is a **status marker, not a lock**: the roster and
+     its marks stay editable afterwards (`ADR-0029`).
    - Each affected student's `consecutive_absences` and derived `status` are recomputed from the
      **full attendance history**, not incrementally.
    - Audit: `attendance.saved` (session-level) + `attendance.marked` (per student).
-9. The toast confirms **"Attendance saved"**. The picker now shows a green check for that session.
-10. The dashboard, student profiles, and reports reflect the new values immediately.
+10. The toast confirms **"Attendance saved"**. The picker now shows a green check for that session.
+11. The dashboard, student profiles, and reports reflect the new values immediately.
 
 **Error / edge cases**
 
@@ -328,6 +340,11 @@ teacher is willing to let groups be created)
 |---|---|
 | Student added to the group after the session date | The student is **excluded** from that session's roster; they appear in later sessions. |
 | Student archived before the session date | Excluded from that session's roster. |
+| Grade-level session, student enrolled after creation | Not added automatically; the teacher adds them by hand. A roster edit is a visible act, never a silent follow of enrollment. |
+| Independent session with no students | Renders an empty-state prompt with the student search; saving with 0 marks is allowed. |
+| Add a student already on the roster | Refused with "already on this session's roster"; no duplicate row. |
+| Remove a student who already has a mark | Refused with "this student already has attendance recorded"; corrections remain the only way to change a mark. |
+| Mark or roster edit on a cancelled session | Refused; cancelled sessions stay excluded from attendance and reports. |
 | Save with 0 marks | Allowed; the session is recorded as "recorded, no marks", and the rate shows `—`. |
 | Network failure mid-save | The transaction either fully applied or did not. The client shows "could not save — retry"; the retry is idempotent by (session, student, mark) and does not create duplicate revisions. |
 | Two devices saving the same session | Last write wins per student, and the losing write produces a revision showing the previous value — never a silent overwrite. |
@@ -335,13 +352,18 @@ teacher is willing to let groups be created)
 | `Excused` | Excluded from the absence streak and from the rate denominator; shown as a neutral badge. |
 | Very long roster (200 students) | Virtualised list; save is a single transaction completing in < 2 s (F-P3-05). |
 
-**AC:** F-P1-06, F-P1-07, F-P1-05
+**AC:** F-P1-06, F-P1-07, F-P1-05, `ADR-0029`
 
 ---
 
 ## F9 — Correct an attendance record
 
-**Actor:** Teacher · **Tier:** P1 · **Preconditions:** a session already has attendance recorded
+**Actor:** Teacher · **Tier:** P1 · **Preconditions:** a session already has attendance recorded and is
+not cancelled
+
+Correction is a first-class action, not a reopening: a non-cancelled session can be corrected at any
+time, whether it is `scheduled`, `started`, or `completed` (`ADR-0029`). "Close session" records that
+the lesson ended; it never freezes the record.
 
 1. Teacher opens **Attendance** and selects a recorded session (it shows a green check).
 2. The current marks load. Each student row that has been corrected before shows a small **"corrected"**
@@ -370,12 +392,14 @@ teacher is willing to let groups be created)
 | Case | Behaviour |
 |---|---|
 | Correcting a session from last month | Allowed. The rate for that session and all subsequent recomputed values update. |
+| Correcting a `completed` session | Allowed. `completed` is a status marker, not a write lock. |
+| Correcting a cancelled session | Refused; the record is immutable for attendance purposes and remains excluded from reports. |
 | Correcting back to the original value | Allowed; it still creates a revision, so the audit trail shows the teacher considered and changed it. |
 | Missing reason | Allowed; the revision records `reason = null` and the UI shows "no reason given". |
 | An assistant without `attendance` permission | Cannot reach this screen, and the API returns `403` (F-P2-01). |
 | Deleting a session | Not possible; sessions are cancelled, never deleted, so corrections always have a referent. |
 
-**AC:** F-P1-07, F-P0-07
+**AC:** F-P1-07, F-P0-07, `ADR-0029`
 
 ---
 

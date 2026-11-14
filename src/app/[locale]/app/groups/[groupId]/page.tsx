@@ -134,6 +134,12 @@ export default async function GroupDetailsPage({
     capacity: t("capacity"),
     color: t("color"),
     teacherNote: t("teacherNote"),
+    slotsLabel: t("slotsLabel"),
+    addSlot: t("addSlot"),
+    removeSlot: t("removeSlot"),
+    roomPlaceholder: t("roomPlaceholder"),
+    atLeastOneScheduleSlot: t("atLeastOneScheduleSlot"),
+    slotOverlapsSameGroup: t("slotOverlapsSameGroup"),
     saveChanges: t("saveChanges"),
     saving: tCommon("saving"),
   };

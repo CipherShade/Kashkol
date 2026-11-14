@@ -18,6 +18,7 @@ afterEach(async () => {
     await withScope({ workspaceId: FIXTURES }, async (tx) => {
       await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId: item.groupId } });
       await tx.teachingSession.deleteMany({ where: { workspaceId: FIXTURES, groupId: item.groupId } });
+      await tx.groupScheduleSlot.deleteMany({ where: { workspaceId: FIXTURES, groupId: item.groupId } });
       await tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: item.groupId } });
       await tx.student.deleteMany({ where: { workspaceId: FIXTURES, id: item.studentId } });
     });
@@ -51,12 +52,8 @@ describe("students and groups services", () => {
         subjectId: null,
         subjectName: null,
         grade: null,
-        room: null,
         color: "indigo",
-        weekday: 0,
-        startTime: "16:00",
-        endTime: "17:00",
-        capacity: 20,
+        slots: [{ weekday: 0, startTime: "16:00", endTime: "17:00", room: null, capacity: 20 }],
         teacherNote: null,
       },
       { requestId: randomUUID() },

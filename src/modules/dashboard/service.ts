@@ -162,9 +162,10 @@ export async function getDashboardData(
 
   function resolvablePrice(session: {
     pricePerStudentMinor: number | null;
-    group: { defaultPricePerStudentMinor: number | null };
+    group: { defaultPricePerStudentMinor: number | null } | null;
   }): number | null {
-    const price = session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+    const price =
+      session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
     return price != null && price > 0 ? price : null;
   }
 
@@ -310,12 +311,15 @@ export async function getDashboardData(
       todaySessions.push({
         id: session.id,
         groupId: session.groupId,
-        groupName: session.group.name,
-        groupColor: session.group.color,
+        groupName: session.group?.name ?? "",
+        groupColor: session.group?.color ?? "",
+        gradeLabel: session.gradeLabel,
         startsAt: session.startsAt.toISOString(),
         endsAt: session.endsAt ? session.endsAt.toISOString() : null,
         status: session.status,
-        enrolledStudentsCount: activeStudentsByGroup.get(session.groupId) ?? 0,
+        enrolledStudentsCount: session.groupId
+          ? activeStudentsByGroup.get(session.groupId) ?? 0
+          : null,
         hasAttendance,
         meetingUrl,
         location: session.location,
@@ -337,7 +341,7 @@ export async function getDashboardData(
     raw.attendanceMarks.map((m) => ({
       studentId: m.studentId,
       groupId: m.session.groupId,
-      groupName: m.session.group.name,
+      groupName: m.session.group?.name ?? m.session.gradeLabel ?? "",
       sessionId: m.sessionId,
       date: m.session.startsAt.toISOString().slice(0, 10),
       mark: m.mark,
@@ -495,7 +499,7 @@ export async function getDashboardData(
       studentName: p.student
         ? `${p.student.firstName} ${p.student.lastName}`
         : p.session
-          ? `${p.session.group.name} · ${p.session.startsAt.toISOString().slice(0, 10)}`
+          ? `${p.session.group?.name ?? p.session.gradeLabel ?? ""} · ${p.session.startsAt.toISOString().slice(0, 10)}`
           : "—",
       amountMinor: p.amountMinor,
       paidOn: p.paidOn.toISOString().slice(0, 10),

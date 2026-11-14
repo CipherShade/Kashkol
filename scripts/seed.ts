@@ -33,6 +33,7 @@ const DELTA_OWNER_MEMBER_ID = "20000000-0000-4000-8000-000000000003";
 
 const NILE_SUBJECT_ID = "30000000-0000-4000-8000-000000000001";
 const NILE_GROUP_ID = "40000000-0000-4000-8000-000000000001";
+const NILE_GROUP_SLOT_ID = "40000000-0000-4000-8000-000000000010";
 const NILE_STUDENT_ID = "50000000-0000-4000-8000-000000000001";
 
 type SeedUser = {
@@ -232,13 +233,36 @@ async function seedNileWorkspace(): Promise<void> {
         subjectId: NILE_SUBJECT_ID,
         name: "رياضيات - السبت 4 مساءً",
         grade: "الصف الأول الثانوي",
+        color: "indigo",
+        scheduleSlots: {
+          create: {
+            id: NILE_GROUP_SLOT_ID,
+            weekday: 0,
+            startTime: new Date("1970-01-01T16:00:00.000Z"),
+            endTime: new Date("1970-01-01T17:30:00.000Z"),
+            capacity: 20,
+          },
+        },
+      },
+      update: { archivedAt: null },
+    });
+    await tx.groupScheduleSlot.upsert({
+      where: { id: NILE_GROUP_SLOT_ID },
+      create: {
+        id: NILE_GROUP_SLOT_ID,
+        workspaceId: NILE_WORKSPACE_ID,
+        groupId: NILE_GROUP_ID,
         weekday: 0,
         startTime: new Date("1970-01-01T16:00:00.000Z"),
         endTime: new Date("1970-01-01T17:30:00.000Z"),
         capacity: 20,
-        color: "indigo",
       },
-      update: { archivedAt: null, capacity: 20 },
+      update: {
+        weekday: 0,
+        startTime: new Date("1970-01-01T16:00:00.000Z"),
+        endTime: new Date("1970-01-01T17:30:00.000Z"),
+        capacity: 20,
+      },
     });
     await tx.student.upsert({
       where: { id: NILE_STUDENT_ID },

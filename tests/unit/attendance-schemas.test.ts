@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { attendanceMarkValueSchema, bulkMarkAttendanceSchema, correctAttendanceSchema, scanQrSchema } from "@/modules/attendance/schemas";
+import {
+  addSessionAttendeeSchema,
+  attendanceMarkValueSchema,
+  bulkMarkAttendanceSchema,
+  correctAttendanceSchema,
+  removeSessionAttendeeSchema,
+  scanQrSchema,
+} from "@/modules/attendance/schemas";
 
 describe("attendance schemas", () => {
   it("accepts valid attendance marks", () => {
@@ -34,5 +41,16 @@ describe("attendance schemas", () => {
       studentId: "01932e77-9f42-7a60-b3e2-8c9a12345679",
     });
     expect(result.studentId).toBeDefined();
+  });
+
+  it("validates session attendee add and remove with session and student ids", () => {
+    const input = {
+      sessionId: "01932e77-9f42-7a60-b3e2-8c9a12345678",
+      studentId: "01932e77-9f42-7a60-b3e2-8c9a12345679",
+    };
+    expect(addSessionAttendeeSchema.parse(input)).toEqual(input);
+    expect(removeSessionAttendeeSchema.parse(input)).toEqual(input);
+    expect(() => addSessionAttendeeSchema.parse({ ...input, studentId: "not-a-uuid" })).toThrow();
+    expect(() => removeSessionAttendeeSchema.parse({ sessionId: input.sessionId })).toThrow();
   });
 });

@@ -15,33 +15,10 @@ export type GroupColor = (typeof GROUP_COLOR_PALETTE)[number];
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-export const createGroupSchema = z
+// One recurring weekly meeting of a group (ADR-0029). A group may meet
+// several times a week; each slot carries its own room and capacity.
+export const groupSlotSchema = z
   .object({
-    name: z
-      .string()
-      .trim()
-      .min(1, { message: "groupNameRequired" })
-      .max(100, { message: "groupNameTooLong" }),
-    subjectId: z.string().uuid({ message: "invalidSubjectId" }).optional().nullable(),
-    subjectName: z.string().trim().max(60).optional().nullable(),
-    grade: z
-      .string()
-      .trim()
-      .max(40, { message: "gradeTooLong" })
-      .optional()
-      .nullable()
-      .transform((v) => (v && v.length > 0 ? v : null)),
-    room: z
-      .string()
-      .trim()
-      .max(60, { message: "roomTooLong" })
-      .optional()
-      .nullable()
-      .transform((v) => (v && v.length > 0 ? v : null)),
-    color: z
-      .enum(GROUP_COLOR_PALETTE, { message: "invalidColor" })
-      .optional()
-      .default("indigo"),
     weekday: z
       .coerce
       .number()
@@ -59,6 +36,13 @@ export const createGroupSchema = z
       .optional()
       .nullable()
       .transform((v) => (v && v.length > 0 ? v : null)),
+    room: z
+      .string()
+      .trim()
+      .max(60, { message: "roomTooLong" })
+      .optional()
+      .nullable()
+      .transform((v) => (v && v.length > 0 ? v : null)),
     capacity: z
       .coerce
       .number()
@@ -67,6 +51,33 @@ export const createGroupSchema = z
       .max(500, { message: "capacityMax" })
       .optional()
       .nullable(),
+  });
+
+export type GroupSlotInput = z.infer<typeof groupSlotSchema>;
+
+export const createGroupSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, { message: "groupNameRequired" })
+      .max(100, { message: "groupNameTooLong" }),
+    subjectId: z.string().uuid({ message: "invalidSubjectId" }).optional().nullable(),
+    subjectName: z.string().trim().max(60).optional().nullable(),
+    grade: z
+      .string()
+      .trim()
+      .max(40, { message: "gradeTooLong" })
+      .optional()
+      .nullable()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+    color: z
+      .enum(GROUP_COLOR_PALETTE, { message: "invalidColor" })
+      .optional()
+      .default("indigo"),
+    slots: z
+      .array(groupSlotSchema)
+      .min(1, { message: "atLeastOneScheduleSlot" }),
     teacherNote: z
       .string()
       .trim()
@@ -76,13 +87,38 @@ export const createGroupSchema = z
       .transform((v) => (v && v.length > 0 ? v : null)),
     defaultPricePerStudentMinor: z.coerce.number().int().min(0).nullable().optional(),
   })
-  .refine(
-    (data) => {
-      if (!data.endTime) return true;
-      return data.endTime > data.startTime;
-    },
-    { message: "endTimeMustBeAfterStartTime", path: ["endTime"] },
-  );
+  .superRefine((data, ctx) => {
+    // No two slots of the same group may overlap in time on the same weekday,
+    // and a slot's end must be after its start.
+    const seen = new Map<number, { startTime: string; endTime: string | null }[]>();
+    for (const slot of data.slots) {
+      if (slot.endTime && slot.endTime <= slot.startTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "endTimeMustBeAfterStartTime",
+          path: ["slots"],
+        });
+        return;
+      }
+      const day = seen.get(slot.weekday) ?? [];
+      const newStart = slot.startTime;
+      const newEnd = slot.endTime ?? slot.startTime;
+      for (const other of day) {
+        const otherStart = other.startTime;
+        const otherEnd = other.endTime ?? other.startTime;
+        if (newStart < otherEnd && newEnd > otherStart) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "slotOverlapsSameGroup",
+            path: ["slots"],
+          });
+          return;
+        }
+      }
+      day.push({ startTime: slot.startTime, endTime: slot.endTime });
+      seen.set(slot.weekday, day);
+    }
+  });
 
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 
@@ -102,42 +138,13 @@ export const updateGroupSchema = z
       .optional()
       .nullable()
       .transform((v) => (v && v.length > 0 ? v : null)),
-    room: z
-      .string()
-      .trim()
-      .max(60, { message: "roomTooLong" })
-      .optional()
-      .nullable()
-      .transform((v) => (v && v.length > 0 ? v : null)),
     color: z
       .enum(GROUP_COLOR_PALETTE, { message: "invalidColor" })
       .optional()
       .default("indigo"),
-    weekday: z
-      .coerce
-      .number()
-      .int()
-      .min(0, { message: "weekdayRange" })
-      .max(6, { message: "weekdayRange" }),
-    startTime: z
-      .string()
-      .trim()
-      .regex(timeRegex, { message: "invalidStartTimeFormat" }),
-    endTime: z
-      .string()
-      .trim()
-      .regex(timeRegex, { message: "invalidEndTimeFormat" })
-      .optional()
-      .nullable()
-      .transform((v) => (v && v.length > 0 ? v : null)),
-    capacity: z
-      .coerce
-      .number()
-      .int()
-      .min(1, { message: "capacityMin" })
-      .max(500, { message: "capacityMax" })
-      .optional()
-      .nullable(),
+    slots: z
+      .array(groupSlotSchema)
+      .min(1, { message: "atLeastOneScheduleSlot" }),
     teacherNote: z
       .string()
       .trim()
@@ -147,13 +154,36 @@ export const updateGroupSchema = z
       .transform((v) => (v && v.length > 0 ? v : null)),
     defaultPricePerStudentMinor: z.coerce.number().int().min(0).nullable().optional(),
   })
-  .refine(
-    (data) => {
-      if (!data.endTime) return true;
-      return data.endTime > data.startTime;
-    },
-    { message: "endTimeMustBeAfterStartTime", path: ["endTime"] },
-  );
+  .superRefine((data, ctx) => {
+    const seen = new Map<number, { startTime: string; endTime: string | null }[]>();
+    for (const slot of data.slots) {
+      if (slot.endTime && slot.endTime <= slot.startTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "endTimeMustBeAfterStartTime",
+          path: ["slots"],
+        });
+        return;
+      }
+      const day = seen.get(slot.weekday) ?? [];
+      const newStart = slot.startTime;
+      const newEnd = slot.endTime ?? slot.startTime;
+      for (const other of day) {
+        const otherStart = other.startTime;
+        const otherEnd = other.endTime ?? other.startTime;
+        if (newStart < otherEnd && newEnd > otherStart) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "slotOverlapsSameGroup",
+            path: ["slots"],
+          });
+          return;
+        }
+      }
+      day.push({ startTime: slot.startTime, endTime: slot.endTime });
+      seen.set(slot.weekday, day);
+    }
+  });
 
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
 

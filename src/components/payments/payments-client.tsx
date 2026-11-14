@@ -9,8 +9,9 @@ import { minorUnitsToEgp } from "@/modules/payments/schemas";
 
 type SessionRevenue = {
   id: string;
-  groupId: string;
+  groupId: string | null;
   groupName: string;
+  gradeLabel: string | null;
   startsAt: string;
   pricePerStudentMinor: number | null;
   presentCount: number;
@@ -122,9 +123,11 @@ export function PaymentsClient({
   }
 
   const pageCount = Math.max(1, Math.ceil(data.pagination.paymentCount / data.pagination.pageSize));
+  const sessionLabel = (session: SessionRevenue) =>
+    session.groupName || session.gradeLabel || t("independentSession");
   const sessionOptions = data.sessions.map((session) => ({
     id: session.id,
-    label: `${session.groupName} · ${new Date(session.startsAt).toLocaleDateString()}`,
+    label: `${sessionLabel(session)} · ${new Date(session.startsAt).toLocaleDateString()}`,
   }));
 
   return (
@@ -174,7 +177,7 @@ export function PaymentsClient({
                 <tbody>
                   {data.sessions.map((session) => (
                     <tr key={session.id} className="border-t border-border">
-                      <td className="p-2">{session.groupName} · {new Date(session.startsAt).toLocaleDateString()}</td>
+                      <td className="p-2">{sessionLabel(session)} · {new Date(session.startsAt).toLocaleDateString()}</td>
                       <td className="p-2">{session.presentCount}</td>
                       <td className="p-2">{session.pricePerStudentMinor != null ? `${minorUnitsToEgp(session.pricePerStudentMinor)} EGP` : "—"}</td>
                       <td className="p-2">{session.expectedRevenueMinor != null ? `${minorUnitsToEgp(session.expectedRevenueMinor)} EGP` : "—"}</td>
@@ -262,7 +265,7 @@ export function PaymentsClient({
                     const session = data.sessions.find((candidate) => candidate.id === payment.sessionId);
                     return (
                       <tr key={payment.id} className="border-t border-border">
-                        <td className="p-2">{session ? `${session.groupName} · ${new Date(session.startsAt).toLocaleDateString()}` : t("unspecified")}</td>
+                        <td className="p-2">{session ? `${sessionLabel(session)} · ${new Date(session.startsAt).toLocaleDateString()}` : t("unspecified")}</td>
                         <td className="p-2">{minorUnitsToEgp(payment.amountMinor)} EGP</td>
                         <td className="p-2">{payment.method === "other" ? payment.methodLabel ?? t("other") : payment.method}</td>
                         <td className="p-2">{payment.paidOn}</td>

@@ -53,12 +53,13 @@ export async function getPayments(scope: Scope, query: PaymentQuery, now = new D
 
   const sessions = data.sessionRows.map((session) => {
     const price =
-      session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null;
+      session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
     const presentCount = presentClBySession.get(session.id) ?? 0;
     return {
       id: session.id,
       groupId: session.groupId,
-      groupName: session.group.name,
+      groupName: session.group?.name ?? "",
+      gradeLabel: session.gradeLabel,
       startsAt: session.startsAt.toISOString(),
       pricePerStudentMinor: price,
       presentCount,

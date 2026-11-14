@@ -31,10 +31,13 @@ type StudentPortalDetail = {
     id: string;
     name: string;
     grade: string | null;
-    room: string | null;
-    weekday: number;
-    startTime: string | null;
-    endTime: string | null;
+    slots: Array<{
+      weekday: number;
+      startTime: string | null;
+      endTime: string | null;
+      room: string | null;
+      capacity: number | null;
+    }>;
     subjectName: string | null;
   }>;
   upcomingSessions: Array<{
@@ -602,7 +605,9 @@ export function StudentPortalClient({
                   className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]"
                 >
                   {group.name}
-                  {group.startTime ? ` (${group.startTime})` : ""}
+                  {group.slots.length > 0
+                    ? ` (${group.slots.map((slot) => slot.startTime).filter(Boolean).join(" · ")})`
+                    : ""}
                 </span>
               ))}
             </div>

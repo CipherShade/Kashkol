@@ -58,10 +58,13 @@ erDiagram
     WORKSPACE ||--o{ SUBJECT : owns
     WORKSPACE ||--o{ GROUP : owns
     SUBJECT ||--o{ GROUP : classifies
+    GROUP ||--o{ GROUP_SCHEDULE_SLOT : meets
     GROUP ||--o{ ENROLLMENT : contains
     STUDENT ||--o{ ENROLLMENT : enrolled
     WORKSPACE ||--o{ STUDENT : owns
-    GROUP ||--o{ TEACHING_SESSION : schedules
+    GROUP |o--o{ TEACHING_SESSION : schedules
+    TEACHING_SESSION ||--o{ SESSION_ATTENDEE : rosters
+    STUDENT ||--o{ SESSION_ATTENDEE : attends
     TEACHING_SESSION ||--o{ SESSION_REVISION : revised
     TEACHING_SESSION ||--o{ ATTENDANCE_MARK : records
     STUDENT ||--o{ ATTENDANCE_MARK : receives
@@ -247,14 +250,30 @@ never normalised on write (`DM-12`).
 | `subject_id` | uuid nullable | FK |
 | `name` | text | Not unique; duplicates show a "same name" hint — `F4` |
 | `grade` | text nullable | |
-| `room` | text nullable | |
 | `color` | text | Key from the fixed accessible palette — `F-P1-04` AC-8 |
+| `teacher_note` | text nullable | |
+| `archived_at` | timestamptz nullable | Archived groups keep history — `F-P1-04` AC-6 |
+
+A group has **no** schedule, room, or capacity columns. Each of those belongs to a meeting, not to
+the group: a group meets one or more times a week and may use a different room or capacity per
+meeting (`ADR-0029`). The legacy `weekday`, `start_time`, `end_time`, `room`, and `capacity` columns
+were dropped after their values were copied into `group_schedule_slot`.
+
+#### `group_schedule_slot`
+
+| Column | Type | Notes |
+|---|---|---|
+| `workspace_id` | uuid | FK |
+| `group_id` | uuid | FK |
 | `weekday` | int | `0..6` where `0 = Saturday` — `A-02` |
 | `start_time` | `time` | Local wall-clock in the workspace timezone |
 | `end_time` | `time` nullable | |
+| `room` | text nullable | Room for **this** meeting |
 | `capacity` | int nullable | Optional maximum roster size; `1..500` when present |
-| `teacher_note` | text nullable | |
-| `archived_at` | timestamptz nullable | Archived groups keep history — `F-P1-04` AC-6 |
+
+One row per weekly meeting; a group may have several (`ADR-0029`). Sessions are generated per slot,
+so a group with two slots produces two sessions per week. The overlap warning (`F-P1-04` AC-7)
+compares slots across the workspace and remains a warning, not a block.
 
 `weekday` is an integer rather than a Postgres `DOW` so that `0 = Saturday` matches the product's
 week order and the calendar UI. The conversion is a single helper, `weekdayToDate()`, and is
@@ -308,16 +327,49 @@ append-only for the application role, and are excluded from audit diffs and port
 | Column | Type | Notes |
 |---|---|---|
 | `workspace_id` | uuid | FK |
-| `group_id` | uuid | FK |
+| `group_id` | uuid nullable | FK; null for a grade-level or independent session — `ADR-0029` |
+| `grade_label` | text nullable | Free-text grade for a grade-level session; null otherwise |
 | `starts_at` | timestamptz | UTC instant — `DM-8` |
 | `ends_at` | timestamptz nullable | |
-| `status` | `session_status` enum | `scheduled` / `completed` / `cancelled` |
-| `is_one_off` | boolean | True for a session created outside the weekly slot — `F-P1-05` AC-6 |
+| `status` | `session_status` enum | `scheduled` / `started` / `completed` / `cancelled` |
+| `is_one_off` | boolean | True for a session created outside the weekly slots — `F-P1-05` AC-6 |
+| `room` | text nullable | |
+| `location` | text nullable | |
+| `notes` | text nullable | |
 | `cancelled_at` | timestamptz nullable | |
 | `cancelled_by` | uuid nullable | |
 
+A session is one of three modes (`ADR-0029`):
+
+| Mode | `group_id` | `grade_label` | Roster |
+|---|---|---|---|
+| Group | set | null | The group's active `enrollment` rows |
+| Grade-level | null | set | Snapshot in `session_attendee` at creation (origin `grade`) |
+| Independent | null | null | `session_attendee` rows added by hand (origin `manual`) |
+
+`group_id` and `grade_label` are mutually exclusive and enforced by the shared Zod schema and the
+service. Only a session with `group_id` takes part in the group conflict check. A grade-level
+roster is a **snapshot**, not a live query: later enrollments do not move it, and the teacher edits
+it explicitly (`A-22`).
+
 Cancelled sessions are excluded from attendance denominators (`F-P1-05` AC-5) and are never deleted
-(`F1` error table: "sessions are cancelled, never deleted").
+(`F1` error table: "sessions are cancelled, never deleted"). `completed` is a status marker, not a
+write lock: attendance and corrections remain allowed on any non-cancelled session (`ADR-0029`).
+
+#### `session_attendee`
+
+| Column | Type | Notes |
+|---|---|---|
+| `workspace_id` | uuid | FK |
+| `session_id` | uuid | FK |
+| `student_id` | uuid | FK |
+| `origin` | `session_attendee_origin` enum | `grade` (snapshot at creation) or `manual` (teacher added) |
+
+The materialised roster of a **group-less** session (`ADR-0029`). Group sessions do not use it: their
+roster is the group's enrollments. `UNIQUE (workspace_id, session_id, student_id)` prevents a
+duplicate attendee; the composite tenant foreign keys use `ON DELETE RESTRICT`. A student on this
+table may be marked; a student who is not cannot. Removing an attendee who already has an
+`attendance_mark` is refused, so no recorded mark is discarded silently.
 
 #### `session_revision`
 
@@ -932,7 +984,7 @@ exist before any data is written.
 same migration** (`ARCHITECTURE.md` §19 rule 5). Migration 14 exists for tables whose policies
 depend on later tables only as a safety net; it must be empty if rule 5 was followed.
 
-**Implemented migrations (through 2026-11-11).** The repository currently applies the sequence in a
+**Implemented migrations (through 2026-11-14).** The repository currently applies the sequence in a
 consolidated form rather than one directory per row above:
 
 | Migration | Contents |
@@ -972,8 +1024,11 @@ consolidated form rather than one directory per row above:
 | `20261111000000_expired_online_exam_attempt_status` | Adds `expired` to the `online_exam_attempt_status` enum (`F-P3-01`) |
 | `20261113000001_homework_completion_mark_grants` | Adds `homework_completion_mark` grants and RLS policy support, and application-role grants (`ADR-0021`) |
 | `20261113000002_session_scoped_finance` | `payment.student_id` and `payment_adjustment.student_id` become nullable; adds the `payment_session_required_check` CHECK constraint; drops `attendance_mark.payment_verified`; adds partial index `payment(workspace_id, session_id)` where `session_id IS NOT NULL` (`ADR-0028`) |
+| `20261113000003_group_schedule_slots` | Adds `group_schedule_slot` (weekday, start/end time, room, capacity) with forced RLS, grants, and its tenant indexes; copies each group's former weekday/start/end into one slot; drops `group.weekday`, `group.start_time`, `group.end_time` (`ADR-0029`) |
+| `20261113000004_group_slot_drop_legacy_columns` | Drops `group.room` and `group.capacity`; room and capacity now live on `group_schedule_slot` (`ADR-0029`) |
+| `20261114000000_session_attendee` | `teaching_session.group_id` becomes nullable and `grade_label` is added; adds the `session_attendee_origin` enum and `session_attendee` table with composite tenant foreign keys, forced RLS, and application-role grants (`ADR-0029`) |
 
-The current local development database tracks all thirty-five migrations above. `student` and
+The current local development database tracks all thirty-eight migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

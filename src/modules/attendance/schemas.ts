@@ -113,6 +113,17 @@ export const rotateStudentQrSchema = z.object({
 
 export type RotateStudentQrInput = z.infer<typeof rotateStudentQrSchema>;
 
+export const addSessionAttendeeSchema = z.object({
+  sessionId: z.string().uuid({ message: "invalidSessionId" }),
+  studentId: z.string().uuid({ message: "invalidStudentId" }),
+});
+
+export type AddSessionAttendeeInput = z.infer<typeof addSessionAttendeeSchema>;
+
+export const removeSessionAttendeeSchema = addSessionAttendeeSchema;
+
+export type RemoveSessionAttendeeInput = AddSessionAttendeeInput;
+
 export function fieldErrorsFrom(error: z.ZodError): Record<string, string[]> {
   const fields: Record<string, string[]> = {};
   for (const issue of error.issues) {

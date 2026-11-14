@@ -546,15 +546,19 @@ export async function commitStudentsImport(
       } else if (mapping.action === "create") {
         if (!groupNameToId.has(normalized)) {
           const newGid = newUuidV7();
-          const defaultStartTime = new Date("1970-01-01T16:00:00Z");
           const created = await tx.group.create({
             data: {
               id: newGid,
               workspaceId: scope.workspaceId,
               name: groupName,
-              weekday: 0, // Saturday
-              startTime: defaultStartTime,
               color: "indigo",
+              scheduleSlots: {
+                create: {
+                  id: newUuidV7(),
+                  weekday: 0, // Saturday
+                  startTime: new Date("1970-01-01T16:00:00Z"),
+                },
+              },
             },
           });
           groupNameToId.set(normalized, created.id);

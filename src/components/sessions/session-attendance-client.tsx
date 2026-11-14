@@ -11,12 +11,19 @@ import { Icon } from "@/components/ui/icon";
 import { formatReport } from "@/modules/attendance/report";
 import { useToast } from "@/components/ui/toast";
 import type { SessionRevenueSummary } from "@/modules/payments/session-revenue";
+import type { SearchStudent } from "@/modules/search/schemas";
 import { QrScannerPanel } from "./qr-scanner-panel";
 
 export type AttendanceSession = {
   id: string;
+  /** Null for independent and grade-linked sessions. */
+  groupId: string | null;
+  /** Empty for independent and grade-linked sessions. */
   groupName: string;
+  /** Empty for independent and grade-linked sessions. */
   groupColor: string;
+  /** Set only for grade-linked sessions; null otherwise. */
+  gradeLabel: string | null;
   startsAt: string;
   endsAt: string | null;
   status: "scheduled" | "started" | "completed" | "cancelled";
@@ -54,7 +61,7 @@ type RosterResponse = {
   session: {
     id: string;
     status: string;
-    group: { name: string; color: string };
+    group: { name: string; color: string } | null;
     startsAt: string;
     endsAt: string | null;
     room: string | null;
@@ -126,8 +133,26 @@ export function SessionAttendanceClient({
   const [revenue, setRevenue] = useState<SessionRevenueSummary | null>(null);
   const [revenueLoading, setRevenueLoading] = useState(true);
   const [revenueError, setRevenueError] = useState(false);
+  // Group-less sessions (independent and grade-linked) keep a session-scoped
+  // roster that the teacher edits by hand; group sessions stay fixed to the
+  // group's enrollments.
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentResults, setStudentResults] = useState<SearchStudent[]>([]);
+  const [studentSearchStatus, setStudentSearchStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [addingStudentId, setAddingStudentId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<AttendanceRosterStudent | null>(null);
 
   const isOpen = session.status === "scheduled" || session.status === "started";
+  // Attendance can be recorded or corrected at any time; only a cancelled
+  // session is frozen (the scanner, manual marks, and corrections all honour this).
+  const isWritable = session.status !== "cancelled";
+  const isGroupSession = session.groupId !== null;
+  const trimmedStudentQuery = studentQuery.trim();
+  const rosterIds = useMemo(() => new Set(roster.map((s) => s.studentId)), [roster]);
+  const addableStudents = useMemo(
+    () => studentResults.filter((s) => !rosterIds.has(s.id)),
+    [studentResults, rosterIds],
+  );
 
   const fetchRevenue = useCallback(async () => {
     if (!canSeeFinancials) {
@@ -168,6 +193,81 @@ export function SessionAttendanceClient({
     );
     await fetchRevenue();
   }, [session.id, push, tRoot, fetchRevenue]);
+
+  useEffect(() => {
+    // Debounced workspace search for students to add to a group-less roster.
+    if (isGroupSession || !trimmedStudentQuery) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setStudentSearchStatus("loading");
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(trimmedStudentQuery)}`, {
+          signal: controller.signal,
+          headers: { accept: "application/json" },
+        });
+        if (!response.ok) throw new Error("search_failed");
+        const data = (await response.json()) as { students?: SearchStudent[] };
+        setStudentResults(Array.isArray(data.students) ? data.students : []);
+        setStudentSearchStatus("ready");
+      } catch {
+        if (controller.signal.aborted) return;
+        setStudentResults([]);
+        setStudentSearchStatus("error");
+      }
+    }, 160);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isGroupSession, trimmedStudentQuery]);
+
+  const addStudentToRoster = useCallback(
+    async (student: SearchStudent) => {
+      setAddingStudentId(student.id);
+      try {
+        const res = await fetch(`/api/sessions/${session.id}/attendees`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "add_session_attendee", studentId: student.id }),
+        });
+        if (!res.ok) {
+          push({ title: tRoot(await errorMessageKey(res, "errors.unknown")), tone: "danger" });
+          return;
+        }
+        setStudentQuery("");
+        setStudentResults([]);
+        setStudentSearchStatus("idle");
+        push({ title: t("addStudentSuccess"), tone: "success" });
+        await refresh();
+      } finally {
+        setAddingStudentId(null);
+      }
+    },
+    [session.id, push, tRoot, t, refresh],
+  );
+
+  const confirmRemoveStudent = useCallback(async () => {
+    if (!removeTarget) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/attendees`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "remove_session_attendee", studentId: removeTarget.studentId }),
+      });
+      if (!res.ok) {
+        push({ title: tRoot(await errorMessageKey(res, "errors.unknown")), tone: "danger" });
+        return;
+      }
+      push({ title: t("removeStudentSuccess"), tone: "success" });
+      setRemoveTarget(null);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }, [removeTarget, session.id, push, tRoot, t, refresh]);
 
   const summary = useMemo(() => {
     const counts = { present: 0, late: 0, absent: 0, excused: 0, unrecorded: 0, total: roster.length };
@@ -418,7 +518,7 @@ export function SessionAttendanceClient({
             />
             <CardBody className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                {isOpen && (
+                {isWritable && (
                   <Button
                     size="sm"
                     variant={showScanner ? "primary" : "outline"}
@@ -429,7 +529,7 @@ export function SessionAttendanceClient({
                     {showScanner ? t("stopCamera") : t("scanQr")}
                   </Button>
                 )}
-                {isOpen && (
+                {isWritable && (
                   <Button size="sm" variant="outline" onClick={() => void markAllPresent()} disabled={busy}>
                     <Icon name="check" size={16} />
                     {t("allPresent")}
@@ -454,6 +554,62 @@ export function SessionAttendanceClient({
                   {locale === "ar" ? "نسخ التقرير" : "Copy report"}
                 </Button>
               </div>
+
+              {!isGroupSession && isWritable && (
+                <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                  <label className="block text-sm font-medium" htmlFor="session-add-student">
+                    {t("addStudent")}
+                  </label>
+                  <input
+                    id="session-add-student"
+                    type="search"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    placeholder={t("addStudentPlaceholder")}
+                    value={studentQuery}
+                    onChange={(event) => setStudentQuery(event.target.value)}
+                    autoComplete="off"
+                    maxLength={80}
+                  />
+                  {trimmedStudentQuery ? (
+                    studentSearchStatus === "loading" ? (
+                      <p className="text-xs text-muted-foreground">{tRoot("Search.loading")}</p>
+                    ) : studentSearchStatus === "error" ? (
+                      <p className="text-xs text-destructive">{tRoot("Search.error")}</p>
+                    ) : addableStudents.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {tRoot("Search.noResults", { query: trimmedStudentQuery })}
+                      </p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {addableStudents.map((student) => (
+                          <li
+                            key={student.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded bg-background px-2 py-1.5 text-sm"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span>
+                                {student.firstName} {student.lastName}
+                              </span>
+                              {student.grade ? (
+                                <span className="text-xs text-muted-foreground">{student.grade}</span>
+                              ) : null}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={addingStudentId !== null}
+                              onClick={() => void addStudentToRoster(student)}
+                            >
+                              <Icon name="plus" size={14} />
+                              {t("addStudent")}
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  ) : null}
+                </div>
+              )}
 
               {showScanner && (
                 <div className="mb-4">
@@ -500,7 +656,15 @@ export function SessionAttendanceClient({
               )}
 
               {roster.length === 0 ? (
-                <EmptyState icon="users" title={t("noStudents")} description={t("noStudentsHint")} />
+                isGroupSession ? (
+                  <EmptyState icon="users" title={t("noStudents")} description={t("noStudentsHint")} />
+                ) : (
+                  <EmptyState
+                    icon="users"
+                    title={t("noStudentsIndependent")}
+                    description={t("noStudentsIndependentHint")}
+                  />
+                )
               ) : (
                 <ul className="ui-attendance-list">
                   {roster.map((student) => (
@@ -543,9 +707,9 @@ export function SessionAttendanceClient({
                               type="button"
                               role="radio"
                               aria-checked={student.mark === mark}
-                              disabled={!isOpen || busy}
+                              disabled={!isWritable || busy}
                               onClick={() => {
-                                if (!isOpen) return;
+                                if (!isWritable) return;
                                 if (student.mark === null || student.mark === undefined) {
                                   void saveMark(student, mark);
                                   return;
@@ -559,7 +723,7 @@ export function SessionAttendanceClient({
                             </button>
                           ))}
                         </div>
-                        {homework && canRecordHomework && isOpen && (
+                        {homework && canRecordHomework && isWritable && (
                           <div
                             className="ui-attendance-hw"
                             role="group"
@@ -588,6 +752,18 @@ export function SessionAttendanceClient({
                             </button>
                           </div>
                         )}
+                        {!isGroupSession && isWritable && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label={t("removeStudent")}
+                            title={t("removeStudent")}
+                            disabled={busy}
+                            onClick={() => setRemoveTarget(student)}
+                          >
+                            <Icon name="trash" size={14} />
+                          </Button>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -605,7 +781,7 @@ export function SessionAttendanceClient({
           </Card>
         </div>
 
-        <QrPanel sessionId={session.id} open={isOpen} checkinPathPrefix={checkinPathPrefix} />
+        <QrPanel sessionId={session.id} open={isWritable} checkinPathPrefix={checkinPathPrefix} />
       </div>
 
       <Dialog
@@ -632,6 +808,29 @@ export function SessionAttendanceClient({
               disabled={busy}
             >
               {t("closeConfirmSubmit")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        title={t("removeStudent")}
+      >
+        <div className="space-y-3">
+          <p className="text-sm">{t("removeStudentConfirm")}</p>
+          {removeTarget ? (
+            <p className="text-sm font-medium">
+              {removeTarget.firstName} {removeTarget.lastName}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setRemoveTarget(null)}>
+              {t("cancelCorrection")}
+            </Button>
+            <Button type="button" onClick={() => void confirmRemoveStudent()} disabled={busy}>
+              {t("removeStudent")}
             </Button>
           </div>
         </div>

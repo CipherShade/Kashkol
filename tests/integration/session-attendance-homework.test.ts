@@ -58,6 +58,11 @@ afterEach(async () => {
   for (const groupId of GROUPS) {
     await bestEffort(
       withScope({ workspaceId: FIXTURES }, (tx) =>
+        tx.groupScheduleSlot.deleteMany({ where: { workspaceId: FIXTURES, groupId } }),
+      ),
+    );
+    await bestEffort(
+      withScope({ workspaceId: FIXTURES }, (tx) =>
         tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: groupId } }),
       ),
     );
@@ -77,10 +82,14 @@ async function createFixture() {
         workspaceId: FIXTURES,
         name: `Roster ${randomUUID()}`,
         color: "indigo",
-        weekday: 6,
-        startTime: new Date("1970-01-01T16:00:00.000Z"),
-        endTime: new Date("1970-01-01T17:00:00.000Z"),
-        capacity: 30,
+        scheduleSlots: {
+          create: {
+            weekday: 6,
+            startTime: new Date("1970-01-01T16:00:00.000Z"),
+            endTime: new Date("1970-01-01T17:00:00.000Z"),
+            capacity: 30,
+          },
+        },
       },
     }),
   );
@@ -197,10 +206,14 @@ describe("session attendance screen homework context", () => {
           workspaceId: FIXTURES,
           name: `Other ${randomUUID()}`,
           color: "rose",
-          weekday: 6,
-          startTime: new Date("1970-01-01T16:00:00.000Z"),
-          endTime: new Date("1970-01-01T17:00:00.000Z"),
-          capacity: 10,
+          scheduleSlots: {
+            create: {
+              weekday: 6,
+              startTime: new Date("1970-01-01T16:00:00.000Z"),
+              endTime: new Date("1970-01-01T17:00:00.000Z"),
+              capacity: 10,
+            },
+          },
         },
       }),
     );

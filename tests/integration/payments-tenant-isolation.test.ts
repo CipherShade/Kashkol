@@ -33,8 +33,12 @@ describe("payment ledger tenant isolation", () => {
             id: groupId,
             workspaceId: NILE,
             name: "Isolation Group",
-            weekday: 1,
-            startTime: new Date("1970-01-01T16:00:00.000Z"),
+            scheduleSlots: {
+              create: {
+                weekday: 1,
+                startTime: new Date("1970-01-01T16:00:00.000Z"),
+              },
+            },
           },
         });
         await tx.teachingSession.create({
@@ -135,8 +139,12 @@ describe("payment ledger tenant isolation", () => {
             id: groupId,
             workspaceId: NILE,
             name: "Retry Group",
-            weekday: 1,
-            startTime: new Date("1970-01-01T16:00:00.000Z"),
+            scheduleSlots: {
+              create: {
+                weekday: 1,
+                startTime: new Date("1970-01-01T16:00:00.000Z"),
+              },
+            },
           },
         });
         await tx.teachingSession.create({

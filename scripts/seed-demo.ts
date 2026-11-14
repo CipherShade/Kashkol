@@ -168,6 +168,7 @@ const SUBJECTS = [
 
 type GroupSeed = {
   id: string;
+  slotId: string;
   subjectIndex: number;
   name: string;
   grade: string;
@@ -185,6 +186,7 @@ type GroupSeed = {
 const GROUPS: GroupSeed[] = [
   {
     id: BASE_GROUP_ID,
+    slotId: fid(0xa2, 1),
     subjectIndex: 0,
     name: "رياضيات — السبت 4 مساءً",
     grade: "الصف الأول الثانوي",
@@ -200,6 +202,7 @@ const GROUPS: GroupSeed[] = [
   },
   {
     id: fid(0x41, 2),
+    slotId: fid(0xa2, 2),
     subjectIndex: 1,
     name: "فيزياء — الأحد 6 مساءً",
     grade: "الصف الثاني الثانوي",
@@ -215,6 +218,7 @@ const GROUPS: GroupSeed[] = [
   },
   {
     id: fid(0x41, 3),
+    slotId: fid(0xa2, 3),
     subjectIndex: 2,
     name: "ميكانيكا — الثلاثاء 5 مساءً",
     grade: "الصف الثالث الثانوي",
@@ -230,6 +234,7 @@ const GROUPS: GroupSeed[] = [
   },
   {
     id: fid(0x41, 4),
+    slotId: fid(0xa2, 4),
     subjectIndex: 0,
     name: "رياضيات — الأربعاء 3 عصرًا",
     grade: "الصف الأول الثانوي",
@@ -426,23 +431,35 @@ async function seedSubjectsGroupsAndPeople(): Promise<void> {
           subjectId: SUBJECTS[group.subjectIndex].id,
           name: group.name,
           grade: group.grade,
-          room: group.room,
           color: group.color,
+          teacherNote: group.teacherNote,
+          defaultPricePerStudentMinor: group.pricePerStudentMinor,
+          searchKey: normalizeSearchTerm(group.name),
+        };
+        const slotData = {
           weekday: group.weekday,
           startTime: timeOnly(group.startHour, group.startMinute),
           endTime: timeOnly(
             group.startHour + Math.floor((group.startMinute + group.durationMinutes) / 60),
             (group.startMinute + group.durationMinutes) % 60,
           ),
+          room: group.room,
           capacity: group.capacity,
-          teacherNote: group.teacherNote,
-          defaultPricePerStudentMinor: group.pricePerStudentMinor,
-          searchKey: normalizeSearchTerm(group.name),
         };
         await tx.group.upsert({
           where: { id: group.id },
-          create: { id: group.id, ...data },
+          create: {
+            id: group.id,
+            ...data,
+            scheduleSlots: { create: { id: group.slotId, ...slotData } },
+          },
           update: { ...data, archivedAt: null },
+        });
+        // Keep the slot true on re-runs even when the group already existed.
+        await tx.groupScheduleSlot.upsert({
+          where: { id: group.slotId },
+          create: { id: group.slotId, workspaceId: NILE_WORKSPACE_ID, groupId: group.id, ...slotData },
+          update: slotData,
         });
       }
 
@@ -2840,7 +2857,7 @@ async function seedPortalsInvitationsReportsAndAudit(): Promise<void> {
           entityType: "group",
           entityId: BASE_GROUP_ID,
           action: "group.created",
-          diff: { name: GROUPS[0].name, weekday: GROUPS[0].weekday },
+          diff: { name: GROUPS[0].name, slots: 1 },
           createdAt: daysAgo(85, 12),
         },
         {

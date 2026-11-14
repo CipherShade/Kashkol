@@ -20,6 +20,13 @@ import {
   updateGroupAction,
 } from "@/app/actions/groups";
 import { GROUP_COLOR_PALETTE, type GroupColor } from "@/modules/groups/schemas";
+import {
+  SlotsEditor,
+  DEFAULT_SLOT_FORM_VALUE,
+  slotFormValueFromSlot,
+  slotFormValuesToJson,
+  type SlotFormValue,
+} from "@/components/groups/slots-editor";
 
 const COLOR_STYLES: Record<string, { bg: string; text: string; bar: string }> = {
   indigo: { bg: "bg-indigo-50 dark:bg-indigo-950/40", text: "text-indigo-700 dark:text-indigo-300", bar: "bg-indigo-600 dark:bg-indigo-500" },
@@ -64,12 +71,15 @@ type GroupDetailsData = {
   subjectId: string | null;
   subject: { id: string; name: string } | null;
   grade: string | null;
-  room: string | null;
   color: string;
-  weekday: number;
-  startTime: string;
-  endTime: string | null;
-  capacity: number | null;
+  slots: Array<{
+    id: string;
+    weekday: number;
+    startTime: string;
+    endTime: string | null;
+    room: string | null;
+    capacity: number | null;
+  }>;
   teacherNote: string | null;
   archivedAt: Date | string | null;
   enrollments: GroupEnrollment[];
@@ -99,7 +109,11 @@ export function GroupDetailsClient({
   const isAr = locale === "ar";
   const weekdayNames = isAr ? WEEKDAY_NAMES_AR : WEEKDAY_NAMES_EN;
   const styles = COLOR_STYLES[group.color] ?? COLOR_STYLES.indigo;
-  const isFull = group.capacity !== null && group.enrollments.length >= group.capacity;
+  const slotCapacities = group.slots
+    .map((slot) => slot.capacity)
+    .filter((capacity): capacity is number => capacity !== null);
+  const isFull =
+    slotCapacities.length > 0 && group.enrollments.length >= Math.min(...slotCapacities);
 
   // Modals state
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
@@ -117,12 +131,10 @@ export function GroupDetailsClient({
   const [editName, setEditName] = useState(group.name);
   const [editSubjectId, setEditSubjectId] = useState(group.subjectId ?? "");
   const [editGrade, setEditGrade] = useState(group.grade ?? "");
-  const [editRoom, setEditRoom] = useState(group.room ?? "");
+  const [editSlots, setEditSlots] = useState<SlotFormValue[]>(
+    group.slots.length > 0 ? group.slots.map(slotFormValueFromSlot) : [{ ...DEFAULT_SLOT_FORM_VALUE }],
+  );
   const [editColor, setEditColor] = useState<GroupColor>((group.color as GroupColor) || "indigo");
-  const [editWeekday, setEditWeekday] = useState(String(group.weekday));
-  const [editStartTime, setEditStartTime] = useState(group.startTime);
-  const [editEndTime, setEditEndTime] = useState(group.endTime ?? "");
-  const [editCapacity, setEditCapacity] = useState(group.capacity ? String(group.capacity) : "");
   const [editNote, setEditNote] = useState(group.teacherNote ?? "");
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -194,19 +206,20 @@ export function GroupDetailsClient({
     formData.set("name", editName);
     if (editSubjectId) formData.set("subjectId", editSubjectId);
     formData.set("grade", editGrade);
-    formData.set("room", editRoom);
     formData.set("color", editColor);
-    formData.set("weekday", editWeekday);
-    formData.set("startTime", editStartTime);
-    formData.set("endTime", editEndTime);
-    if (editCapacity) formData.set("capacity", editCapacity);
+    formData.set("slots", slotFormValuesToJson(editSlots));
     if (editNote) formData.set("teacherNote", editNote);
 
     startTransition(async () => {
       const res = await updateGroupAction(undefined, formData);
       if (res.status === "error") {
+        const slotError = res.fieldErrors?.slots?.[0];
+        const knownSlotError =
+          slotError === "slotOverlapsSameGroup" || slotError === "atLeastOneScheduleSlot"
+            ? labels[slotError]
+            : undefined;
         const key = res.errorKey ?? "errors.generic";
-        setEditError(labels[key] ?? key);
+        setEditError(knownSlotError ?? labels[key] ?? key);
       } else {
         setIsEditOpen(false);
         router.refresh();
@@ -275,18 +288,24 @@ export function GroupDetailsClient({
 
               {/* Meta details */}
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground pt-1">
-                <div className="flex items-center gap-1.5">
-                  <Icon name="clock" size="sm" className="text-muted-foreground" />
-                  <span>
-                    {weekdayNames[group.weekday]} • {group.startTime}
-                    {group.endTime ? ` - ${group.endTime}` : ""}
-                  </span>
+                <div className="flex items-start gap-1.5">
+                  <Icon name="clock" size="sm" className="text-muted-foreground mt-0.5" />
+                  <div className="space-y-0.5">
+                    {group.slots.map((slot) => (
+                      <span key={slot.id} className="block">
+                        {weekdayNames[slot.weekday] ?? ""} • {slot.startTime}
+                        {slot.endTime ? ` - ${slot.endTime}` : ""}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
-                {group.room && (
+                {group.slots.some((slot) => slot.room) && (
                   <div className="flex items-center gap-1.5">
                     <Icon name="map-pin" size="sm" className="text-muted-foreground" />
-                    <span>{group.room}</span>
+                    <span>
+                      {Array.from(new Set(group.slots.map((slot) => slot.room).filter(Boolean))).join(" · ")}
+                    </span>
                   </div>
                 )}
 
@@ -295,11 +314,7 @@ export function GroupDetailsClient({
                   <span className="font-medium text-foreground">
                     {group.enrollments.length}
                   </span>
-                  {group.capacity ? (
-                    <span>/ {group.capacity} {labels.students ?? "students"}</span>
-                  ) : (
-                    <span>{labels.students ?? "students"}</span>
-                  )}
+                  <span>{labels.students ?? "students"}</span>
                 </div>
               </div>
             </div>
@@ -817,57 +832,7 @@ export function GroupDetailsClient({
               />
             </FormField>
 
-            <FormField label={labels.roomLocation ?? "Room / Location"}>
-              <Input
-                value={editRoom}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditRoom(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FormField label={labels.weekday ?? "Day of Week"} required>
-              <Select
-                value={editWeekday}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditWeekday(e.target.value)}
-              >
-                {weekdayNames.map((name, idx) => (
-                  <option key={idx} value={String(idx)}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-
-            <FormField label={labels.startTime ?? "Start Time"} required>
-              <Input
-                type="time"
-                required
-                value={editStartTime}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditStartTime(e.target.value)}
-              />
-            </FormField>
-
-            <FormField label={labels.endTime ?? "End Time"}>
-              <Input
-                type="time"
-                value={editEndTime}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditEndTime(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label={labels.capacity ?? "Capacity (Max Students)"}>
-              <Input
-                type="number"
-                min="1"
-                max="500"
-                value={editCapacity}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditCapacity(e.target.value)}
-              />
-            </FormField>
-
+            {/* Color Swatch Picker */}
             <FormField label={labels.color ?? "Color Theme"}>
               <div className="flex items-center gap-2 pt-1 flex-wrap">
                 {GROUP_COLOR_PALETTE.map((color) => {
@@ -888,6 +853,14 @@ export function GroupDetailsClient({
               </div>
             </FormField>
           </div>
+
+          {/* Schedule slots: weekday + time + room + capacity per slot */}
+          <SlotsEditor
+            slots={editSlots}
+            onChange={setEditSlots}
+            labels={labels}
+            weekdayNames={weekdayNames}
+          />
 
           <FormField label={labels.teacherNote ?? "Private Teacher Notes"}>
             <Textarea

@@ -669,6 +669,7 @@
     "sessionStatus_started": "جارية",
     "sessionStatus_completed": "مكتملة",
     "sessionStatus_cancelled": "ملغاة",
+    "independentSession": "حصة مستقلة",
     "sessionEnrolledStudents": "{count} مسجل",
     "attendanceDone": "تم رصد الحضور",
     "attendancePending": "الحضور معلق",
@@ -977,7 +978,13 @@
     "guardian": "ولي الأمر",
     "grade": "الصف",
     "internalNotes": "ملاحظات داخلية",
-    "openWhatsApp": "فتح واتساب"
+    "openWhatsApp": "فتح واتساب",
+    "slotsLabel": "المواعيد الأسبوعية",
+    "addSlot": "إضافة موعد",
+    "removeSlot": "إزالة الموعد",
+    "roomPlaceholder": "مثال: قاعة 3 — سنتر النجاح",
+    "atLeastOneScheduleSlot": "أضف موعدًا أسبوعيًا واحدًا على الأقل.",
+    "slotOverlapsSameGroup": "يوجد موعدان متداخلان في نفس المجموعة في نفس اليوم."
   },
   "Payments": {
     "title": "المدفوعات",
@@ -989,6 +996,7 @@
     "filterSession": "تصفية حسب الجلسة",
     "allSessions": "كل الجلسات",
     "session": "الجلسة",
+    "independentSession": "حصة مستقلة",
     "attended": "الحاضرون والمتأخرون",
     "price": "سعر الجلسة",
     "chooseSession": "اختر جلسة",
@@ -1455,6 +1463,17 @@
     "app": "افتح التطبيق",
     "note": "لم يتغيّر أي شيء. إن وصلت من رابط داخل التطبيق، فقد تكون الصفحة مخططة لمرحلة لاحقة."
   },
+  "attendance": {
+    "errors": {
+      "sessionCancelled": "لا يمكن تسجيل الحضور في حصة ملغاة.",
+      "invalidQrCode": "رمز QR غير صالح أو تعذّر التحقق منه.",
+      "alreadyScanned": "تم تسجيل حضور هذا الطالب في هذه الحصة بالفعل.",
+      "studentNotEnrolled": "هذا الطالب غير موجود في كشف هذه الحصة.",
+      "attendeeAlreadyOnRoster": "هذا الطالب موجود بالفعل في كشف الحصة.",
+      "attendeeHasMarks": "لدى هذا الطالب سجلات حضور ولا يمكن إزالته من الكشف.",
+      "groupSessionRosterFixed": "حصص المجموعات تستخدم كشف الحضور المسجل للمجموعة."
+    }
+  },
   "errors": {
     "unauthorized": "يلزم تسجيل الدخول للمتابعة.",
     "forbidden": "لا تملك صلاحية لهذا الإجراء.",
@@ -1561,6 +1580,9 @@
     "today": "اليوم",
     "noSessions": "لا توجد جلسات",
     "group": "المجموعة",
+    "independent": "مستقلة (بدون مجموعة)",
+    "grade": "الصف",
+    "gradeLabel": "الصف الدراسي",
     "startsAt": "وقت البداية",
     "endsAt": "وقت النهاية",
     "reschedule": "إعادة الجدولة",
@@ -1598,6 +1620,7 @@
     "attendance": {
       "eyebrow": "الحضور",
       "pageTitle": "حضور الحصة",
+      "independentSession": "حصة مستقلة",
       "pageDescription": "سجّل حضور كل طالب، وراجع الملخص، ثم أغلق الحصة. التعديل بعد الإغلاق يتطلب سببًا.",
       "rosterTitle": "كشف الحضور",
       "refresh": "تحديث",
@@ -1606,6 +1629,8 @@
       "closeSession": "إغلاق الحصة",
       "sessionClosed": "أُغلقت الحصة",
       "noStudents": "لا يوجد طلاب مسجلون",
+      "noStudentsIndependent": "لا يوجد طلاب مسجلون بعد.",
+      "noStudentsIndependentHint": "أضف طلابًا من قائمة الطلاب لتسجيل حضورهم لهذه الحصة.",
       "noStudentsHint": "أضِف طلابًا إلى المجموعة لتسجيل حضورهم لهذه الحصة.",
       "sourceQr": "تسجيل عبر رمز QR",
       "sourceManual": "سُجل بواسطتك",
@@ -1628,7 +1653,7 @@
       "qrTitle": "تسجيل عبر رمز QR",
       "qrSessionLabel": "صالح لهذه الحصة فقط",
       "qrNotAvailable": "غير متاح",
-      "qrNotAvailableHint": "تسجيل QR متاح ما دامت الحصة مجدولة أو بدأت.",
+      "qrNotAvailableHint": "تسجيل QR متاح ما لم تلغَ الحصة.",
       "qrIdleHint": "اعرض الرمز على شاشتك؛ يمسح الطلاب الرمز بهواتفهم لتسجيل حضرهم بأنفسهم.",
       "issueQr": "عرض رمز QR",
       "qrIssuing": "جارٍ التحضير…",
@@ -1664,7 +1689,16 @@
       "homeworkQuestion": "هل حلّ الطالب الواجب ({title})؟",
       "homeworkYes": "نعم",
       "homeworkNo": "لا",
-      "homeworkToggleFailed": "تعذر حفظ حالة الواجب. حاول مرة أخرى."
+      "homeworkToggleFailed": "تعذر حفظ حالة الواجب. حاول مرة أخرى.",
+      "addStudent": "إضافة طالب",
+      "addStudentPlaceholder": "ابحث عن طالب بالاسم أو رقم الهاتف…",
+      "addStudentSuccess": "تمت إضافة الطالب إلى كشف الحصة",
+      "removeStudent": "إزالة طالب",
+      "removeStudentConfirm": "إزالة هذا الطالب من كشف الحصة؟",
+      "removeStudentSuccess": "تمت إزالة الطالب من كشف الحصة",
+      "studentNotOnRoster": "الطالب غير موجود في كشف الحصة",
+      "studentHasMarks": "الطالب لديه سجلات حضور ولا يمكن إزالته",
+      "groupSessionRosterFixed": "حصص المجموعات تستخدم كشف الحضور المسجل للمجموعة"
     }
   },
   "Portal": {

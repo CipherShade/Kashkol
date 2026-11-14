@@ -146,7 +146,7 @@ Workspace
 
 | ID | Decision |
 |---|---|
-| `D-03` | A **Group** carries a recurring weekly slot (weekday + start time + room). A **Session** is a single dated occurrence of a group. Sessions are materialised per group for a rolling horizon and are individually editable/cancellable without mutating the group's slot. |
+| `D-03` | A **Group** carries one or more recurring weekly slots (weekday + start time + optional end time + room + capacity). A **Session** is a single dated occurrence of a slot, a grade level, or an independent class. Sessions are materialised per slot for a rolling horizon and are individually editable/cancellable without mutating the group's slots. **Amended by `ADR-0029`** (2026-11-14): multiple slots per group; a session may have no group at all. |
 | `D-04` | Attendance marks are exactly four: `present`, `absent`, `late`, `excused`. |
 | `D-05` | Student status (`active` / `at_risk` / `inactive`) is **derived**, never stored as truth. It is recomputed from consecutive absences against workspace thresholds (prototype default `at_risk ≥ 2`, `inactive ≥ 4`) whenever attendance changes. The derived value may be cached but the source of truth is the attendance record. |
 | `D-06` | `excused` does **not** count toward the absence streak and does **not** count in the attendance denominator (see `A-05`). |
@@ -545,11 +545,13 @@ room, so that sessions and rosters are organised.
 **Dependencies:** F-P0-06, F-P1-02.
 
 **Acceptance criteria**
-1. A group has: name, subject, grade, room, colour, and a recurring weekly slot (weekday + start time
-   + optional end time + optional teacher note).
+1. A group has: name, subject, grade, colour, and one or more recurring weekly slots. Each slot has
+   a weekday, a start time, an optional end time, an optional room, and an optional capacity
+   (`ADR-0029`, superseding the single-slot form of this criterion).
 2. A group's name defaults to a composed label (e.g. `Physics — Saturday 4 PM`) but is fully editable.
-3. Group cards show subject, name, schedule, room, and enrolled student count; they are arranged in a
-   responsive grid (1 column ≤ 480 px, 2 columns ≤ 900 px, 3+ above).
+3. Group cards show subject, name, schedule (one or more slots, with each slot's room when set), and
+   enrolled student count; they are arranged in a responsive grid (1 column ≤ 480 px, 2 columns ≤
+   900 px, 3+ above).
 4. Opening a group shows: roster table (name, attendance %, status), upcoming sessions, and actions to
    add a session for this group and to enrol/unenrol students.
 5. Enrolling a student in a second group keeps both rosters consistent; group-scoped attendance and
@@ -578,18 +580,26 @@ and can reschedule a single lesson.
    agreeing.
 3. Navigation: previous week / this week / next week, plus a "Today" shortcut. The current week is
    highlighted and today's column is visually distinguished.
-4. Sessions are auto-generated from group weekly slots for a rolling horizon (default 4 weeks ahead,
-   configurable) and are individually editable (date/time/group) and cancellable.
+4. Sessions are auto-generated from **every** group weekly slot for a rolling horizon (default 4
+   weeks ahead, configurable) and are individually editable (date/time/group) and cancellable.
 5. Cancelling a session does **not** delete the group slot and is marked as cancelled rather than
    removed, so that history stays explainable. A cancelled session is excluded from attendance and
    from attendance-rate denominators.
-6. Creating a one-off session outside the regular slot is supported.
+6. Creating a one-off session outside the regular slot is supported. The session may belong to a
+   group, to a grade level, or to no group at all (an independent session).
 7. Timezone is explicit: sessions are stored with a UTC instant plus the workspace timezone for
    display; the prototype's `toISOString()` UTC-shift bug (dates can be off by one around midnight in
    `Africa/Cairo`) must not occur.
 8. On mobile, the week view becomes a single-column agenda list grouped by day, with a day picker.
 9. A past session with no attendance recorded is visibly marked as **unrecorded** and appears in the
    teacher's to-do list.
+
+**Amended by `ADR-0029` (2026-11-14).** A group may have several weekly slots, and a session may be
+group-less. `group_id` and `grade_label` are mutually exclusive. A grade-level session materialises
+its roster at creation from students currently enrolled in groups with that grade and does not follow
+later enrollments; a teacher may add or remove students by hand. An independent session starts empty
+and gains students only by explicit addition. Attendance may be recorded or corrected at any time on
+a non-cancelled session; `completed` is a status marker, not a write lock.
 
 ---
 
@@ -603,7 +613,9 @@ late, or excused in a few taps, so that my records are accurate without slowing 
 **Acceptance criteria**
 1. Two-pane layout on tablet/desktop: a scrollable session picker on the side, and the roster on the
    main canvas. On mobile it becomes a stacked flow: pick session → mark roster.
-2. The roster is the group's **enrolled students** for that session. Students enrolled mid-week are
+2. The roster is the session's attendance set. For a group session it is the group's **enrolled
+   students**; for a grade-level or independent session it is the session roster materialised at
+   creation and edited explicitly by the teacher (`ADR-0029`). Students enrolled mid-week are
    included; students archived before the session date are excluded.
 3. Each student row offers exactly four marks: present, absent, late, excused. The selected mark is
    visually distinct via the status colour and is exposed to assistive technology as a radio group.
@@ -624,6 +636,12 @@ late, or excused in a few taps, so that my records are accurate without slowing 
     phone (no input lag beyond 100 ms per mark).
 11. Attendance is the **only** path to compute attendance rate; the prototype's stored-and-never-
     recomputed `attendancePct` field is removed as a source of truth.
+
+**Amended by `ADR-0029` (2026-11-14).** Marks may be recorded and corrected on any non-cancelled
+session regardless of its date or status; closing a session is a status change, not a write lock.
+A group-less session exposes a workspace student search and per-row add/remove on the attendance
+screen; a group session keeps its group roster and refuses manual edits. Removing a student who
+already has an attendance mark is refused, so no recorded mark is silently discarded.
 
 ---
 

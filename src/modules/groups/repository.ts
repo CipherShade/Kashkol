@@ -4,21 +4,30 @@ import { newUuidV7 } from "@/lib/id";
 import type { Scope } from "@/modules/tenancy/types";
 import type { GroupQueryParams } from "./schemas";
 
+export type GroupSlotItem = {
+  id: string;
+  weekday: number;
+  startTime: string;
+  endTime: string | null;
+  room: string | null;
+  capacity: number | null;
+};
+
 export type GroupListItem = {
   id: string;
   name: string;
   subject: { id: string; name: string } | null;
   grade: string | null;
-  room: string | null;
   color: string;
-  weekday: number;
-  startTime: string;
-  endTime: string | null;
-  capacity: number | null;
+  slots: GroupSlotItem[];
   teacherNote: string | null;
   enrolledCount: number;
   archivedAt: Date | null;
 };
+
+export function sortSlots<T extends { weekday: number; startTime: string }>(slots: T[]): T[] {
+  return [...slots].sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime));
+}
 
 export function parseTimeToDate(timeStr: string): Date {
   return new Date(`1970-01-01T${timeStr}:00Z`);
@@ -70,6 +79,7 @@ export async function findGroupById(scope: Scope, groupId: string) {
           take: 5,
           orderBy: { startsAt: "asc" },
         },
+        scheduleSlots: { orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
       },
     });
 
@@ -81,12 +91,15 @@ export async function findGroupById(scope: Scope, groupId: string) {
       subjectId: group.subjectId,
       subject: group.subject,
       grade: group.grade,
-      room: group.room,
       color: group.color,
-      weekday: group.weekday,
-      startTime: formatTimeFromDate(group.startTime) ?? "16:00",
-      endTime: formatTimeFromDate(group.endTime),
-      capacity: group.capacity,
+      slots: group.scheduleSlots.map((s) => ({
+        id: s.id,
+        weekday: s.weekday,
+        startTime: formatTimeFromDate(s.startTime) ?? "16:00",
+        endTime: formatTimeFromDate(s.endTime),
+        room: s.room,
+        capacity: s.capacity,
+      })),
       defaultPricePerStudentMinor: group.defaultPricePerStudentMinor,
       teacherNote: group.teacherNote,
       archivedAt: group.archivedAt,
@@ -112,14 +125,14 @@ export async function listGroups(scope: Scope, query: GroupQueryParams): Promise
     }
 
     if (query.weekday !== undefined) {
-      where.weekday = query.weekday;
+      where.scheduleSlots = { some: { weekday: query.weekday } };
     }
 
     if (query.search) {
       const term = query.search.trim();
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
-        { room: { contains: term, mode: "insensitive" } },
+        { scheduleSlots: { some: { room: { contains: term, mode: "insensitive" } } } },
         { subject: { name: { contains: term, mode: "insensitive" } } },
       ];
     }
@@ -128,6 +141,7 @@ export async function listGroups(scope: Scope, query: GroupQueryParams): Promise
       where,
       include: {
         subject: { select: { id: true, name: true } },
+        scheduleSlots: { orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
         _count: {
           select: {
             enrollments: {
@@ -136,26 +150,36 @@ export async function listGroups(scope: Scope, query: GroupQueryParams): Promise
           },
         },
       },
-      orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
     });
 
-    return groups.map((g) => {
-      return {
-        id: g.id,
-        name: g.name,
-        subject: g.subject,
-        grade: g.grade,
-        room: g.room,
-        color: g.color,
-        weekday: g.weekday,
-        startTime: formatTimeFromDate(g.startTime) ?? "16:00",
-        endTime: formatTimeFromDate(g.endTime),
-        capacity: g.capacity,
-        teacherNote: g.teacherNote,
-        enrolledCount: g._count.enrollments,
-        archivedAt: g.archivedAt,
-      };
-    });
+    return groups
+      .map((g) => {
+        return {
+          id: g.id,
+          name: g.name,
+          subject: g.subject,
+          grade: g.grade,
+          color: g.color,
+          slots: g.scheduleSlots.map((s) => ({
+            id: s.id,
+            weekday: s.weekday,
+            startTime: formatTimeFromDate(s.startTime) ?? "16:00",
+            endTime: formatTimeFromDate(s.endTime),
+            room: s.room,
+            capacity: s.capacity,
+          })),
+          teacherNote: g.teacherNote,
+          enrolledCount: g._count.enrollments,
+          archivedAt: g.archivedAt,
+        };
+      })
+      .sort((a, b) => {
+        const aFirst = a.slots[0];
+        const bFirst = b.slots[0];
+        if (!aFirst) return 1;
+        if (!bFirst) return -1;
+        return aFirst.weekday - bFirst.weekday || aFirst.startTime.localeCompare(bFirst.startTime);
+      });
   });
 }
 
@@ -169,26 +193,24 @@ export async function findGroupConflicts(
   },
 ) {
   return withScope(scope, async (tx) => {
-    const groupsOnSameDay = await tx.group.findMany({
+    const slotsOnSameDay = await tx.groupScheduleSlot.findMany({
       where: {
         workspaceId: scope.workspaceId,
         weekday: criteria.weekday,
-        archivedAt: null,
-        id: criteria.excludeGroupId ? { not: criteria.excludeGroupId } : undefined,
+        group: {
+          archivedAt: null,
+          id: criteria.excludeGroupId ? { not: criteria.excludeGroupId } : undefined,
+        },
       },
-      select: {
-        id: true,
-        name: true,
-        startTime: true,
-        endTime: true,
-        room: true,
+      include: {
+        group: { select: { id: true, name: true } },
       },
     });
 
     const newStart = criteria.startTime;
     const newEnd = criteria.endTime ?? criteria.startTime;
 
-    const conflicts = groupsOnSameDay.filter((other) => {
+    const conflicts = slotsOnSameDay.filter((other) => {
       const otherStart = formatTimeFromDate(other.startTime) ?? "00:00";
       const otherEnd = formatTimeFromDate(other.endTime) ?? otherStart;
 
@@ -197,8 +219,8 @@ export async function findGroupConflicts(
     });
 
     return conflicts.map((c) => ({
-      id: c.id,
-      name: c.name,
+      id: c.group.id,
+      name: c.group.name,
       startTime: formatTimeFromDate(c.startTime) ?? "16:00",
       endTime: formatTimeFromDate(c.endTime),
       room: c.room,
@@ -214,12 +236,14 @@ export async function insertGroupTx(
     name: string;
     subjectId?: string | null;
     grade?: string | null;
-    room?: string | null;
     color: string;
-    weekday: number;
-    startTime: string;
-    endTime?: string | null;
-    capacity?: number | null;
+    slots: {
+      weekday: number;
+      startTime: string;
+      endTime?: string | null;
+      room?: string | null;
+      capacity?: number | null;
+    }[];
     teacherNote?: string | null;
     defaultPricePerStudentMinor?: number | null;
   },
@@ -231,28 +255,38 @@ export async function insertGroupTx(
       name: data.name,
       subjectId: data.subjectId ?? null,
       grade: data.grade ?? null,
-      room: data.room ?? null,
       color: data.color,
-      weekday: data.weekday,
-      startTime: parseTimeToDate(data.startTime),
-      endTime: data.endTime ? parseTimeToDate(data.endTime) : null,
-      capacity: data.capacity ?? null,
       teacherNote: data.teacherNote ?? null,
       defaultPricePerStudentMinor: data.defaultPricePerStudentMinor ?? null,
     },
   });
 
-  // Generate sessions for rolling 4-week horizon (F4 AC-5)
-  await generateGroupUpcomingSessionsTx(
-    tx,
-    scope.workspaceId,
-    group.id,
-    data.weekday,
-    data.startTime,
-    data.endTime,
-    4,
-    data.defaultPricePerStudentMinor ?? null,
-  );
+  for (const slot of sortSlots(data.slots)) {
+    await tx.groupScheduleSlot.create({
+      data: {
+        id: newUuidV7(),
+        workspaceId: scope.workspaceId,
+        groupId: group.id,
+        weekday: slot.weekday,
+        startTime: parseTimeToDate(slot.startTime),
+        endTime: slot.endTime ? parseTimeToDate(slot.endTime) : null,
+        room: slot.room ?? null,
+        capacity: slot.capacity ?? null,
+      },
+    });
+
+    // Generate sessions for rolling 4-week horizon (F4 AC-5)
+    await generateGroupUpcomingSessionsTx(
+      tx,
+      scope.workspaceId,
+      group.id,
+      slot.weekday,
+      slot.startTime,
+      slot.endTime,
+      4,
+      data.defaultPricePerStudentMinor ?? null,
+    );
+  }
 
   return group;
 }
@@ -312,17 +346,19 @@ export async function updateGroupTx(
     name?: string;
     subjectId?: string | null;
     grade?: string | null;
-    room?: string | null;
     color?: string;
-    weekday?: number;
-    startTime?: string;
-    endTime?: string | null;
-    capacity?: number | null;
+    slots?: {
+      weekday: number;
+      startTime: string;
+      endTime?: string | null;
+      room?: string | null;
+      capacity?: number | null;
+    }[];
     teacherNote?: string | null;
     defaultPricePerStudentMinor?: number | null;
   },
 ) {
-  return tx.group.update({
+  const group = await tx.group.update({
     where: {
       id: groupId,
       workspaceId: scope.workspaceId,
@@ -331,20 +367,35 @@ export async function updateGroupTx(
       ...(data.name !== undefined ? { name: data.name } : {}),
       ...(data.subjectId !== undefined ? { subjectId: data.subjectId } : {}),
       ...(data.grade !== undefined ? { grade: data.grade } : {}),
-      ...(data.room !== undefined ? { room: data.room } : {}),
       ...(data.color !== undefined ? { color: data.color } : {}),
-      ...(data.weekday !== undefined ? { weekday: data.weekday } : {}),
-      ...(data.startTime !== undefined ? { startTime: parseTimeToDate(data.startTime) } : {}),
-      ...(data.endTime !== undefined
-        ? { endTime: data.endTime ? parseTimeToDate(data.endTime) : null }
-        : {}),
-      ...(data.capacity !== undefined ? { capacity: data.capacity } : {}),
       ...(data.teacherNote !== undefined ? { teacherNote: data.teacherNote } : {}),
       ...(data.defaultPricePerStudentMinor !== undefined
         ? { defaultPricePerStudentMinor: data.defaultPricePerStudentMinor }
         : {}),
     },
   });
+
+  if (data.slots !== undefined) {
+    await tx.groupScheduleSlot.deleteMany({
+      where: { workspaceId: scope.workspaceId, groupId },
+    });
+    for (const slot of sortSlots(data.slots)) {
+      await tx.groupScheduleSlot.create({
+        data: {
+          id: newUuidV7(),
+          workspaceId: scope.workspaceId,
+          groupId,
+          weekday: slot.weekday,
+          startTime: parseTimeToDate(slot.startTime),
+          endTime: slot.endTime ? parseTimeToDate(slot.endTime) : null,
+          room: slot.room ?? null,
+          capacity: slot.capacity ?? null,
+        },
+      });
+    }
+  }
+
+  return group;
 }
 
 export async function archiveGroupTx(

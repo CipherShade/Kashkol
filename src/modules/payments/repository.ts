@@ -27,6 +27,7 @@ export async function loadPaymentDashboard(
           select: {
             id: true,
             groupId: true,
+            gradeLabel: true,
             startsAt: true,
             pricePerStudentMinor: true,
             group: { select: { name: true, defaultPricePerStudentMinor: true } },
@@ -166,7 +167,7 @@ export async function getSessionRevenueDataTx(
   if (!session) return null;
   return {
     pricePerStudentMinor:
-      session.pricePerStudentMinor ?? session.group.defaultPricePerStudentMinor ?? null,
+      session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null,
     eligibleAttendanceCount: marks.length,
     payments,
   };

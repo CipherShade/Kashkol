@@ -42,6 +42,20 @@ function text(formData: FormData, key: string): string {
   return typeof val === "string" ? val : "";
 }
 
+function parseSlots(formData: FormData): { ok: true; slots: unknown[] } | { ok: false } {
+  const raw = formData.get("slots");
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return { ok: false };
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return { ok: false };
+    return { ok: true, slots: parsed };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function createGroupAction(
   _previous: FormActionState = initialFormState,
   formData: FormData,
@@ -51,17 +65,14 @@ export async function createGroupAction(
     const { scope } = await requireStaffSession();
     const ctx = await actionRequestContext();
 
+    const slotsParsed = parseSlots(formData);
     const raw = {
       name: text(formData, "name"),
       subjectId: text(formData, "subjectId") || null,
       subjectName: text(formData, "subjectName") || null,
       grade: text(formData, "grade") || null,
-      room: text(formData, "room") || null,
       color: text(formData, "color") || "indigo",
-      weekday: text(formData, "weekday"),
-      startTime: text(formData, "startTime"),
-      endTime: text(formData, "endTime") || null,
-      capacity: text(formData, "capacity") || null,
+      slots: slotsParsed.ok ? slotsParsed.slots : [],
       teacherNote: text(formData, "teacherNote") || null,
     };
 
@@ -72,17 +83,19 @@ export async function createGroupAction(
 
     const ignoreConflicts = formData.get("ignoreConflicts") === "true";
     if (!ignoreConflicts) {
-      const conflicts = await checkGroupSlotConflicts(scope, {
-        weekday: parsed.data.weekday,
-        startTime: parsed.data.startTime,
-        endTime: parsed.data.endTime ?? null,
-      });
-
-      if (conflicts.length > 0) {
-        return errorState("groups.conflictWarning", {
-          hasConflict: ["true"],
-          conflictingGroupName: [conflicts[0].name],
+      for (const slot of parsed.data.slots) {
+        const conflicts = await checkGroupSlotConflicts(scope, {
+          weekday: slot.weekday,
+          startTime: slot.startTime,
+          endTime: slot.endTime ?? null,
         });
+
+        if (conflicts.length > 0) {
+          return errorState("groups.conflictWarning", {
+            hasConflict: ["true"],
+            conflictingGroupName: [conflicts[0].name],
+          });
+        }
       }
     }
 
@@ -110,17 +123,14 @@ export async function updateGroupAction(
     const { scope } = await requireStaffSession();
     const ctx = await actionRequestContext();
 
+    const slotsParsed = parseSlots(formData);
     const raw = {
       id: text(formData, "id"),
       name: text(formData, "name"),
       subjectId: text(formData, "subjectId") || null,
       grade: text(formData, "grade") || null,
-      room: text(formData, "room") || null,
       color: text(formData, "color") || "indigo",
-      weekday: text(formData, "weekday"),
-      startTime: text(formData, "startTime"),
-      endTime: text(formData, "endTime") || null,
-      capacity: text(formData, "capacity") || null,
+      slots: slotsParsed.ok ? slotsParsed.slots : [],
       teacherNote: text(formData, "teacherNote") || null,
     };
 

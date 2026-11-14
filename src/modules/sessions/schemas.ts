@@ -12,7 +12,8 @@ export type SessionQueryParams = z.infer<typeof sessionQuerySchema>;
 
 export const createOneOffSessionSchema = z
   .object({
-    groupId: z.string().uuid({ message: "invalidGroupId" }),
+    groupId: z.string().uuid({ message: "invalidGroupId" }).optional().nullable(),
+    gradeLabel: z.string().trim().max(100, { message: "gradeLabelTooLong" }).optional().nullable(),
     startsAt: z.string().datetime({ message: "invalidStartTime" }),
     endsAt: z.string().datetime({ message: "invalidEndTime" }).optional().nullable(),
     reason: z.string().trim().max(500).optional().nullable(),
@@ -29,6 +30,10 @@ export const createOneOffSessionSchema = z
       return new Date(data.endsAt) > new Date(data.startsAt);
     },
     { message: "endTimeMustBeAfterStartTime", path: ["endsAt"] },
+  )
+  .refine(
+    (data) => !(data.groupId && data.gradeLabel),
+    { message: "groupAndGradeAreMutuallyExclusive", path: ["gradeLabel"] },
   );
 
 export type CreateOneOffSessionInput = z.infer<typeof createOneOffSessionSchema>;

@@ -21,10 +21,6 @@ const GROUP = {
   name: "Group One",
   color: "#0a84ff",
   grade: "Grade 9",
-  weekday: 1,
-  startTime: "16:00",
-  endTime: "17:30",
-  room: "R1",
   defaultPricePerStudentMinor: 500_000,
 };
 

@@ -14,7 +14,7 @@ export type FollowUpFlagReason = {
 export type FlagStudent = { id: string; firstName: string; lastName: string };
 export type AttendanceFact = {
   studentId: string;
-  groupId: string;
+  groupId: string | null;
   groupName: string;
   sessionId: string;
   date: string;

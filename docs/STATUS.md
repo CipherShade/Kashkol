@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-13 · **Status:** Theme-switch hydration loop on the public landing page fixed (§5.18); student portal sign-in QR removed; student QR attendance-only (`ADR-0027`, partially superseding `ADR-0026`): permanent teacher-generated passwords (`KSH-XXXX-XXXX`), shared phones across workspaces, attendance QR auto-created on student creation, separated credential/QR operations in the Portal Access section · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-14 · **Status:** Multiple weekly slots per group and sessions that are not tied to a group (§5.20, `ADR-0029`): per-slot room/time/capacity, grade-level snapshot rosters, independent sessions with an explicit student roster, and attendance recordable/correctable at any time on a non-cancelled session · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -8,7 +8,7 @@
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
 now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and
-thirty-three migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
+thirty-eight migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
 infrastructure, the core domain schema with Arabic search indexes, the bilingual shell,
@@ -25,7 +25,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (24 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (28 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -1093,6 +1093,59 @@ runtime. The field was removed and the client regenerated; zero code references 
 
 - Commit/push awaits owner direction; the change is uncommitted in the working tree.
 - `.vitest/` reporter output was produced during verification and is now git-ignored.
+
+### 5.20 Multiple weekly slots per group, three session modes, and any-time attendance on 2026-11-14 — `ADR-0029`
+
+Three core requests from the beta teacher were implemented and verified together, resolving discrepancies
+between the original specification and the reality of Egyptian tutoring operations:
+
+1. **Any-time attendance and corrections on non-cancelled sessions.**
+   - Attendance recording and corrections are permitted at any time, on any date, and in any status
+     (`scheduled`, `started`, or `completed`).
+   - "Close session" sets `status = completed`; it is an operational status marker, never a write lock.
+   - Cancelled sessions remain strictly read-only and immutable for attendance, QR scan, and roster mutations.
+   - Every mark mutation continues to record append-only, audited revisions (`ADR-0014`).
+
+2. **Multiple weekly schedule slots per group (`group_schedule_slot`).**
+   - Groups now have one or more weekly slots, each carrying its own `weekday` (0 = Saturday),
+     `start_time`, `end_time`, `room`, and `capacity`.
+   - Legacy single-slot columns on `group` (`weekday`, `start_time`, `end_time`, `room`, `capacity`) were dropped
+     after data migration (`20261113000003_group_schedule_slots`, `20261113000004_group_slot_drop_legacy_columns`).
+     `group_schedule_slot` is the sole source of truth for group schedules.
+   - Group sessions are generated per slot independently.
+   - The UI includes a bilingual `SlotsEditor` with dynamic slot additions, removals, validation, and overlap warnings.
+
+3. **Three session modes: group, grade-level, and independent.**
+   - Migration `20261114000000_session_attendee` made `teaching_session.group_id` nullable, added
+     `teaching_session.grade_label`, and introduced the `session_attendee` join table (`origin` enum: `'manual' | 'grade'`).
+   - **Group session:** `group_id` set, `grade_label` null. Roster derives from active enrollments; manual
+     attendee add/remove is rejected (`groupSessionRosterFixed`).
+   - **Grade-level session:** `group_id` null, `grade_label` set. At creation, the roster is snapshotted from
+     all active enrollments across groups with that grade label (`origin = 'grade'`). Later enrollment changes
+     do not silently modify the roster (`A-22`); teachers can manually add/remove students afterwards.
+   - **Independent session:** `group_id` null, `grade_label` null. Roster starts empty and students are added
+     explicitly (`origin = 'manual'`).
+   - `group_id` and `grade_label` are mutually exclusive. Group conflict checking runs only when `group_id` is set.
+   - Attendance screen includes a searchable student selector panel for group-less sessions, per-row removal
+     with confirmation, and strict refusal to remove an attendee who already has recorded attendance marks.
+   - All session consumers across payments, dashboard, followups, student profile, portals, and reports handle
+     nullable groups with fallback to grade label or "Independent session".
+
+**Migrations applied:**
+- `20261113000003_group_schedule_slots`
+- `20261113000004_group_slot_drop_legacy_columns`
+- `20261114000000_session_attendee`
+- `TENANT_TABLES` updated and verified with `npm run lint:rules`.
+
+**Gate results:**
+- `npm run lint`: passed (ESLint + project rules check).
+- `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
+- `npm test`: passed (67 test files, 434 unit tests + 21 UI primitive tests).
+- `npm run test:integration`: passed (20 test files, 130 tests including new `session-modes-attendance.test.ts`).
+- `npm run build`: passed (Next.js production build succeeded).
+
+**Not done here:**
+- Commit and push await repository owner direction; all changes remain uncommitted in the working tree.
 
 ## 6. Implementation plan
 

@@ -6,6 +6,7 @@ import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
 import {
+  addSessionAttendeeTx,
   correctAttendanceMarkTx,
   createQrTokenTx,
   findActiveQrTokenByHash,
@@ -13,7 +14,9 @@ import {
   getActiveEnrollmentForStudent,
   getEnrollmentForStudent,
   getRosterForSession,
+  getSessionAttendeeTx,
   getSessionWithGroup,
+  removeSessionAttendeeTx,
   upsertAttendanceMarkTx,
 } from "./repository";
 import {
@@ -25,6 +28,7 @@ import { getSessionHomeworkContextTx } from "@/modules/homework";
 
 import { createAttendanceNotification } from "@/modules/notifications";
 import type {
+  AddSessionAttendeeInput,
   BulkCorrectAttendanceSchemaInput,
   BulkMarkAttendanceInput,
   CloseSessionInput,
@@ -32,6 +36,7 @@ import type {
   IssueQrTokenInput,
   MarkAllPresentInput,
   MarkAttendanceInput,
+  RemoveSessionAttendeeInput,
   RotateQrTokenInput,
   ScanQrInput,
   ScanStudentQrInput,
@@ -96,19 +101,29 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
   if (session.status === "cancelled") throw new AppError("CONFLICT");
 
   const mark = await withScope(scope, async (tx) => {
-    // 1. Check if student is in session's group
-    const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, input.studentId);
+    // Check the student is allowed on this session's roster. Group sessions
+    // use the group's enrollments (with cross-season guest attendance);
+    // group-less sessions use the materialised attendee roster, so a student
+    // added via the attendance screen is checkable and one who isn't is not.
     let isCrossSeason = false;
     let primaryGroupId: string | null = null;
 
-    if (!primaryEnrollment) {
-      // 2. Cross-season check: student must have an active enrollment in ANY group in this workspace
-      const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, input.studentId);
-      if (!activeEnrollment) {
+    if (session.groupId) {
+      const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, input.studentId);
+      if (!primaryEnrollment) {
+        // 2. Cross-season check: student must have an active enrollment in ANY group in this workspace
+        const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, input.studentId);
+        if (!activeEnrollment) {
+          throw new AppError("NOT_FOUND");
+        }
+        isCrossSeason = true;
+        primaryGroupId = activeEnrollment.groupId;
+      }
+    } else {
+      const attendee = await getSessionAttendeeTx(tx, scope.workspaceId, input.sessionId, input.studentId);
+      if (!attendee) {
         throw new AppError("NOT_FOUND");
       }
-      isCrossSeason = true;
-      primaryGroupId = activeEnrollment.groupId;
     }
 
     const m = await upsertAttendanceMarkTx(tx, scope, {
@@ -147,7 +162,7 @@ export async function markAttendance(scope: Scope, input: MarkAttendanceInput, r
     await createAttendanceNotification(scope, {
       sessionId: input.sessionId,
       studentId: input.studentId,
-      groupName: session.group.name,
+      groupName: session.group?.name ?? session.gradeLabel ?? "Kashkol",
       sessionDate: session.startsAt.toISOString(),
       sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
       mark: input.mark,
@@ -171,15 +186,20 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
   const marks = await withScope(scope, async (tx) => {
     const results = [];
     for (const m of input.marks) {
-      const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, m.studentId);
       let isCrossSeason = false;
       let primaryGroupId: string | null = null;
 
-      if (!primaryEnrollment) {
-        const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, m.studentId);
-        if (!activeEnrollment) continue;
-        isCrossSeason = true;
-        primaryGroupId = activeEnrollment.groupId;
+      if (session.groupId) {
+        const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, m.studentId);
+        if (!primaryEnrollment) {
+          const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, m.studentId);
+          if (!activeEnrollment) continue;
+          isCrossSeason = true;
+          primaryGroupId = activeEnrollment.groupId;
+        }
+      } else {
+        const attendee = await getSessionAttendeeTx(tx, scope.workspaceId, input.sessionId, m.studentId);
+        if (!attendee) continue;
       }
 
       const mark = await upsertAttendanceMarkTx(tx, scope, {
@@ -216,7 +236,7 @@ export async function bulkMarkAttendance(scope: Scope, input: BulkMarkAttendance
       await createAttendanceNotification(scope, {
         sessionId: input.sessionId,
         studentId: m.studentId,
-        groupName: session.group.name,
+        groupName: session.group?.name ?? session.gradeLabel ?? "Kashkol",
         sessionDate: session.startsAt.toISOString(),
         sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
         mark: m.mark as "present" | "absent" | "late" | "excused",
@@ -550,22 +570,6 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
       throw new AppError("CONFLICT");
     }
 
-    if (token.session.status === "completed") {
-      await writeAuditEvent(tx, {
-        workspaceId: scope.workspaceId,
-        actorUserId: scope.actorUserId,
-        actorDisplayName: scope.actorDisplayName,
-        actorType: "user",
-        entityType: "teaching_session",
-        entityId: token.sessionId,
-        action: attendanceAuditActions.qrRejected,
-        diff: { reason: "session_completed" },
-        requestId: ctx.requestId,
-        ipHash: ctx.ipHash,
-      });
-      throw new AppError("CONFLICT");
-    }
-
     const studentId = input.studentId;
     if (!studentId) {
       await writeAuditEvent(tx, {
@@ -583,22 +587,42 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
       throw new AppError("VALIDATION_FAILED");
     }
 
-    // Check enrollment
-    const enrollment = await getEnrollmentForStudent(tx, scope.workspaceId, token.session.groupId, studentId);
-    if (!enrollment) {
-      await writeAuditEvent(tx, {
-        workspaceId: scope.workspaceId,
-        actorUserId: scope.actorUserId,
-        actorDisplayName: scope.actorDisplayName,
-        actorType: "user",
-        entityType: "teaching_session",
-        entityId: token.sessionId,
-        action: attendanceAuditActions.qrRejected,
-        diff: { reason: "not_enrolled", studentId },
-        requestId: ctx.requestId,
-        ipHash: ctx.ipHash,
-      });
-      throw new AppError("FORBIDDEN");
+    // Check the student is allowed on this session's roster: group sessions
+    // use the group's enrollment; group-less sessions use the attendee roster.
+    if (token.session.groupId) {
+      const enrollment = await getEnrollmentForStudent(tx, scope.workspaceId, token.session.groupId, studentId);
+      if (!enrollment) {
+        await writeAuditEvent(tx, {
+          workspaceId: scope.workspaceId,
+          actorUserId: scope.actorUserId,
+          actorDisplayName: scope.actorDisplayName,
+          actorType: "user",
+          entityType: "teaching_session",
+          entityId: token.sessionId,
+          action: attendanceAuditActions.qrRejected,
+          diff: { reason: "not_enrolled", studentId },
+          requestId: ctx.requestId,
+          ipHash: ctx.ipHash,
+        });
+        throw new AppError("FORBIDDEN");
+      }
+    } else {
+      const attendee = await getSessionAttendeeTx(tx, scope.workspaceId, token.sessionId, studentId);
+      if (!attendee) {
+        await writeAuditEvent(tx, {
+          workspaceId: scope.workspaceId,
+          actorUserId: scope.actorUserId,
+          actorDisplayName: scope.actorDisplayName,
+          actorType: "user",
+          entityType: "teaching_session",
+          entityId: token.sessionId,
+          action: attendanceAuditActions.qrRejected,
+          diff: { reason: "not_on_roster", studentId },
+          requestId: ctx.requestId,
+          ipHash: ctx.ipHash,
+        });
+        throw new AppError("FORBIDDEN");
+      }
     }
 
     // Check for existing mark (prevent duplicates)
@@ -667,9 +691,6 @@ export async function scanStudentQrCode(
   if (session.status === "cancelled") {
     throw new AppError("CONFLICT", { messageKey: "attendance.errors.sessionCancelled" });
   }
-  if (session.status === "completed") {
-    throw new AppError("CONFLICT", { messageKey: "attendance.errors.sessionCompleted" });
-  }
 
   const result = await withScope(scope, async (tx) => {
     // 1. Verify student QR token cryptographic signature and active hash in database
@@ -718,18 +739,27 @@ export async function scanStudentQrCode(
       throw new AppError("CONFLICT", { messageKey: "attendance.errors.alreadyScanned" });
     }
 
-    // 3. Enrollment check (regular vs cross-season)
-    const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, student.id);
+    // 3. Roster check (regular vs cross-season). Group-less sessions use the
+    //    attendee roster — there is no cross-season guest concept there.
     let isCrossSeason = false;
     let primaryGroupId: string | null = null;
 
-    if (!primaryEnrollment) {
-      const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, student.id);
-      if (!activeEnrollment) {
+    if (session.groupId) {
+      const primaryEnrollment = await getEnrollmentForStudent(tx, scope.workspaceId, session.groupId, student.id);
+
+      if (!primaryEnrollment) {
+        const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, student.id);
+        if (!activeEnrollment) {
+          throw new AppError("NOT_FOUND", { messageKey: "attendance.errors.studentNotEnrolled" });
+        }
+        isCrossSeason = true;
+        primaryGroupId = activeEnrollment.groupId;
+      }
+    } else {
+      const attendee = await getSessionAttendeeTx(tx, scope.workspaceId, input.sessionId, student.id);
+      if (!attendee) {
         throw new AppError("NOT_FOUND", { messageKey: "attendance.errors.studentNotEnrolled" });
       }
-      isCrossSeason = true;
-      primaryGroupId = activeEnrollment.groupId;
     }
 
     const markValue = input.markLate ? "late" : "present";
@@ -777,7 +807,7 @@ export async function scanStudentQrCode(
     await createAttendanceNotification(scope, {
       sessionId: input.sessionId,
       studentId: result.student.id,
-      groupName: session.group.name,
+      groupName: session.group?.name ?? session.gradeLabel ?? "Kashkol",
       sessionDate: session.startsAt.toISOString(),
       sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
       mark: result.mark.mark as "present" | "late",
@@ -788,4 +818,102 @@ export async function scanStudentQrCode(
   }
 
   return result;
+}
+
+/**
+ * Add a student to the roster of a group-less session (independent or
+ * grade-level) so their attendance can be recorded (`F-P3-…`, ADR-0029).
+ * Group sessions keep their roster fixed to the group's enrollments; this
+ * operation is refused for them.
+ */
+export async function addSessionAttendee(
+  scope: Scope,
+  input: AddSessionAttendeeInput,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "attendance", "write");
+  const ctx = context(reqCtx);
+
+  const session = await getSessionWithGroup(scope, input.sessionId);
+  if (!session) throw new AppError("NOT_FOUND");
+  if (session.status === "cancelled") throw new AppError("CONFLICT");
+  if (session.groupId) throw new AppError("CONFLICT", { messageKey: "attendance.errors.groupSessionRosterFixed" });
+
+  return withScope(scope, async (tx) => {
+    const student = await tx.student.findFirst({
+      where: { id: input.studentId, workspaceId: scope.workspaceId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!student) throw new AppError("NOT_FOUND");
+
+    const existing = await getSessionAttendeeTx(tx, scope.workspaceId, session.id, student.id);
+    if (existing) {
+      throw new AppError("CONFLICT", { messageKey: "attendance.errors.attendeeAlreadyOnRoster" });
+    }
+
+    const attendee = await addSessionAttendeeTx(tx, scope.workspaceId, session.id, student.id, "manual");
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "session_attendee",
+      entityId: attendee.id,
+      action: attendanceAuditActions.attendeeAdded,
+      diff: { sessionId: input.sessionId, studentId: student.id },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return attendee;
+  });
+}
+
+/**
+ * Remove a student from the roster of a group-less session before any
+ * attendance has been recorded for them. Refused once a mark exists, so no
+ * recorded truth is silently discarded.
+ */
+export async function removeSessionAttendee(
+  scope: Scope,
+  input: RemoveSessionAttendeeInput,
+  reqCtx?: RequestContext,
+) {
+  authorize(scope, "attendance", "write");
+  const ctx = context(reqCtx);
+
+  const session = await getSessionWithGroup(scope, input.sessionId);
+  if (!session) throw new AppError("NOT_FOUND");
+  if (session.status === "cancelled") throw new AppError("CONFLICT");
+  if (session.groupId) throw new AppError("CONFLICT", { messageKey: "attendance.errors.groupSessionRosterFixed" });
+
+  return withScope(scope, async (tx) => {
+    const attendee = await getSessionAttendeeTx(tx, scope.workspaceId, session.id, input.studentId);
+    if (!attendee) throw new AppError("NOT_FOUND");
+
+    const markCount = await tx.attendanceMark.count({
+      where: { workspaceId: scope.workspaceId, sessionId: session.id, studentId: input.studentId },
+    });
+    if (markCount > 0) {
+      throw new AppError("CONFLICT", { messageKey: "attendance.errors.attendeeHasMarks" });
+    }
+
+    await removeSessionAttendeeTx(tx, scope.workspaceId, session.id, input.studentId);
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "session_attendee",
+      entityId: attendee.id,
+      action: attendanceAuditActions.attendeeRemoved,
+      diff: { sessionId: input.sessionId, studentId: input.studentId },
+      requestId: ctx.requestId,
+      ipHash: ctx.ipHash,
+    });
+
+    return { removed: true };
+  });
 }

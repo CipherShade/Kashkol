@@ -60,9 +60,13 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
             id: groupId,
             workspaceId: NILE,
             name: "Grade 10 Physics",
-            weekday: 1,
-            startTime: new Date("1970-01-01T16:00:00.000Z"),
             teacherNote: "CONFIDENTIAL_GROUP_TEACHER_NOTE",
+            scheduleSlots: {
+              create: {
+                weekday: 1,
+                startTime: new Date("1970-01-01T16:00:00.000Z"),
+              },
+            },
           },
         });
 
@@ -425,6 +429,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
         await tx.attendanceMark.deleteMany({ where: { sessionId } });
         await tx.teachingSession.deleteMany({ where: { id: sessionId } });
         await tx.enrollment.deleteMany({ where: { groupId } });
+        await tx.groupScheduleSlot.deleteMany({ where: { groupId } });
         await tx.group.deleteMany({ where: { id: groupId } });
       });
 

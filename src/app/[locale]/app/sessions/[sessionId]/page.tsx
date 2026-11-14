@@ -48,8 +48,10 @@ export default async function SessionDetailPage({
 
   const session: AttendanceSession = {
     id: data.session.id,
-    groupName: data.session.group.name,
-    groupColor: data.session.group.color,
+    groupId: data.session.groupId,
+    groupName: data.session.group?.name ?? "",
+    groupColor: data.session.group?.color ?? "",
+    gradeLabel: data.session.gradeLabel,
     startsAt: data.session.startsAt.toISOString(),
     endsAt: data.session.endsAt ? data.session.endsAt.toISOString() : null,
     status: data.session.status,
@@ -59,7 +61,7 @@ export default async function SessionDetailPage({
     seriesId: data.session.seriesId,
     pricePerStudentMinor:
       data.session.pricePerStudentMinor ??
-      data.session.group.defaultPricePerStudentMinor ??
+      data.session.group?.defaultPricePerStudentMinor ??
       null,
   };
 
@@ -88,7 +90,7 @@ export default async function SessionDetailPage({
     <div className="app-page space-y-4">
       <PageHeader
         eyebrow={t("eyebrow")}
-        title={session.groupName}
+        title={session.groupName || session.gradeLabel || t("independentSession")}
         description={t("pageDescription")}
       />
       <SessionAttendanceClient

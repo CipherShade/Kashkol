@@ -21,13 +21,14 @@ export type KpiCardMetric = {
 
 export type TodaySessionItem = {
   id: string;
-  groupId: string;
+  groupId: string | null;
   groupName: string;
   groupColor: string;
+  gradeLabel: string | null;
   startsAt: string;
   endsAt: string | null;
   status: "scheduled" | "started" | "completed" | "cancelled";
-  enrolledStudentsCount: number;
+  enrolledStudentsCount: number | null;
   hasAttendance: boolean;
   meetingUrl: string | null;
   location: string | null;

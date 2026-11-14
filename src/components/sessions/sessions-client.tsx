@@ -23,9 +23,11 @@ import type { GroupListItem } from "@/modules/groups/repository";
 
 export type SessionItem = {
   id: string;
-  groupId: string;
+  /** Null for independent and grade-level sessions (ADR-0029). */
+  groupId: string | null;
   groupName: string;
   groupColor: string;
+  gradeLabel: string | null;
   startsAt: string | Date;
   endsAt: string | Date | null;
   status: "scheduled" | "started" | "completed" | "cancelled";
@@ -101,6 +103,9 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
   const weekStart = useMemo(() => startOfWeekSaturday(currentDate), [currentDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
+  const sessionTitle = (s: SessionItem) =>
+    s.groupName || (s.gradeLabel ? `${t("grade")}: ${s.gradeLabel}` : t("independent"));
+
   const sessionsByDay = useMemo(() => {
     const map = new Map<string, SessionItem[]>();
     for (const day of weekDays) {
@@ -168,8 +173,8 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
           >
             <form action={createAction} className="space-y-3">
               <FormField label={t("group")}>
-                <select name="groupId" required className="ui-select">
-                  <option value="">{t("group")}</option>
+                <select name="groupId" className="ui-select">
+                  <option value="">{t("independent")}</option>
                   {groups.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
@@ -177,6 +182,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
                   ))}
                 </select>
               </FormField>
+              <Field label={t("gradeLabel")} name="gradeLabel" />
               <Field label={t("startsAtTime")} name="startsAt" type="datetime-local" required />
               <Field label={t("endsAt")} name="endsAt" type="datetime-local" />
               <Field label={t("room")} name="room" />
@@ -217,7 +223,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
                           <div className="font-medium">{formatTime(new Date(s.startsAt), locale)}</div>
                           <span className="text-xs text-muted-foreground">{t(s.status)}</span>
                         </div>
-                        <div className="text-sm">{s.groupName}</div>
+                        <div className="text-sm">{sessionTitle(s)}</div>
                         {s.isOneOff ? <div className="text-xs text-muted-foreground">{t("oneOff")}</div> : null}
                       </button>
                     ))
@@ -248,7 +254,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-10 rounded" style={{ backgroundColor: s.groupColor || "#3b82f6" }} />
                       <div>
-                        <div className="font-medium">{s.groupName}</div>
+                        <div className="font-medium">{sessionTitle(s)}</div>
                         <div className="text-xs text-muted-foreground">
                           {new Date(s.startsAt).toLocaleString(locale)} {s.endsAt ? `- ${formatTime(new Date(s.endsAt), locale)}` : ""}
                         </div>
@@ -275,7 +281,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
         <Dialog
           open={!!selectedSession}
           onOpenChange={(open) => !open && setSelectedSession(null)}
-          title={selectedSession.groupName}
+          title={sessionTitle(selectedSession)}
           description={new Date(selectedSession.startsAt).toLocaleString(locale)}
         >
           <div className="space-y-3">

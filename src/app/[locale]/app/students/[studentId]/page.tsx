@@ -202,6 +202,7 @@ export default async function StudentProfilePage({
             id: m.session.id,
             startsAt: m.session.startsAt.toISOString(),
             status: m.session.status,
+            gradeLabel: m.session.gradeLabel,
             group: m.session.group,
           },
           revisions: m.revisions.map((r) => ({

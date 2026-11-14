@@ -157,7 +157,7 @@ export async function getHomeworkCompletionRosterTx(
         where: { id: sessionId, workspaceId },
         select: { groupId: true },
       });
-      if (session) {
+      if (session?.groupId) {
         const enrollments = await tx.enrollment.findMany({
           where: { workspaceId, groupId: session.groupId, leftAt: null },
           include: { student: { select: { id: true, firstName: true, lastName: true } } },

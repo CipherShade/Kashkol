@@ -18,6 +18,13 @@ import {
 } from "@/app/actions/groups";
 import type { GroupListItem } from "@/modules/groups/repository";
 import { GROUP_COLOR_PALETTE, type GroupColor } from "@/modules/groups/schemas";
+import {
+  SlotsEditor,
+  DEFAULT_SLOT_FORM_VALUE,
+  slotFormValueFromSlot,
+  slotFormValuesToJson,
+  type SlotFormValue,
+} from "@/components/groups/slots-editor";
 
 const COLOR_STYLES: Record<string, { bg: string; text: string; border: string; bar: string }> = {
   indigo: {
@@ -137,12 +144,8 @@ export function GroupsClient({
   const [addSubjectId, setAddSubjectId] = useState("");
   const [addSubjectName, setAddSubjectName] = useState("");
   const [addGrade, setAddGrade] = useState("");
-  const [addRoom, setAddRoom] = useState("");
+  const [addSlots, setAddSlots] = useState<SlotFormValue[]>([{ ...DEFAULT_SLOT_FORM_VALUE }]);
   const [addColor, setAddColor] = useState<GroupColor>("indigo");
-  const [addWeekday, setAddWeekday] = useState("0");
-  const [addStartTime, setAddStartTime] = useState("16:00");
-  const [addEndTime, setAddEndTime] = useState("18:00");
-  const [addCapacity, setAddCapacity] = useState("");
   const [addNote, setAddNote] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
@@ -152,12 +155,8 @@ export function GroupsClient({
   const [editName, setEditName] = useState("");
   const [editSubjectId, setEditSubjectId] = useState("");
   const [editGrade, setEditGrade] = useState("");
-  const [editRoom, setEditRoom] = useState("");
+  const [editSlots, setEditSlots] = useState<SlotFormValue[]>([{ ...DEFAULT_SLOT_FORM_VALUE }]);
   const [editColor, setEditColor] = useState<GroupColor>("indigo");
-  const [editWeekday, setEditWeekday] = useState("0");
-  const [editStartTime, setEditStartTime] = useState("16:00");
-  const [editEndTime, setEditEndTime] = useState("18:00");
-  const [editCapacity, setEditCapacity] = useState("");
   const [editNote, setEditNote] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -202,12 +201,12 @@ export function GroupsClient({
     setEditName(group.name);
     setEditSubjectId(group.subject?.id ?? "");
     setEditGrade(group.grade ?? "");
-    setEditRoom(group.room ?? "");
+    setEditSlots(
+      group.slots.length > 0
+        ? group.slots.map(slotFormValueFromSlot)
+        : [{ ...DEFAULT_SLOT_FORM_VALUE }],
+    );
     setEditColor((group.color as GroupColor) || "indigo");
-    setEditWeekday(String(group.weekday));
-    setEditStartTime(group.startTime);
-    setEditEndTime(group.endTime ?? "");
-    setEditCapacity(group.capacity ? String(group.capacity) : "");
     setEditNote(group.teacherNote ?? "");
     setEditError(null);
   }
@@ -224,12 +223,8 @@ export function GroupsClient({
       formData.set("subjectId", addSubjectId);
     }
     formData.set("grade", addGrade);
-    formData.set("room", addRoom);
     formData.set("color", addColor);
-    formData.set("weekday", addWeekday);
-    formData.set("startTime", addStartTime);
-    formData.set("endTime", addEndTime);
-    if (addCapacity) formData.set("capacity", addCapacity);
+    formData.set("slots", slotFormValuesToJson(addSlots));
     if (addNote) formData.set("teacherNote", addNote);
     if (ignoreConflict) formData.set("ignoreConflicts", "true");
 
@@ -244,8 +239,13 @@ export function GroupsClient({
               : `Schedule slot overlaps with group: ${conflictName}`,
           );
         } else {
+          const slotError = res.fieldErrors?.slots?.[0];
+          const knownSlotError =
+            slotError === "slotOverlapsSameGroup" || slotError === "atLeastOneScheduleSlot"
+              ? labels[slotError]
+              : undefined;
           const key = res.errorKey ?? "errors.generic";
-          setAddError(labels[key] ?? key);
+          setAddError(knownSlotError ?? labels[key] ?? key);
         }
       } else {
         setIsAddOpen(false);
@@ -262,12 +262,8 @@ export function GroupsClient({
     setAddSubjectId("");
     setAddSubjectName("");
     setAddGrade("");
-    setAddRoom("");
+    setAddSlots([{ ...DEFAULT_SLOT_FORM_VALUE }]);
     setAddColor("indigo");
-    setAddWeekday("0");
-    setAddStartTime("16:00");
-    setAddEndTime("18:00");
-    setAddCapacity("");
     setAddNote("");
     setAddError(null);
     setConflictWarning(null);
@@ -284,19 +280,20 @@ export function GroupsClient({
     formData.set("name", editName);
     if (editSubjectId) formData.set("subjectId", editSubjectId);
     formData.set("grade", editGrade);
-    formData.set("room", editRoom);
     formData.set("color", editColor);
-    formData.set("weekday", editWeekday);
-    formData.set("startTime", editStartTime);
-    formData.set("endTime", editEndTime);
-    if (editCapacity) formData.set("capacity", editCapacity);
+    formData.set("slots", slotFormValuesToJson(editSlots));
     if (editNote) formData.set("teacherNote", editNote);
 
     startTransition(async () => {
       const res = await updateGroupAction(undefined, formData);
       if (res.status === "error") {
+        const slotError = res.fieldErrors?.slots?.[0];
+        const knownSlotError =
+          slotError === "slotOverlapsSameGroup" || slotError === "atLeastOneScheduleSlot"
+            ? labels[slotError]
+            : undefined;
         const key = res.errorKey ?? "errors.generic";
-        setEditError(labels[key] ?? key);
+        setEditError(knownSlotError ?? labels[key] ?? key);
       } else {
         setEditingGroup(null);
         router.refresh();
@@ -475,8 +472,11 @@ export function GroupsClient({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {initialGroups.map((group) => {
             const styles = COLOR_STYLES[group.color] ?? COLOR_STYLES.indigo;
-            const weekdayName = weekdayNames[group.weekday] ?? "";
-            const isFull = group.capacity !== null && group.enrolledCount >= group.capacity;
+            const slotCapacities = group.slots
+              .map((slot) => slot.capacity)
+              .filter((capacity): capacity is number => capacity !== null);
+            const isFull =
+              slotCapacities.length > 0 && group.enrolledCount >= Math.min(...slotCapacities);
 
             return (
               <Card
@@ -526,22 +526,20 @@ export function GroupsClient({
                     </Link>
                   </h3>
 
-                  {/* Schedule slot */}
-                  <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <Icon name="clock" size="xs" className="shrink-0 text-muted-foreground" />
-                    <span>
-                      {weekdayName} • {group.startTime}
-                      {group.endTime ? ` - ${group.endTime}` : ""}
-                    </span>
-                  </div>
-
-                  {/* Room / Location */}
-                  {group.room && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Icon name="map-pin" size="xs" className="shrink-0 text-muted-foreground" />
-                      <span>{group.room}</span>
+                  {/* Schedule slots: one line per weekly slot */}
+                  <div className="text-xs text-muted-foreground flex items-start gap-1.5">
+                    <Icon name="clock" size="xs" className="shrink-0 mt-0.5 text-muted-foreground" />
+                    <div className="space-y-0.5">
+                      {group.slots.map((slot) => (
+                        <span key={slot.id} className="block">
+                          {weekdayNames[slot.weekday] ?? ""} • {slot.startTime}
+                          {slot.endTime ? ` - ${slot.endTime}` : ""}
+                          {slot.room ? ` · ${slot.room}` : ""}
+                          {slot.capacity !== null ? ` · ${slot.capacity}` : ""}
+                        </span>
+                      ))}
                     </div>
-                  )}
+                  </div>
 
                   {/* Enrolled Students & Capacity */}
                   <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
@@ -550,15 +548,9 @@ export function GroupsClient({
                       <span className="font-medium text-foreground">
                         {group.enrolledCount}
                       </span>
-                      {group.capacity ? (
-                        <span className="text-muted-foreground">
-                          / {group.capacity} {labels.students ?? "students"}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {labels.students ?? "students"}
-                        </span>
-                      )}
+                      <span className="text-muted-foreground">
+                        {labels.students ?? "students"}
+                      </span>
                     </div>
 
                     {/* Actions */}
@@ -661,60 +653,6 @@ export function GroupsClient({
               />
             </FormField>
 
-            <FormField label={labels.roomLocation ?? "Room / Location"}>
-              <Input
-                value={addRoom}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddRoom(e.target.value)}
-                placeholder={isAr ? "مثال: قاعة 3 - سنتر النجاح" : "e.g. Room 3 - Main Hall"}
-              />
-            </FormField>
-          </div>
-
-          {/* Schedule fields: Day, Start Time, End Time */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FormField label={labels.weekday ?? "Day of Week"} required>
-              <Select
-                value={addWeekday}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAddWeekday(e.target.value)}
-              >
-                {weekdayNames.map((name, idx) => (
-                  <option key={idx} value={String(idx)}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-
-            <FormField label={labels.startTime ?? "Start Time"} required>
-              <Input
-                type="time"
-                required
-                value={addStartTime}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddStartTime(e.target.value)}
-              />
-            </FormField>
-
-            <FormField label={labels.endTime ?? "End Time"}>
-              <Input
-                type="time"
-                value={addEndTime}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddEndTime(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label={labels.capacity ?? "Capacity (Max Students)"}>
-              <Input
-                type="number"
-                min="1"
-                max="500"
-                value={addCapacity}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddCapacity(e.target.value)}
-                placeholder={labels.capacityPlaceholder ?? "e.g. 25"}
-              />
-            </FormField>
-
             {/* Color Swatch Picker */}
             <FormField label={labels.color ?? "Color Theme"}>
               <div className="flex items-center gap-2 pt-1 flex-wrap">
@@ -736,6 +674,14 @@ export function GroupsClient({
               </div>
             </FormField>
           </div>
+
+          {/* Schedule slots: weekday + time + room + capacity per slot */}
+          <SlotsEditor
+            slots={addSlots}
+            onChange={setAddSlots}
+            labels={labels}
+            weekdayNames={weekdayNames}
+          />
 
           <FormField label={labels.teacherNote ?? "Private Teacher Notes"}>
             <Textarea
@@ -806,57 +752,7 @@ export function GroupsClient({
               />
             </FormField>
 
-            <FormField label={labels.roomLocation ?? "Room / Location"}>
-              <Input
-                value={editRoom}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditRoom(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <FormField label={labels.weekday ?? "Day of Week"} required>
-              <Select
-                value={editWeekday}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditWeekday(e.target.value)}
-              >
-                {weekdayNames.map((name, idx) => (
-                  <option key={idx} value={String(idx)}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-
-            <FormField label={labels.startTime ?? "Start Time"} required>
-              <Input
-                type="time"
-                required
-                value={editStartTime}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditStartTime(e.target.value)}
-              />
-            </FormField>
-
-            <FormField label={labels.endTime ?? "End Time"}>
-              <Input
-                type="time"
-                value={editEndTime}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditEndTime(e.target.value)}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <FormField label={labels.capacity ?? "Capacity (Max Students)"}>
-              <Input
-                type="number"
-                min="1"
-                max="500"
-                value={editCapacity}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditCapacity(e.target.value)}
-              />
-            </FormField>
-
+            {/* Color Swatch Picker */}
             <FormField label={labels.color ?? "Color Theme"}>
               <div className="flex items-center gap-2 pt-1 flex-wrap">
                 {GROUP_COLOR_PALETTE.map((color) => {
@@ -877,6 +773,14 @@ export function GroupsClient({
               </div>
             </FormField>
           </div>
+
+          {/* Schedule slots: weekday + time + room + capacity per slot */}
+          <SlotsEditor
+            slots={editSlots}
+            onChange={setEditSlots}
+            labels={labels}
+            weekdayNames={weekdayNames}
+          />
 
           <FormField label={labels.teacherNote ?? "Private Teacher Notes"}>
             <Textarea

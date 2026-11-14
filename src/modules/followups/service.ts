@@ -40,6 +40,8 @@ export async function getFollowUpDashboard(scope: Scope, now = new Date()) {
             select: {
               id: true,
               startsAt: true,
+              groupId: true,
+              gradeLabel: true,
               group: { select: { id: true, name: true } },
             },
           },
@@ -87,8 +89,8 @@ export async function getFollowUpDashboard(scope: Scope, now = new Date()) {
 
     const attendanceFacts: AttendanceFact[] = marks.map((mark) => ({
       studentId: mark.studentId,
-      groupId: mark.session.group.id,
-      groupName: mark.session.group.name,
+      groupId: mark.session.groupId,
+      groupName: mark.session.group?.name ?? mark.session.gradeLabel ?? "",
       sessionId: mark.session.id,
       date: mark.session.startsAt.toISOString(),
       mark: mark.mark,

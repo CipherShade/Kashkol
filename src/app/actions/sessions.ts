@@ -51,7 +51,8 @@ export async function createOneOffSessionAction(
     const ctx = await actionRequestContext();
 
     const raw = {
-      groupId: text(formData, "groupId"),
+      groupId: optionalText(formData, "groupId"),
+      gradeLabel: optionalText(formData, "gradeLabel"),
       startsAt: text(formData, "startsAt"),
       endsAt: optionalText(formData, "endsAt"),
       reason: optionalText(formData, "reason"),

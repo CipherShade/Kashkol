@@ -31,12 +31,8 @@ async function addGroup(scope: Scope, name: string): Promise<string> {
       subjectId: null,
       subjectName: null,
       grade: null,
-      room: null,
       color: "indigo",
-      weekday: 0,
-      startTime: "16:00",
-      endTime: "17:00",
-      capacity: null,
+      slots: [{ weekday: 0, startTime: "16:00", endTime: "17:00", room: null, capacity: null }],
       teacherNote: null,
     },
     { requestId: randomUUID() },
@@ -50,6 +46,7 @@ afterEach(async () => {
     await withScope({ workspaceId: FIXTURES }, async (tx) => {
       await tx.teachingSession.deleteMany({ where: { workspaceId: FIXTURES, groupId } });
       await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId } });
+      await tx.groupScheduleSlot.deleteMany({ where: { workspaceId: FIXTURES, groupId } });
       await tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: groupId } });
     });
   }

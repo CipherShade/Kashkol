@@ -136,7 +136,7 @@ export function TodayOperations({ data, locale }: TodayOperationsProps) {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontWeight: 600, color: "var(--ink)", fontSize: "0.9375rem" }}>
-                          {session.groupName}
+                          {session.groupName || session.gradeLabel || t("independentSession")}
                         </span>
                         <Badge tone={statusToneMap[session.status]}>
                           {t(`sessionStatus_${session.status}`)}
@@ -153,7 +153,7 @@ export function TodayOperations({ data, locale }: TodayOperationsProps) {
                         }}
                       >
                         <span>{formattedTime}</span>
-                        {session.enrolledStudentsCount > 0 ? (
+                        {session.enrolledStudentsCount != null && session.enrolledStudentsCount > 0 ? (
                           <>
                             <span>•</span>
                             <span>{t("sessionEnrolledStudents", { count: session.enrolledStudentsCount })}</span>

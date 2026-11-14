@@ -44,6 +44,9 @@ afterEach(async () => {
     });
     await tx.homework.deleteMany({ where: { workspaceId: FIXTURES, id: { in: homeworkIds } } });
     await tx.enrollment.deleteMany({ where: { workspaceId: FIXTURES, groupId: { in: groupIds } } });
+    await tx.groupScheduleSlot.deleteMany({
+      where: { workspaceId: FIXTURES, groupId: { in: groupIds } },
+    });
     await tx.group.deleteMany({ where: { workspaceId: FIXTURES, id: { in: groupIds } } });
     await tx.student.deleteMany({ where: { workspaceId: FIXTURES, id: { in: studentIds } } });
   });
@@ -62,10 +65,14 @@ async function createFixture() {
         workspaceId: FIXTURES,
         name: `Academic ${randomUUID()}`,
         color: "indigo",
-        weekday: 0,
-        startTime: new Date("1970-01-01T16:00:00.000Z"),
-        endTime: new Date("1970-01-01T17:00:00.000Z"),
-        capacity: 20,
+        scheduleSlots: {
+          create: {
+            weekday: 0,
+            startTime: new Date("1970-01-01T16:00:00.000Z"),
+            endTime: new Date("1970-01-01T17:00:00.000Z"),
+            capacity: 20,
+          },
+        },
       },
     }),
   );

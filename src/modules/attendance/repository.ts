@@ -33,20 +33,54 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
     });
     if (!session) return [];
 
-    // Get active enrollments for the group
-    const enrollments = await tx.enrollment.findMany({
-      where: {
-        workspaceId: scope.workspaceId,
-        groupId: session.groupId,
-        leftAt: null,
-      },
-      include: {
-        student: {
-          select: { id: true, firstName: true, lastName: true },
-        },
-      },
-      orderBy: [{ student: { firstName: "asc" } }],
-    });
+    // Resolve the base roster: group sessions use the group's active
+    // enrollments; group-less sessions (independent / grade-level) use the
+    // materialised `session_attendee` roster (ADR-0029).
+    const rosterBase: Array<{
+      studentId: string;
+      firstName: string;
+      lastName: string;
+      enrolledAt: Date | null;
+    }> = session.groupId
+      ? (
+          await tx.enrollment.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              groupId: session.groupId,
+              leftAt: null,
+            },
+            include: {
+              student: {
+                select: { id: true, firstName: true, lastName: true },
+              },
+            },
+            orderBy: [{ student: { firstName: "asc" } }],
+          })
+        ).map((e) => ({
+          studentId: e.studentId,
+          firstName: e.student.firstName,
+          lastName: e.student.lastName,
+          enrolledAt: e.enrolledAt,
+        }))
+      : (
+          await tx.sessionAttendee.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              sessionId,
+            },
+            include: {
+              student: {
+                select: { id: true, firstName: true, lastName: true },
+              },
+            },
+            orderBy: [{ student: { firstName: "asc" } }],
+          })
+        ).map((a) => ({
+          studentId: a.studentId,
+          firstName: a.student.firstName,
+          lastName: a.student.lastName,
+          enrolledAt: null,
+        }));
 
     // Get existing marks including student and primaryGroup for cross-season attendees
     const marks = await tx.attendanceMark.findMany({
@@ -65,16 +99,16 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
     });
 
     const markMap = new Map(marks.map((m) => [m.studentId, m]));
-    const enrolledStudentIds = new Set(enrollments.map((e) => e.studentId));
+    const rosterStudentIds = new Set(rosterBase.map((r) => r.studentId));
 
-    // 1. Regular roster students from enrollments
-    const roster: RosterStudent[] = enrollments.map((e) => {
-      const m = markMap.get(e.studentId);
+    // 1. Regular roster students
+    const roster: RosterStudent[] = rosterBase.map((r) => {
+      const m = markMap.get(r.studentId);
       return {
-        studentId: e.studentId,
-        firstName: e.student.firstName,
-        lastName: e.student.lastName,
-        enrolledAt: e.enrolledAt,
+        studentId: r.studentId,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        enrolledAt: r.enrolledAt,
         mark: m ? m.mark : null,
         markId: m ? m.id : null,
         source: m ? m.source : null,
@@ -86,9 +120,12 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
       };
     });
 
-    // 2. Cross-season students who attended this session but are not enrolled in session.groupId
+    // 2. Cross-season students who attended this session but are not enrolled in session.groupId.
+    //    Group-less sessions have no "not enrolled in this group" concept, so any
+    //    mark-holder missing from the attendee roster is appended without the
+    //    cross-season badge instead of being hidden.
     for (const m of marks) {
-      if (!enrolledStudentIds.has(m.studentId)) {
+      if (!rosterStudentIds.has(m.studentId)) {
         roster.push({
           studentId: m.studentId,
           firstName: m.student.firstName,
@@ -99,9 +136,9 @@ export async function getRosterForSession(scope: Scope, sessionId: string): Prom
           source: m.source,
           recordedAt: m.recordedAt,
           recordedBy: m.recordedBy,
-          isCrossSeason: true,
-          primaryGroupId: m.primaryGroupId,
-          primaryGroupName: m.primaryGroup?.name ?? null,
+          isCrossSeason: Boolean(session.groupId),
+          primaryGroupId: session.groupId ? m.primaryGroupId : null,
+          primaryGroupName: session.groupId ? (m.primaryGroup?.name ?? null) : null,
         });
       }
     }
@@ -272,6 +309,52 @@ export async function getEnrollmentForStudent(
       studentId,
       leftAt: null,
     },
+  });
+}
+
+/**
+ * The attendance set of a group-less session (ADR-0029): the
+ * `session_attendee` row for one student, or null when the student is not on
+ * the roster. The caller decides what "not on the roster" means for the
+ * operation being authorised.
+ */
+export async function getSessionAttendeeTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+  studentId: string,
+) {
+  return tx.sessionAttendee.findFirst({
+    where: { workspaceId, sessionId, studentId },
+  });
+}
+
+export async function addSessionAttendeeTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+  studentId: string,
+  origin: "manual" | "grade" = "manual",
+) {
+  return tx.sessionAttendee.create({
+    data: {
+      id: crypto.randomUUID(),
+      workspaceId,
+      sessionId,
+      studentId,
+      origin,
+    },
+  });
+}
+
+export async function removeSessionAttendeeTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  sessionId: string,
+  studentId: string,
+) {
+  return tx.sessionAttendee.deleteMany({
+    where: { workspaceId, sessionId, studentId },
   });
 }
 
