@@ -2,7 +2,11 @@ import { getServerEnv } from "@/lib/config/env";
 import { listActiveWorkspaceIdsForWorker } from "@/modules/tenancy/repository";
 import { processOutboxBatch } from "@/modules/messaging";
 import { processReportExportBatch } from "@/modules/reports/service";
-import { createMessagingWorkerScope } from "@/lib/worker/system-actor";
+import {
+  createMessagingWorkerScope,
+  createNotificationWorkerScope,
+} from "@/lib/worker/system-actor";
+import { evaluateNotificationRules } from "@/modules/notifications/rules";
 
 export const REPORT_BATCH_SIZE = 10;
 export const OUTBOX_BATCH_SIZE = 25;
@@ -106,4 +110,30 @@ export async function drainMessageOutboxes(
 export function workerPollIntervalMs(): number {
   const env = getServerEnv();
   return env.WORKER_POLL_INTERVAL_SECONDS * 1000;
+}
+
+/**
+ * Evaluate notification rules (unrecorded sessions, homework due soon, pending grades)
+ * for every active workspace on each worker cycle.
+ */
+export async function drainNotificationRules(
+  maxWorkspacesPerPass: number = Number.POSITIVE_INFINITY,
+): Promise<{ readonly processed: number; readonly created: number; readonly workspaces: number }> {
+  const workspaceIds = await listActiveWorkspaceIdsForWorker();
+  let created = 0;
+  let iterations = 0;
+
+  for (const workspaceId of workspaceIds) {
+    if (iterations >= maxWorkspacesPerPass) break;
+    iterations += 1;
+    const scope = createNotificationWorkerScope(workspaceId);
+    try {
+      const result = await evaluateNotificationRules(scope);
+      created += result.createdCount;
+    } catch {
+      continue;
+    }
+  }
+
+  return { processed: iterations, created, workspaces: iterations };
 }

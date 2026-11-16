@@ -481,12 +481,41 @@ export const ROUTES: RouteEntry[] = [
     description: "Enqueue attendance notification to guardian.",
   },
   {
+    path: "/api/notifications",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Staff in-app notification center for teacher and assistants (F-P0-10).",
+  },
+  {
+    path: "/api/notifications/[notificationId]/read",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Mark one staff notification as read (F-P0-10).",
+  },
+  {
+    path: "/api/notifications/read-all",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Mark all staff notifications as read for the authenticated user (F-P0-10).",
+  },
+  {
     path: "/api/worker/outbox",
     methods: ["POST"],
     access: "session",
     tenantScoped: false,
     description:
       "Process a workspace message outbox batch, authenticated by a staff session or the dedicated messaging worker token.",
+  },
+  {
+    path: "/api/worker/notifications",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: false,
+    description:
+      "Background notification rule evaluator. Runs the rule engine for all workspaces (worker token) or the caller's own workspace (staff session). Produces alerts for unrecorded sessions, homework due soon, and pending assessment grades (F-P0-10, F-P2-07).",
   },
   {
     path: "/api/messaging/settings",

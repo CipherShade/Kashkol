@@ -19,3 +19,16 @@ export function createMessagingWorkerScope(workspaceId: string): Scope {
     permissions: new Set(),
   };
 }
+
+/**
+ * The system actor used by the background notification rule worker.
+ */
+export function createNotificationWorkerScope(workspaceId: string): Scope {
+  return {
+    workspaceId,
+    actorUserId: "system:notification-worker",
+    actorDisplayName: "Notification worker",
+    role: "owner",
+    permissions: new Set(),
+  };
+}

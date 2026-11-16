@@ -12,6 +12,8 @@ import {
 } from "./repository";
 import { attendanceAuditActions } from "./audit";
 import { enqueueAttendanceNotificationForSelfCheckIn } from "@/modules/messaging";
+import { createAttendanceNotification } from "@/modules/notifications";
+import type { Scope } from "@/modules/tenancy/types";
 
 export type SelfCheckInActor = {
   /** The verified portal user (resolved server-side, never from the request). */
@@ -156,11 +158,39 @@ export async function checkInWithQrToken(
       requestId: reqId,
     });
 
-    return { sessionId: session.id, sessionStatus: session.status };
+    return {
+      sessionId: session.id,
+      sessionStatus: session.status,
+      groupName: session.group?.name ?? session.gradeLabel ?? "Kashkol",
+      sessionDate: session.startsAt ? session.startsAt.toISOString() : new Date().toISOString(),
+      sessionTime: session.endsAt ? session.endsAt.toISOString() : null,
+    };
   });
 
   // The guardian notification is a system event written after the attendance
   // transaction; its failure must not affect the attendance record.
+  // 1. In-app notification + Web Push dispatch (Fix 2 & 3)
+  try {
+    const notifyScope: Scope = {
+      workspaceId: actor.workspaceId,
+      actorUserId: actor.userId,
+      actorDisplayName: actor.displayName,
+      role: "owner",
+      permissions: new Set(),
+    };
+    await createAttendanceNotification(notifyScope, {
+      sessionId: result.sessionId,
+      studentId: actor.studentId,
+      groupName: result.groupName,
+      sessionDate: result.sessionDate,
+      sessionTime: result.sessionTime,
+      mark: "present",
+    });
+  } catch {
+    // best-effort: in-app notification failure must not affect attendance
+  }
+
+  // 2. Outbox enqueue (for message logs / outbox drain)
   try {
     await enqueueAttendanceNotificationForSelfCheckIn(
       { workspaceId: actor.workspaceId, userId: actor.userId, displayName: actor.displayName },
@@ -168,7 +198,7 @@ export async function checkInWithQrToken(
       { requestId: newRequestId() },
     );
   } catch {
-    // best-effort: the in-app notification and the outbox event already exist
+    // best-effort: outbox event failure must not affect attendance
   }
 
   return { mark: "present", sessionId: result.sessionId, sessionStatus: result.sessionStatus };

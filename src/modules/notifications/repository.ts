@@ -3,6 +3,106 @@ import { Prisma } from "@/generated/prisma/client";
 import { withScope } from "@/lib/db/scope";
 import type { Scope } from "@/modules/tenancy/types";
 
+export type CreateNotificationInput = {
+  recipientUserId?: string | null;
+  studentId?: string | null;
+  guardianId?: string | null;
+  type:
+    | "attendance_present"
+    | "attendance_absent"
+    | "attendance_late"
+    | "attendance_excused"
+    | "session_cancelled"
+    | "session_rescheduled"
+    | "homework_assigned"
+    | "homework_reminder"
+    | "exam_result"
+    | "student_at_risk"
+    | "session_unrecorded"
+    | "homework_due_soon"
+    | "assessment_pending_grades"
+    | "backup_ready"
+    | "export_ready"
+    | "general";
+  severity?: "info" | "warning" | "critical";
+  messageKey?: string | null;
+  messageParams?: Record<string, unknown> | null;
+  dedupeKey?: string | null;
+  title?: string | null;
+  body?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown };
+  return (
+    candidate.code === "P2002" ||
+    (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+  );
+}
+
+export async function createNotificationTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  data: CreateNotificationInput,
+) {
+  // Database-enforced idempotency: if a recipient and dedupeKey are specified, check for existing
+  if (data.recipientUserId && data.dedupeKey) {
+    const existing = await tx.notification.findFirst({
+      where: {
+        workspaceId,
+        recipientUserId: data.recipientUserId,
+        dedupeKey: data.dedupeKey,
+      },
+    });
+    if (existing) return existing;
+  }
+
+  try {
+    return await tx.notification.create({
+      data: {
+        id: crypto.randomUUID(),
+        workspaceId,
+        recipientUserId: data.recipientUserId ?? null,
+        studentId: data.studentId ?? null,
+        guardianId: data.guardianId ?? null,
+        type: data.type,
+        severity: data.severity ?? "info",
+        messageKey: data.messageKey ?? null,
+        messageParams: data.messageParams
+          ? (data.messageParams as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        dedupeKey: data.dedupeKey ?? null,
+        title: data.title ?? null,
+        body: data.body ?? null,
+        isRead: false,
+        entityType: data.entityType ?? null,
+        entityId: data.entityId ?? null,
+        metadata: data.metadata
+          ? (data.metadata as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      },
+    });
+  } catch (error) {
+    // If concurrent insert raced on unique (workspaceId, recipientUserId, dedupeKey)
+    if (data.recipientUserId && data.dedupeKey && isUniqueViolation(error)) {
+      const existing = await tx.notification.findFirst({
+        where: {
+          workspaceId,
+          recipientUserId: data.recipientUserId,
+          dedupeKey: data.dedupeKey,
+        },
+      });
+      if (existing) return existing;
+    }
+    throw error;
+  }
+}
+
+/** Backwards-compatible alias for in-app attendance notification creation */
 export async function createInAppNotificationTx(
   tx: Prisma.TransactionClient,
   workspaceId: string,
@@ -18,39 +118,91 @@ export async function createInAppNotificationTx(
     idempotencyKey?: string;
   },
 ) {
-  // Idempotency: prevent duplicate notifications for the same attendance event
-  if (data.idempotencyKey) {
-    const all = await tx.notification.findMany({
-      where: { workspaceId, studentId: data.studentId },
-      select: { metadata: true, createdAt: true },
-      take: 10,
-    });
-    const existing = all.find((n) => {
-      try {
-        const meta = n.metadata as { idempotencyKey?: string } | null;
-        return meta?.idempotencyKey === data.idempotencyKey;
-      } catch {
-        return false;
-      }
-    });
-    if (existing) return existing;
-  }
+  return createNotificationTx(tx, workspaceId, {
+    studentId: data.studentId,
+    guardianId: data.guardianId,
+    type: data.type,
+    severity: data.type === "attendance_absent" ? "warning" : "info",
+    title: data.title,
+    body: data.body,
+    entityType: data.entityType,
+    entityId: data.entityId,
+    metadata: data.metadata,
+    dedupeKey: data.idempotencyKey,
+  });
+}
 
-  return tx.notification.create({
-    data: {
-      id: crypto.randomUUID(),
+export async function listNotificationsForUser(
+  scope: Scope,
+  userId: string,
+  options?: { limit?: number; unreadOnly?: boolean },
+) {
+  return withScope(scope, async (tx) => {
+    const where: Prisma.NotificationWhereInput = {
+      workspaceId: scope.workspaceId,
+      recipientUserId: userId,
+      ...(options?.unreadOnly ? { isRead: false } : {}),
+    };
+
+    const [notifications, unreadCount] = await Promise.all([
+      tx.notification.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }],
+        take: options?.limit ?? 50,
+      }),
+      tx.notification.count({
+        where: {
+          workspaceId: scope.workspaceId,
+          recipientUserId: userId,
+          isRead: false,
+        },
+      }),
+    ]);
+
+    return {
+      notifications,
+      unreadCount,
+    };
+  });
+}
+
+export async function markNotificationReadTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  userId: string,
+  notificationId: string,
+) {
+  const result = await tx.notification.updateMany({
+    where: {
       workspaceId,
-      studentId: data.studentId,
-      guardianId: data.guardianId || null,
-      type: data.type,
-      title: data.title,
-      body: data.body,
-      isRead: false,
-      entityType: data.entityType ?? null,
-      entityId: data.entityId ?? null,
-      metadata: data.metadata ? (data.metadata as Prisma.InputJsonValue) : Prisma.JsonNull,
+      id: notificationId,
+      recipientUserId: userId,
+    },
+    data: {
+      isRead: true,
+      readAt: new Date(),
     },
   });
+  return result.count > 0;
+}
+
+export async function markAllNotificationsReadTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  userId: string,
+) {
+  const result = await tx.notification.updateMany({
+    where: {
+      workspaceId,
+      recipientUserId: userId,
+      isRead: false,
+    },
+    data: {
+      isRead: true,
+      readAt: new Date(),
+    },
+  });
+  return result.count;
 }
 
 export async function listNotificationsForGuardian(
@@ -58,7 +210,6 @@ export async function listNotificationsForGuardian(
   studentId?: string,
 ) {
   return withScope(scope, async (tx) => {
-    // Find all authorized guardians in this workspace to enforce student-level authorization
     const guardians = await tx.guardian.findMany({
       where: {
         workspaceId: scope.workspaceId,
@@ -70,7 +221,6 @@ export async function listNotificationsForGuardian(
     const guardianIds = guardians.map((g) => g.id);
     const allowedStudentIds = new Set(guardians.map((g) => g.studentId));
 
-    // Only retrieve notifications linked to authorized guardians for allowed students
     const notifications = await tx.notification.findMany({
       where: {
         workspaceId: scope.workspaceId,
@@ -85,18 +235,6 @@ export async function listNotificationsForGuardian(
       take: 50,
     });
 
-    // Final filter: notification student must belong to an authorized guardian (cross-parent protection)
-    return notifications.filter((n) => allowedStudentIds.has(n.studentId));
-  });
-}
-
-export async function markNotificationReadTx(
-  tx: Prisma.TransactionClient,
-  workspaceId: string,
-  notificationId: string,
-) {
-  return tx.notification.update({
-    where: { workspaceId, id: notificationId },
-    data: { isRead: true, readAt: new Date() },
+    return notifications.filter((n) => allowedStudentIds.has(n.studentId ?? ""));
   });
 }
