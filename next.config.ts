@@ -22,6 +22,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   outputFileTracingRoot: process.cwd(),
   allowedDevOrigins: devOrigins,
+  experimental: { agentUpgrade: "security" },
   async headers() {
     return [
       {
