@@ -25,6 +25,10 @@ const serverEnvSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_SECURE: z.enum(["true","false"]).optional().default("false").transform(v => v === "true"),
+    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+    FACEBOOK_CLIENT_ID: z.string().min(1).optional(),
+    FACEBOOK_CLIENT_SECRET: z.string().min(1).optional(),
     AUTH_RATE_LIMIT_ENABLED: z
       .enum(["true", "false"])
       .optional()
@@ -219,6 +223,10 @@ export type ServerEnv = {
   SMTP_USER?: string;
   SMTP_PASS?: string;
   SMTP_SECURE: boolean;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  FACEBOOK_CLIENT_ID?: string;
+  FACEBOOK_CLIENT_SECRET?: string;
   AUTH_RATE_LIMIT_ENABLED?: boolean;
   FILE_STORAGE_DRIVER: "local" | "s3";
   FILE_LOCAL_STORAGE_PATH: string;

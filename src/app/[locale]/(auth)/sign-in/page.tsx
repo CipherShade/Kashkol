@@ -2,6 +2,8 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound, redirect } from "next/navigation";
 import { SignInForm } from "@/components/auth/forms";
+import { socialProviderConfig } from "@/lib/auth/auth-options";
+import { getServerEnv } from "@/lib/config/env";
 import { routing } from "@/i18n/routing";
 import { AppError } from "@/lib/http/errors";
 import { getStaffGate } from "@/modules/identity/session";
@@ -15,6 +17,12 @@ export default async function SignInPage({ params, searchParams }: PageProps) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
+
+  const env = getServerEnv();
+  const providers = {
+    google: socialProviderConfig(env).google.enabled,
+    facebook: socialProviderConfig(env).facebook.enabled,
+  };
 
   let portalOnly = false;
   try {
@@ -36,11 +44,15 @@ export default async function SignInPage({ params, searchParams }: PageProps) {
       ? t("resetDone")
       : query.signedOut === "1"
         ? t("signedOut")
-        : portalOnly || query.error === "portal"
-          ? tRoot("errors.portalActor")
-          : query.error === "forbidden"
-            ? tRoot("errors.forbidden")
-            : null;
+        : query.registered === "1"
+          ? t("accountCreated")
+          : portalOnly || query.error === "portal"
+            ? tRoot("errors.portalActor")
+            : query.error === "forbidden"
+              ? tRoot("errors.forbidden")
+              : query.signInError === "1"
+                ? tRoot("auth.errors.socialSignInFailed")
+                : null;
 
   return (
     <section className="auth-card" aria-labelledby="sign-in-title">
@@ -51,13 +63,13 @@ export default async function SignInPage({ params, searchParams }: PageProps) {
       {notice ? (
         <p
           className="form-alert"
-          data-kind={portalOnly || query.error ? "error" : "success"}
+          data-kind={portalOnly || query.error || query.signInError === "1" ? "error" : "success"}
           role="status"
         >
           {notice}
         </p>
       ) : null}
-      <SignInForm locale={locale} />
+      <SignInForm locale={locale} providers={providers} />
     </section>
   );
 }

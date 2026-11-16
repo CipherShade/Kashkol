@@ -9,6 +9,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { PreferredTheme } from "@/lib/theme";
 import { ProfileMenu } from "./profile-menu";
 import { TopbarSearch } from "./topbar-search";
+import { NotificationBell } from "./notification-bell";
 
 export function Topbar({
   labels,
@@ -51,6 +52,7 @@ export function Topbar({
       </div>
       {searchVisible ? <TopbarSearch /> : null}
       <div className="app-topbar-actions">
+        <NotificationBell />
         <LanguageSwitch />
         <ThemeSwitch initialTheme={initialTheme} />
         <ProfileMenu

@@ -44,6 +44,24 @@ export const resendVerificationSchema = z.object({
 });
 
 /**
+ * The social providers this deployment can offer. A provider is offered in
+ * the UI only when both credentials are configured (`socialProviderConfig`);
+ * the server action refuses any other value, so the client can never request
+ * a provider the environment does not have.
+ */
+export const socialProviderSchema = z.enum(["google", "facebook"]);
+
+/**
+ * Unlink one Better Auth account row by its internal id. The id comes from
+ * `listUserAccounts` and is never typed by hand.
+ */
+export const unlinkAccountSchema = z.object({
+  accountId: z.string().min(1).max(512),
+});
+
+export type SocialProvider = z.infer<typeof socialProviderSchema>;
+
+/**
  * A per-user interface preference. It is stored on `user_preference`, never in
  * the workspace, so it follows the person across devices and workspaces.
  */

@@ -37,7 +37,13 @@ export default async function StudentPortalPage({
     portal = await requireStudentPortalContext();
   } catch (error) {
     if (error instanceof AppError && error.code === "UNAUTHORIZED") {
-      return redirect({ href: "/portal", locale });
+      // Carry ?checkin= through to the sign-in page so the token is not lost
+      // when a student scans the session QR before they are signed in.
+      const isValid = checkin && /^[a-zA-Z0-9_.-]{1,128}$/.test(checkin);
+      const destination = isValid
+        ? `/portal?checkin=${encodeURIComponent(checkin)}`
+        : "/portal";
+      return redirect({ href: destination, locale });
     }
     return redirect({ href: "/not-available", locale });
   }

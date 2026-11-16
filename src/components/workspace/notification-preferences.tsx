@@ -87,6 +87,37 @@ export function NotificationPreferencesForm({
     }
   }
 
+  async function resetDefaults() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const response = await fetch("/api/messaging/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          enabled: true,
+          quietHoursEnabled: false,
+          quietHoursStart: null,
+          quietHoursEnd: null,
+        }),
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("resetFailed");
+      const value = (await response.json()) as Settings;
+      setSettings(value);
+      setEnabled(true);
+      setQuietEnabled(false);
+      setStart("");
+      setEnd("");
+      setSaved(true);
+    } catch {
+      setError("resetFailed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <p className="app-muted" role="status">{t("loading")}</p>;
   if (!settings) return <Alert tone="danger" live="alert">{t(error ?? "loadFailed")}</Alert>;
 
@@ -144,8 +175,16 @@ export function NotificationPreferencesForm({
         </div>
       ) : null}
       {canWrite ? (
-        <div className="ui-form-actions">
+        <div className="ui-form-actions flex flex-wrap items-center gap-3">
           <Button type="submit" variant="primary" disabled={busy}>{t(busy ? "saving" : "save")}</Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void resetDefaults()}
+          >
+            {t("resetToDefault")}
+          </Button>
         </div>
       ) : null}
     </form>

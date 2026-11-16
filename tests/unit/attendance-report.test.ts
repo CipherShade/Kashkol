@@ -49,6 +49,28 @@ describe("attendance report formatting", () => {
     expect(text).not.toContain("❌ Absent");
   });
 
+  it("supports attended_only mode, omitting absent and late", () => {
+    const text = formatReport({ ...base, locale: "ar", mode: "attended_only" });
+    expect(text).toContain("✅ الحضور");
+    expect(text).toContain("Ahmed Ali");
+    expect(text).not.toContain("❌ الغياب");
+    expect(text).not.toContain("Sara Hassan");
+    expect(text).not.toContain("⏰ التأخير");
+    expect(text).not.toContain("Omar Khalid");
+    expect(text).toContain("📊 إجمالي الحاضرين: 1");
+  });
+
+  it("supports attended_and_late mode, including late but omitting absent", () => {
+    const text = formatReport({ ...base, locale: "ar", mode: "attended_and_late" });
+    expect(text).toContain("✅ الحضور");
+    expect(text).toContain("Ahmed Ali");
+    expect(text).toContain("⏰ التأخير");
+    expect(text).toContain("Omar Khalid");
+    expect(text).not.toContain("❌ الغياب");
+    expect(text).not.toContain("Sara Hassan");
+    expect(text).toContain("📊 إجمالي الحضور والتأخير: 2");
+  });
+
   it("uses real database-derived student names, never hardcoded", () => {
     const text = formatReport({ ...base, locale: "ar" });
     expect(text).toContain("Ahmed Ali");

@@ -1,4 +1,4 @@
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { getServerEnv } from "@/lib/config/env";
 import { firstForwardedIp } from "@/lib/http/csrf";
 import { newRequestId } from "@/lib/http/request-id";
@@ -14,6 +14,7 @@ type AuthContext = {
     returned?: unknown;
     newSession?: { user?: { id?: string } } | null;
     session?: { user?: { id?: string } } | null;
+    sessionConfig?: { freshAge?: number };
   };
 };
 
@@ -61,6 +62,38 @@ async function record(
 }
 
 /**
+ * Enforces the same freshness rule as Better Auth's own
+ * `freshSessionMiddleware` for an endpoint that omits it.
+ *
+ * `POST /link-social` is a credential mutation: it makes a third-party identity
+ * an accepted way into the account. `better-auth@1.7.12` protects
+ * `/unlink-account` with `freshSessionMiddleware` but guards `/link-social` with
+ * the plain `sessionMiddleware`, so a stolen old session could add an attacker
+ * identity instead of being forced to re-authenticate. The endpoint is on the
+ * public Better Auth router, so gating only the server action would not be a
+ * permission check.
+ */
+async function requireFreshSession(ctx: AuthContext): Promise<void> {
+  const session = await getSessionFromCtx(
+    ctx as unknown as Parameters<typeof getSessionFromCtx>[0],
+  );
+  if (!session?.session) {
+    throw new APIError("UNAUTHORIZED", { message: "Unauthorized", code: "UNAUTHORIZED" });
+  }
+
+  const freshAge = ctx.context.sessionConfig?.freshAge;
+  if (!freshAge) return;
+
+  const createdAt = new Date(session.session.createdAt).getTime();
+  if (Date.now() - createdAt >= freshAge * 1000) {
+    throw new APIError("FORBIDDEN", {
+      message: "Session is not fresh",
+      code: "SESSION_NOT_FRESH",
+    });
+  }
+}
+
+/**
  * Better Auth lifecycle hooks (official `createAuthMiddleware` API).
  *
  * The hooks are the one place where a failed sign-in is counted and where the
@@ -70,6 +103,10 @@ async function record(
 export const authHooks = {
   before: createAuthMiddleware(async (rawCtx) => {
     const ctx = rawCtx as unknown as AuthContext;
+    if (ctx.path === "/link-social") {
+      await requireFreshSession(ctx);
+      return;
+    }
     if (ctx.path !== "/sign-in/email") return;
     const email = bodyEmail(ctx.body);
     if (!email) return;

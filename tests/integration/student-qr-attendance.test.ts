@@ -6,6 +6,7 @@ import { createStudent as createStudentService } from "@/modules/students/servic
 import { enrollStudentInGroup } from "@/modules/groups/service";
 import { scanStudentQrCode, markAttendance } from "@/modules/attendance/service";
 import {
+  getStudentQrToken,
   getOrGenerateStudentQrToken,
   rotateStudentQrToken,
   revokeStudentQrToken,
@@ -321,7 +322,7 @@ describe("student attendance QR against PostgreSQL", () => {
     expect(mark?.source).toBe("qr");
   });
 
-  it("revoking the QR rejects scans until it is re-issued", async () => {
+  it("revoking the QR rejects scans until it is re-issued, and revocation is durable across reads", async () => {
     const { student } = await createServiceStudent();
     const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
       requestId: randomUUID(),
@@ -329,7 +330,16 @@ describe("student attendance QR against PostgreSQL", () => {
     const { group, session } = await createGroupWithSession(FIXTURES, "started");
     await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
 
-    await revokeStudentQrToken(fixturesScope(), student.id, { requestId: randomUUID() });
+    const revokeResult = await revokeStudentQrToken(fixturesScope(), student.id, { requestId: randomUUID() });
+    expect(revokeResult).toEqual({ success: true, status: "disabled" });
+
+    // Durable revocation: reading the QR token again returns disabled, not a regenerated token!
+    const stateAfterRevoke = await getStudentQrToken(fixturesScope(), student.id);
+    expect(stateAfterRevoke).toEqual({ status: "disabled", studentId: student.id });
+
+    // Re-reading it again STILL returns disabled (page reload cannot undo revoke)
+    const stateSecondRead = await getStudentQrToken(fixturesScope(), student.id);
+    expect(stateSecondRead).toEqual({ status: "disabled", studentId: student.id });
 
     await expect(
       scanStudentQrCode(
@@ -341,6 +351,84 @@ describe("student attendance QR against PostgreSQL", () => {
       code: "FORBIDDEN",
       messageKey: "attendance.errors.invalidQrCode",
     });
+
+    // Verify rejection audit event exists
+    const audits = await withScope({ workspaceId: FIXTURES }, (tx) =>
+      tx.auditEvent.findMany({
+        where: {
+          workspaceId: FIXTURES,
+          entityId: session.id,
+          action: "attendance.qr_rejected",
+        },
+      }),
+    );
+    expect(
+      audits.some((a) => (a.diff as { reason?: string })?.reason === "invalid_or_revoked_student_qr"),
+    ).toBe(true);
+
+    // Re-issuing restores active state and allows scanning again
+    const rotated = await rotateStudentQrToken(fixturesScope(), student.id, { requestId: randomUUID() });
+    expect(rotated.status).toBe("active");
+    const activeState = await getStudentQrToken(fixturesScope(), student.id);
+    expect(activeState.status).toBe("active");
+
+    await scanStudentQrCode(
+      fixturesScope(),
+      { qrToken: rotated.token, sessionId: session.id, markLate: false },
+      { requestId: randomUUID() },
+    );
+    const mark = await withScope({ workspaceId: FIXTURES }, (tx) =>
+      tx.attendanceMark.findFirst({
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
+      }),
+    );
+    expect(mark?.source).toBe("qr");
+  });
+
+  it("concurrent duplicate scans result in exactly one successful mark and a 409 conflict", async () => {
+    const { student } = await createServiceStudent();
+    const { group, session } = await createGroupWithSession(FIXTURES, "started");
+    await enrollStudentInGroup(fixturesScope(), { groupId: group.id, studentId: student.id });
+
+    const { token } = await getOrGenerateStudentQrToken(fixturesScope(), student.id, {
+      requestId: randomUUID(),
+    });
+
+    // Fire two identical scans concurrently at the exact same moment
+    const [scan1, scan2] = await Promise.allSettled([
+      scanStudentQrCode(
+        fixturesScope(),
+        { qrToken: token, sessionId: session.id, markLate: false, deviceId: "device-sim-1" },
+        { requestId: randomUUID() },
+      ),
+      scanStudentQrCode(
+        fixturesScope(),
+        { qrToken: token, sessionId: session.id, markLate: false, deviceId: "device-sim-2" },
+        { requestId: randomUUID() },
+      ),
+    ]);
+
+    const results = [scan1, scan2];
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    // Exactly one must succeed and the other must be rejected with 409 CONFLICT
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(1);
+
+    const rejectionReason = (rejected[0] as PromiseRejectedResult).reason;
+    expect(rejectionReason).toMatchObject({
+      code: "CONFLICT",
+      messageKey: "attendance.errors.alreadyScanned",
+    });
+
+    // Exactly one attendance mark must exist in the database
+    const count = await withScope({ workspaceId: FIXTURES }, (tx) =>
+      tx.attendanceMark.count({
+        where: { workspaceId: FIXTURES, sessionId: session.id, studentId: student.id },
+      }),
+    );
+    expect(count).toBe(1);
   });
 
   it("a QR issued in one workspace is rejected in another", async () => {
@@ -494,6 +582,20 @@ describe("student attendance QR against PostgreSQL", () => {
         { requestId: randomUUID() },
       ),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // Verify rejection audit event was written
+    const cancelledAudits = await withScope({ workspaceId: FIXTURES }, (tx) =>
+      tx.auditEvent.findMany({
+        where: {
+          workspaceId: FIXTURES,
+          entityId: session.id,
+          action: "attendance.qr_rejected",
+        },
+      }),
+    );
+    expect(
+      cancelledAudits.some((a) => (a.diff as { reason?: string })?.reason === "session_cancelled"),
+    ).toBe(true);
     await expect(
       markAttendance(
         fixturesScope(),

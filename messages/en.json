@@ -284,8 +284,12 @@
     "resetDone": "Your password was set. Sign in again.",
     "emailDisabledNotice": "Outbound email is not configured in this environment. Verification and account recovery cannot complete until a provider is selected.",
     "signedOut": "You have been signed out.",
+    "accountCreated": "Your account was created. Sign in to continue.",
     "sessionExpired": "Your session expired. Sign in again.",
-    "signInLink": "Go to sign in"
+    "signInLink": "Go to sign in",
+    "socialDivider": "Or continue with",
+    "continueWithGoogle": "Continue with Google",
+    "continueWithFacebook": "Continue with Facebook"
   },
   "auth": {
     "errors": {
@@ -301,6 +305,12 @@
       "nameTooLong": "That name is too long.",
       "tokenInvalid": "That recovery link is not valid.",
       "generic": "The request could not be completed. Try again.",
+      "providerUnavailable": "That sign-in provider is not available in this environment.",
+      "socialSignInFailed": "The social sign-in could not be completed. Try again.",
+      "socialAlreadyLinked": "That social account is already linked to another account.",
+      "linkFailed": "That social account could not be linked. Try again.",
+      "unlinkFailed": "That social account could not be disconnected. Try again.",
+      "reauthRequired": "Sign in again to confirm this change, then try once more.",
       "password": {
         "tooShort": "The password must be at least 10 characters.",
         "tooLong": "The password is too long.",
@@ -311,7 +321,9 @@
     "notice": {
       "verificationSent": "If that address has an account, a confirmation link is on its way.",
       "resetSent": "If that address has an account, a recovery link is on its way.",
-      "emailDisabled": "Outbound email is not configured in this environment, so no message was sent."
+      "emailDisabled": "Outbound email is not configured in this environment, so no message was sent.",
+      "accountLinked": "The social account was linked to your account.",
+      "accountUnlinked": "The social account was disconnected."
     }
   },
   "Workspace": {
@@ -509,7 +521,44 @@
     "quietStart": "Quiet hours start",
     "quietEnd": "Quiet hours end",
     "save": "Save preferences",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "resetToDefault": "Reset to default",
+    "resetFailed": "Failed to restore default settings. Try again."
+  },
+  "Notifications": {
+    "bell": "Notifications",
+    "unreadCount": "{count, plural, =1 {1 unread notification} other {# unread notifications}}",
+    "empty": "No new notifications",
+    "emptyHint": "Alerts regarding your groups and students will appear here.",
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark as read",
+    "allRead": "All notifications marked as read",
+    "viewDetails": "View details",
+    "types": {
+      "attendance_present": "Present",
+      "attendance_absent": "Absent",
+      "attendance_late": "Late",
+      "attendance_excused": "Excused",
+      "student_at_risk": "Student at risk",
+      "session_unrecorded": "Unrecorded session",
+      "homework_due_soon": "Homework due soon",
+      "assessment_pending_grades": "Pending grades",
+      "backup_ready": "Backup ready",
+      "export_ready": "Export ready",
+      "general": "General notification"
+    },
+    "messages": {
+      "studentAtRisk": "Student {studentName} attendance dropped to {rate}%, crossing the at-risk threshold.",
+      "sessionUnrecorded": "Session for {groupName} ended more than 2 hours ago with unrecorded attendance.",
+      "homeworkDueSoon": "Homework {homeworkTitle} for {groupName} is due within 48 hours.",
+      "assessmentPendingGrades": "Grades for {assessmentTitle} in {groupName} are still pending.",
+      "backupReady": "Your workspace backup is ready for download.",
+      "exportReady": "Your requested export file is ready for download.",
+      "attendancePresent": "Attendance marked Present for {studentName} in {groupName}.",
+      "attendanceAbsent": "Attendance marked Absent for {studentName} in {groupName}.",
+      "attendanceLate": "Attendance marked Late for {studentName} in {groupName}.",
+      "attendanceExcused": "Attendance marked Excused for {studentName} in {groupName}."
+    }
   },
   "Shell": {
     "greeting": "Hello, {name}",
@@ -782,7 +831,23 @@
     "signOutEverywhereAction": "Sign out everywhere",
     "signOutEverywhereTitle": "Sign out of every device?",
     "signOutEverywhereDescription": "Every session for your account will be revoked immediately, including this one. You will need to sign in again.",
-    "signOutEverywhereConfirm": "Sign out everywhere"
+    "signOutEverywhereConfirm": "Sign out everywhere",
+    "connectedAccountsSection": "Connected accounts",
+    "connectedAccountsHint": "Link Google or Facebook so you can sign in without your password. The social account's verified email must match the email on this account. Kashkol never links accounts silently; you link them here yourself.",
+    "connectedAccountsLoadFailed": "Your linked accounts could not be loaded. Reload the page to try again.",
+    "providerGoogle": "Google",
+    "providerFacebook": "Facebook",
+    "signInMethodEmail": "Email and password",
+    "primaryMethodNote": "Your main sign-in method. It cannot be removed.",
+    "connectedAtLabel": "Connected on",
+    "notConnected": "Not connected",
+    "connectGoogleAction": "Connect Google",
+    "connectFacebookAction": "Connect Facebook",
+    "disconnect": "Disconnect",
+    "disconnectConfirmTitle": "Disconnect this account?",
+    "disconnectConfirmDescription": "{provider} will no longer be able to sign in to Kashkol. You can link it again whenever you like.",
+    "disconnectConfirm": "Disconnect",
+    "socialNotConfigured": "Social sign-in is not configured on this server. Ask whoever runs this Kashkol instance to set up Google and Facebook credentials."
   },
   "Students": {
     "eyebrow": "Students",
@@ -1671,6 +1736,8 @@
       "scanDuplicate": "Student already checked in for this session",
       "scanNotEnrolled": "Student not enrolled in any active group",
       "scanInvalid": "Invalid or unverified QR code",
+      "scanRateLimited": "Too many scans — please wait a moment and try again",
+      "markLateLabel": "Mark as late",
       "cameraNotSupported": "Camera access is not supported on this browser or device",
       "cameraDenied": "Camera permission was denied. Please allow camera access in browser settings.",
       "cameraError": "An error occurred while accessing the camera",

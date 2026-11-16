@@ -39,6 +39,11 @@ export async function studentPortalSignInAction(
   formData: FormData,
 ): Promise<FormActionState> {
   const locale = localeFrom(formData);
+  // The ?checkin= token is passed through the hidden form field so it survives
+  // the sign-in POST. It is validated server-side by the check-in endpoint and
+  // never trusted as an auth credential here — it is only carried for redirect.
+  const rawCheckin = text(formData, "checkin").trim();
+  const checkin = /^[a-zA-Z0-9_.-]{1,128}$/.test(rawCheckin) ? rawCheckin : "";
   try {
     const env = getServerEnv();
     assertTrustedOrigin(await headers(), env.BETTER_AUTH_URL);
@@ -83,5 +88,6 @@ export async function studentPortalSignInAction(
     { requestId: ctx.requestId, ipHash: ctx.ipHash, userAgentHash: null },
   );
 
-  redirect(`/${locale}/portal/student`);
+  const base = `/${locale}/portal/student`;
+  redirect(checkin ? `${base}?checkin=${encodeURIComponent(checkin)}` : base);
 }

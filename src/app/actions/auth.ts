@@ -5,6 +5,7 @@ import { hasLocale } from "next-intl";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth/auth";
+import { socialProviderConfig } from "@/lib/auth/auth-options";
 import { evaluatePassword, passwordRejectionKey } from "@/lib/auth/password-policy";
 import { getServerEnv, isEmailConfigured } from "@/lib/config/env";
 import { assertTrustedOrigin } from "@/lib/http/csrf";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/forms/action-state";
 import { AppError } from "@/lib/http/errors";
 import { routing } from "@/i18n/routing";
+import { requireStaffSession } from "@/modules/identity/session";
 import {
   fieldErrorsFrom,
   requestPasswordResetSchema,
@@ -23,6 +25,8 @@ import {
   resetPasswordSchema,
   signInSchema,
   signUpSchema,
+  socialProviderSchema,
+  unlinkAccountSchema,
 } from "@/modules/identity/schemas";
 
 function localeFrom(formData: FormData): string {
@@ -42,6 +46,11 @@ function authFailureKey(error: unknown): string {
     if (status === "403" || status === "FORBIDDEN") return "auth.errors.emailNotVerified";
   }
   return "auth.errors.generic";
+}
+
+/** Better Auth's freshness rejection, shared by link and unlink. */
+function isSessionNotFresh(error: unknown): boolean {
+  return error instanceof APIError && String(error.body?.code) === "SESSION_NOT_FRESH";
 }
 
 async function guardOrigin(): Promise<void> {
@@ -81,7 +90,9 @@ export async function signUpAction(
   }
 
   const env = getServerEnv();
-  let destination = `/${locale}/app`;
+  // Sign-up never starts a session. With a transport the address must be
+  // confirmed; without one the person signs in with the password just chosen.
+  let destination = `/${locale}/sign-in?registered=1`;
   try {
     await getAuth().api.signUpEmail({
       body: {
@@ -252,4 +263,149 @@ export async function resetPasswordAction(
   }
 
   redirect(`/${locale}/sign-in?reset=1`);
+}
+
+/**
+ * Start a social sign-in (Google or Facebook) for an anonymous visitor.
+ *
+ * The provider must be configured in this environment; an unconfigured
+ * provider is refused with an honest error instead of a provider URL that
+ * could never work. Success always leaves this server by redirecting to the
+ * provider's authorization URL.
+ */
+export async function signInSocialAction(
+  _previous: FormActionState = initialFormState,
+  formData: FormData,
+): Promise<FormActionState> {
+  const locale = localeFrom(formData);
+  try {
+    await guardOrigin();
+  } catch (error) {
+    return errorState(error instanceof AppError ? error.messageKey : "errors.forbidden");
+  }
+
+  const parsed = socialProviderSchema.safeParse(text(formData, "provider"));
+  if (!parsed.success) {
+    return errorState("auth.errors.generic");
+  }
+
+  const env = getServerEnv();
+  const config = socialProviderConfig(env);
+  if (!config[parsed.data].enabled) {
+    // The button is hidden when the provider is not configured; a hand-crafted
+    // POST gets the same honest answer.
+    return errorState("auth.errors.providerUnavailable");
+  }
+
+  let url: string | null = null;
+  try {
+    const result = await getAuth().api.signInSocial({
+      body: {
+        provider: parsed.data,
+        callbackURL: `${env.BETTER_AUTH_URL}/${locale}/app`,
+        newUserCallbackURL: `${env.BETTER_AUTH_URL}/${locale}/app`,
+        errorCallbackURL: `${env.BETTER_AUTH_URL}/${locale}/sign-in?signInError=1`,
+        disableRedirect: true,
+      },
+      headers: await headers(),
+    });
+    url = result?.url ?? null;
+  } catch {
+    // The provider could not be reached or refused the request. The sign-in
+    // page shows a generic failure; the specific reason never reaches the UI.
+  }
+
+  if (!url) return errorState("auth.errors.socialSignInFailed");
+  redirect(url);
+}
+
+/**
+ * Start linking a social identity to the signed-in staff member's account.
+ * Linking is explicit only: Better Auth performs it while the user is
+ * authenticated, and implicit linking on sign-in is disabled in the auth
+ * configuration. Success always leaves this server by redirecting to the
+ * provider's authorization URL.
+ */
+export async function linkSocialAction(
+  _previous: FormActionState = initialFormState,
+  formData: FormData,
+): Promise<FormActionState> {
+  const locale = localeFrom(formData);
+  try {
+    await guardOrigin();
+    await requireStaffSession();
+  } catch {
+    return errorState("errors.forbidden");
+  }
+
+  const parsed = socialProviderSchema.safeParse(text(formData, "provider"));
+  if (!parsed.success) {
+    return errorState("auth.errors.generic");
+  }
+
+  const env = getServerEnv();
+  const config = socialProviderConfig(env);
+  if (!config[parsed.data].enabled) {
+    return errorState("auth.errors.providerUnavailable");
+  }
+
+  let url: string | null = null;
+  let needsReauth = false;
+  try {
+    const result = await getAuth().api.linkSocialAccount({
+      body: {
+        provider: parsed.data,
+        callbackURL: `${env.BETTER_AUTH_URL}/${locale}/app/account?linked=1`,
+        errorCallbackURL: `${env.BETTER_AUTH_URL}/${locale}/app/account?linkError=1`,
+        disableRedirect: true,
+      },
+      headers: await headers(),
+    });
+    url = result?.url ?? null;
+  } catch (error) {
+    // A session older than 12 hours must re-authenticate before a new identity
+    // is accepted (`SESSION_NOT_FRESH`). Same-email mismatches, provider
+    // outages, and link conflicts all land on the generic failure below.
+    needsReauth = isSessionNotFresh(error);
+  }
+
+  if (needsReauth) redirect(`/${locale}/app/account?error=reauthRequired`);
+  if (!url) return errorState("auth.errors.linkFailed");
+  redirect(url);
+}
+
+/**
+ * Unlink one social identity from the signed-in staff member's account.
+ *
+ * Refused when the target is the credential account (email/password must stay
+ * available as the recovery path) or when the account owns no other sign-in
+ * method, so a staff member can never lock themselves out. Better Auth's own
+ * `allowUnlinkingAll: false` guard is the second line of defence.
+ */
+export async function unlinkSocialAction(formData: FormData): Promise<void> {
+  const locale = localeFrom(formData);
+  try {
+    await guardOrigin();
+    await requireStaffSession();
+
+    const parsed = unlinkAccountSchema.safeParse({ accountId: text(formData, "accountId") });
+    if (!parsed.success) throw new Error("invalid account id");
+
+    const requestHeaders = await headers();
+    const accounts = await getAuth().api.listUserAccounts({ headers: requestHeaders });
+    const target = accounts.find((account) => account.id === parsed.data.accountId);
+    if (!target || target.providerId === "credential") throw new Error("cannot unlink");
+    if (accounts.length <= 1) throw new Error("last account");
+
+    await getAuth().api.unlinkAccount({
+      body: { accountId: parsed.data.accountId },
+      headers: requestHeaders,
+    });
+  } catch (error) {
+    redirect(
+      `/${locale}/app/account?error=${isSessionNotFresh(error) ? "reauthRequired" : "unlinkFailed"}`,
+    );
+  }
+
+  redirect(`/${locale}/app/account?unlinked=1`);
 }

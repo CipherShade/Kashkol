@@ -80,7 +80,7 @@ not navigation sketches.
 
 | Case | Behaviour |
 |---|---|
-| Email already registered | Generic "an account with this email already exists" message. Do **not** reveal which accounts exist. |
+| Email already registered | The response is identical to a new registration (a synthetic success, no session). No message reveals which accounts exist. |
 | Verification link expired | Show "link expired" + a resend button with a 60-second cooldown. |
 | Email provider down | Show a retryable banner "we could not send the email"; the account exists and can be verified later. Do not delete the account. |
 | Workspace creation fails after user creation | Transaction rolls back; the user lands on a retry screen. The user must never end up with an account and no workspace, or vice versa. |

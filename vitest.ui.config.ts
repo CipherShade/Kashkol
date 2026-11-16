@@ -11,6 +11,10 @@ export default defineConfig({
     alias: {
       "@": path.resolve(process.cwd(), "src"),
       "server-only": path.resolve(process.cwd(), "tests/stubs/server-only.ts"),
+      // next-intl's navigation factory imports Next's client router; the UI
+      // suite renders under Node where those entry points do not resolve.
+      "next/navigation": path.resolve(process.cwd(), "tests/stubs/next-navigation.ts"),
+      "next/link": path.resolve(process.cwd(), "tests/stubs/next-link.ts"),
     },
   },
   test: {
@@ -19,5 +23,8 @@ export default defineConfig({
     passWithNoTests: false,
     reporters: ["default"],
     pool: "threads",
+    // next-intl is inlined so the `next/navigation` and `next/link` aliases
+    // above apply to its own imports instead of Node resolving them directly.
+    server: { deps: { inline: ["next-intl"] } },
   },
 });

@@ -103,6 +103,7 @@ export const scanStudentQrSchema = z.object({
   qrToken: z.string().min(1, { message: "qrTokenRequired" }),
   sessionId: z.string().uuid({ message: "invalidSessionId" }),
   markLate: z.boolean().optional().default(false),
+  deviceId: z.string().max(128).optional(),
 });
 
 export type ScanStudentQrInput = z.infer<typeof scanStudentQrSchema>;

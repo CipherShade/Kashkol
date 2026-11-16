@@ -300,9 +300,23 @@ enum NotificationType {
   homework_assigned
   homework_reminder
   exam_result
+  student_at_risk
+  session_unrecorded
+  homework_due_soon
+  assessment_pending_grades
+  backup_ready
+  export_ready
   general
 
   @@map("notification_type")
+}
+
+enum NotificationSeverity {
+  info
+  warning
+  critical
+
+  @@map("notification_severity")
 }
 
 enum OutboxState {
@@ -468,6 +482,7 @@ model User {
   portalLogin  PortalLogin?
   portalPushSubscriptions PortalPushSubscription[]
   platformAdmin PlatformAdmin?
+  notifications Notification[]
 
   @@map("user")
 }
@@ -506,6 +521,8 @@ model Account {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([providerId, accountId], map: "account_provider_id_account_id_key")
+  @@unique([userId, providerId], map: "account_user_id_provider_id_key")
   @@index([userId])
   @@map("account")
 }
@@ -1688,30 +1705,39 @@ model FileStudentAccess {
 // ---------------------------------------------------------------------------
 
 model Notification {
-  id          String           @id @default(uuid(7)) @db.Uuid
-  workspaceId String           @map("workspace_id") @db.Uuid
-  studentId   String           @map("student_id") @db.Uuid
-  guardianId  String?          @map("guardian_id") @db.Uuid
-  type        NotificationType
-  title       String
-  body        String
-  isRead      Boolean          @default(false) @map("is_read")
-  readAt      DateTime?        @map("read_at") @db.Timestamptz(6)
-  entityType  String?          @map("entity_type")
-  entityId    String?          @map("entity_id")
-  metadata    Json?
-  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String               @id @default(uuid(7)) @db.Uuid
+  workspaceId     String               @map("workspace_id") @db.Uuid
+  recipientUserId String?              @map("recipient_user_id")
+  studentId       String?              @map("student_id") @db.Uuid
+  guardianId      String?              @map("guardian_id") @db.Uuid
+  type            NotificationType
+  severity        NotificationSeverity @default(info)
+  messageKey      String?              @map("message_key")
+  messageParams   Json?                @map("message_params")
+  dedupeKey       String?              @map("dedupe_key")
+  title           String?
+  body            String?
+  isRead          Boolean              @default(false) @map("is_read")
+  readAt          DateTime?            @map("read_at") @db.Timestamptz(6)
+  entityType      String?              @map("entity_type")
+  entityId        String?              @map("entity_id")
+  metadata        Json?
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
-  guardian  Guardian? @relation(fields: [workspaceId, guardianId], references: [workspaceId, id], onDelete: Restrict)
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  recipientUser User?     @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  student       Student?  @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  guardian      Guardian? @relation(fields: [workspaceId, guardianId], references: [workspaceId, id], onDelete: Restrict)
 
   @@unique([workspaceId, id])
+  @@unique([workspaceId, recipientUserId, dedupeKey])
   @@index([workspaceId])
+  @@index([workspaceId, recipientUserId])
+  @@index([workspaceId, recipientUserId, readAt])
+  @@index([workspaceId, isRead])
   @@index([studentId])
   @@index([guardianId])
-  @@index([workspaceId, isRead])
   @@map("notification")
 }
 

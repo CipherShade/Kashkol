@@ -2,6 +2,8 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound, redirect } from "next/navigation";
 import { SignUpForm } from "@/components/auth/forms";
+import { socialProviderConfig } from "@/lib/auth/auth-options";
+import { getServerEnv } from "@/lib/config/env";
 import { routing } from "@/i18n/routing";
 import { AppError } from "@/lib/http/errors";
 import { getStaffGate } from "@/modules/identity/session";
@@ -25,6 +27,11 @@ export default async function SignUpPage({ params }: PageProps) {
 
   const t = await getTranslations("Auth");
   const tRoot = await getTranslations();
+  const env = getServerEnv();
+  const providers = {
+    google: socialProviderConfig(env).google.enabled,
+    facebook: socialProviderConfig(env).facebook.enabled,
+  };
   return (
     <section className="auth-card" aria-labelledby="sign-up-title">
       <h2 id="sign-up-title" className="auth-title">
@@ -36,7 +43,7 @@ export default async function SignUpPage({ params }: PageProps) {
           {tRoot("errors.portalActor")}
         </p>
       ) : (
-        <SignUpForm locale={locale} />
+        <SignUpForm locale={locale} providers={providers} />
       )}
     </section>
   );

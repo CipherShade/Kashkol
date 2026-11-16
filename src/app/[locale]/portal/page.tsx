@@ -30,19 +30,28 @@ export async function generateMetadata({
 
 type PageProps = {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ checkin?: string }>;
 };
 
-export default async function PortalPage({ params }: PageProps) {
+export default async function PortalPage({ params, searchParams }: PageProps) {
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
 
-  // An already-signed-in portal actor goes straight to their portal; nobody
-  // else sees the sign-in form.
+  const { checkin } = await searchParams;
+
+  // An already-signed-in portal actor goes straight to their portal.
+  // Carry ?checkin= forward so a student who was already signed in does not
+  // lose the check-in token they scanned before landing here.
   const portal = await getPortalContext().catch(() => null);
   if (portal) {
     const isStudent = portal.grants.some((grant) => grant.kind === "student");
-    redirect(`/${locale}/portal/${isStudent ? "student" : "parent"}`);
+    const base = `/${locale}/portal/${isStudent ? "student" : "parent"}`;
+    const isValid = checkin && /^[a-zA-Z0-9_.-]{1,128}$/.test(checkin);
+    const destination = isStudent && isValid
+      ? `${base}?checkin=${encodeURIComponent(checkin)}`
+      : base;
+    redirect(destination);
   }
 
   const t = await getTranslations("Portal.signIn");
@@ -72,7 +81,7 @@ export default async function PortalPage({ params }: PageProps) {
             {t("title")}
           </h1>
           <p className="auth-subtitle">{t("subtitle")}</p>
-          <PortalSignInForm locale={locale} />
+          <PortalSignInForm locale={locale} checkin={checkin ?? null} />
         </section>
       </div>
     </main>

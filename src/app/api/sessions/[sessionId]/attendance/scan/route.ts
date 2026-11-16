@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertTrustedOrigin } from "@/lib/http/csrf";
-import { errorResponse } from "@/lib/http/errors";
+import { AppError, errorResponse } from "@/lib/http/errors";
 import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
 import { assertRateLimit, getClientIp } from "@/lib/http/rate-limit";
 import { getServerEnv } from "@/lib/config/env";
@@ -24,9 +24,10 @@ export async function POST(
     const env = getServerEnv();
     assertTrustedOrigin(await headers(), env.BETTER_AUTH_URL);
 
-    // Scanning is a staff-camera action; rate-limit per client IP so a
-    // device cannot brute-force or flood scans.
-    assertRateLimit(`attendance:scan:${getClientIp(request)}`, 10, 60_000);
+    // Scanning is a staff-camera action; rate-limit per client IP.
+    // 60/min accommodates a full class of 30 students checking in with
+    // some retries; brute-force attacks require orders of magnitude more.
+    assertRateLimit(`attendance:scan:${getClientIp(request)}`, 60, 60_000);
 
     const { scope } = await requireStaffSession();
     const { sessionId } = await params;
@@ -57,6 +58,19 @@ export async function POST(
       headers: { "x-request-id": requestId, "cache-control": "no-store" },
     });
   } catch (error) {
+    // A concurrent duplicate scan that loses the DB unique-constraint race
+    // surfaces as Prisma P2002. Map it to 409 CONFLICT so the scanner UI
+    // shows the correct "already checked in" message rather than a 500.
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      return errorResponse(
+        new AppError("CONFLICT", { messageKey: "attendance.errors.alreadyScanned" }),
+        requestId,
+      );
+    }
     return errorResponse(error, requestId);
   }
 }

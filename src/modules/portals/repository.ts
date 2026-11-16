@@ -1311,8 +1311,8 @@ export async function loadParentChildDetail(
       notifications = notificationRows.map((n) => ({
         id: n.id,
         type: n.type,
-        title: n.title,
-        body: n.body,
+        title: n.title ?? "",
+        body: n.body ?? "",
         isRead: n.isRead,
         readAt: n.readAt?.toISOString() ?? null,
         createdAt: n.createdAt.toISOString(),
@@ -1888,8 +1888,8 @@ export async function loadStudentPortalDetail(
       notifications = notificationRows.map((n) => ({
         id: n.id,
         type: n.type,
-        title: n.title,
-        body: n.body,
+        title: n.title ?? "",
+        body: n.body ?? "",
         isRead: n.isRead,
         readAt: n.readAt?.toISOString() ?? null,
         createdAt: n.createdAt.toISOString(),
@@ -2055,11 +2055,11 @@ export async function listPortalNotificationsForGrants(grants: PortalGrantRow[])
       if (!results.some((existing) => existing.id === row.id)) {
         results.push({
           id: row.id,
-          studentId: row.studentId,
-          studentName: `${row.student.firstName} ${row.student.lastName}`.trim(),
+          studentId: row.studentId ?? "",
+          studentName: row.student ? `${row.student.firstName} ${row.student.lastName}`.trim() : "",
           type: row.type,
-          title: row.title,
-          body: row.body,
+          title: row.title ?? "",
+          body: row.body ?? "",
           isRead: row.isRead,
           readAt: row.readAt?.toISOString() ?? null,
           createdAt: row.createdAt.toISOString(),

@@ -168,6 +168,12 @@ export type AttendanceActor = {
   actorUserId: string;
 };
 
+export function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown };
+  return candidate.code === "P2002" || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002");
+}
+
 export async function upsertAttendanceMarkTx(
   tx: Prisma.TransactionClient,
   scope: AttendanceActor,

@@ -44,6 +44,7 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
   const [hasCamera, setHasCamera] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState<string>("");
+  const [markLate, setMarkLate] = useState<boolean>(false);
   const [lastScanMessage, setLastScanMessage] = useState<{
     type: "success" | "error" | "warning";
     text: string;
@@ -84,7 +85,7 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             qrToken: token.trim(),
-            markLate: false,
+            markLate,
           }),
         });
 
@@ -97,6 +98,8 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
             setLastScanMessage({ type: "warning", text: t("scanDuplicate") });
           } else if (code === "NOT_FOUND") {
             setLastScanMessage({ type: "error", text: t("scanNotEnrolled") });
+          } else if (code === "RATE_LIMITED") {
+            setLastScanMessage({ type: "warning", text: t("scanRateLimited") });
           } else {
             setLastScanMessage({ type: "error", text: t("scanInvalid") });
           }
@@ -132,7 +135,7 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
         setIsSubmitting(false);
       }
     },
-    [sessionId, playBeep, t, onScanSuccess],
+    [sessionId, markLate, playBeep, t, onScanSuccess],
   );
 
   // Camera stream setup. Depends only on `t`: the stream is acquired once and
@@ -270,6 +273,20 @@ export function QrScannerPanel({ sessionId, onScanSuccess, onClose }: QrScannerP
       </div>
 
       <p className="text-xs text-[var(--fg-muted)]">{t("scanningInstructions")}</p>
+
+      {/* Late toggle — teacher selects before scanning; applies to all scans until changed */}
+      <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+        <input
+          type="checkbox"
+          checked={markLate}
+          onChange={(e) => setMarkLate(e.target.checked)}
+          className="h-4 w-4 rounded border border-[var(--border-base)] accent-[var(--status-warning)]"
+          aria-label={t("markLateLabel")}
+        />
+        <span className={`text-sm font-medium ${markLate ? "text-[var(--status-warning)]" : "text-[var(--fg-muted)]"}`}>
+          {t("markLateLabel")}
+        </span>
+      </label>
 
       {/* Camera Viewport */}
       {hasCamera ? (

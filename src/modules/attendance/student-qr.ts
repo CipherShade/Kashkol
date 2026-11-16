@@ -130,8 +130,44 @@ export async function createStudentQrForTx(
 }
 
 /**
- * Get the current student QR token (creating one if none exists yet).
- * Returns the plaintext token for display/printing in the teacher app or portal.
+ * Get the current student QR token.
+ *
+ * Returns `{ status: "active", token, studentId }` when a token exists, or
+ * `{ status: "disabled", studentId }` when the QR has been revoked.
+ *
+ * This function NEVER auto-generates a new token: if the stored hash is null
+ * (revoked), the caller must call `rotateStudentQrToken` explicitly to re-issue.
+ * This keeps revocation durable — a page refresh cannot silently undo it.
+ */
+export async function getStudentQrToken(
+  scope: Scope,
+  studentId: string,
+): Promise<
+  | { status: "active"; token: string; studentId: string }
+  | { status: "disabled"; studentId: string }
+> {
+  authorize(scope, "students", "read");
+
+  return withScope(scope, async (tx) => {
+    const student = await getStudentForQrTx(tx, scope.workspaceId, studentId);
+    if (!student) throw new AppError("NOT_FOUND");
+
+    const parsed = parseStorage(student.qrTokenHash);
+    if (!parsed) {
+      return { status: "disabled", studentId: student.id };
+    }
+
+    const token = buildStudentQrPayload(student.id, parsed.nonce);
+    return { status: "active", token, studentId: student.id };
+  });
+}
+
+/**
+ * @deprecated Use `getStudentQrToken` instead. This alias is kept only for
+ * integration-test callers that assert the auto-generate behaviour. It will
+ * be removed once all call sites are updated to handle the `status` field.
+ *
+ * Get the current student QR token, creating one if none exists yet.
  */
 export async function getOrGenerateStudentQrToken(
   scope: Scope,
@@ -146,12 +182,13 @@ export async function getOrGenerateStudentQrToken(
 
     const parsed = parseStorage(student.qrTokenHash);
     if (parsed) {
-      // Re-create the persistent token
+      // Re-create the persistent token from the stored nonce
       const token = buildStudentQrPayload(student.id, parsed.nonce);
       return { token, studentId: student.id };
     }
 
-    // Generate new persistent token
+    // No stored token yet — generate one (first-time only; revoked tokens must
+    // be explicitly re-issued via rotateStudentQrToken, not this path).
     const nonce = randomBytes(16).toString("base64url");
     const token = buildStudentQrPayload(student.id, nonce);
     const storageValue = encodeStorage(nonce, token);
@@ -183,7 +220,7 @@ export async function rotateStudentQrToken(
   scope: Scope,
   studentId: string,
   reqCtx?: { requestId?: string; ipHash?: string | null },
-): Promise<{ token: string; studentId: string }> {
+): Promise<{ status: "active"; token: string; studentId: string }> {
   authorize(scope, "students", "write");
 
   return withScope(scope, async (tx) => {
@@ -209,7 +246,7 @@ export async function rotateStudentQrToken(
       ipHash: reqCtx?.ipHash,
     });
 
-    return { token, studentId: student.id };
+    return { status: "active", token, studentId: student.id };
   });
 }
 
@@ -221,7 +258,7 @@ export async function revokeStudentQrToken(
   scope: Scope,
   studentId: string,
   reqCtx?: { requestId?: string; ipHash?: string | null },
-): Promise<{ success: true }> {
+): Promise<{ success: true; status: "disabled" }> {
   authorize(scope, "students", "write");
 
   return withScope(scope, async (tx) => {
@@ -243,7 +280,7 @@ export async function revokeStudentQrToken(
       ipHash: reqCtx?.ipHash,
     });
 
-    return { success: true };
+    return { success: true, status: "disabled" };
   });
 }
 

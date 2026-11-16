@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-14 · **Status:** Multiple weekly slots per group and sessions that are not tied to a group (§5.20, `ADR-0029`): per-slot room/time/capacity, grade-level snapshot rosters, independent sessions with an explicit student roster, and attendance recordable/correctable at any time on a non-cancelled session · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-16 · **Status:** Google/Facebook social sign-in with explicit-only account linking, a Connected Accounts screen, and the database constraints behind them (`account` uniqueness on `(providerId, accountId)` and `(userId, providerId)`) are implemented and unit-tested; Google credentials are now configured locally and the OAuth start leg is **live-verified through a Cloudflare quick tunnel** (Google consent page reached, no `redirect_uri_mismatch`), while a completed sign-in with a real Google account is still outstanding · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -8,7 +8,7 @@
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
 now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and
-thirty-eight migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
+thirty-nine migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
 seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
 the server-enforced role and permission model, the portal-link authorization design, audit
 infrastructure, the core domain schema with Arabic search indexes, the bilingual shell,
@@ -25,7 +25,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (28 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (29 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -122,6 +122,10 @@ health/readiness probes, the route registry, and the project-rule checks.
   private storage to serve durable production files.
 - A public breached-password list integration. A local denylist and identity checks are implemented
   and documented as such; there is no live breach check.
+- Google/Facebook social sign-in is **implemented but not live-verified** (`docs/ENVIRONMENT.md`
+  §"Social providers"): no OAuth credentials exist in this environment, so no end-to-end OAuth flow
+  has been exercised. The feature is wired through Better Auth's explicit `linkSocial` flow only,
+  with implicit linking disabled, and stays invisible until both credentials are configured.
 
 ---
 
@@ -146,7 +150,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | `docs/INTEGRATIONS.md` | 318 | Integration principles, the package-versioning policy, the integration inventory, the adapter contract pattern, and a contract for each integration: PostgreSQL, object storage, the antivirus scanner, email, the WhatsApp deep link, QR and token services, Railway, observability, and deferred payments — plus the failure matrix and the integration security checklist. |
 | `docs/OPERATIONS_RUNBOOK.md` | 214 | Backup model (Railway-managed vs. logical encrypted archive), backup procedure, 35-day retention, alerting, what "verified" means, RTO/RPO, incident restore procedure, monthly drill checklist, what was done and what is unverified. |
 | `docs/decisions/README.md` | 65 | The ADR format, the index, the conventions, and the requirement traceability table. |
-| `docs/decisions/0001`–`0025` | 1,524 | Twenty-four architecture decisions with context, decision, consequences, rejected alternatives, and a revisit trigger. |
+| `docs/decisions/0001`-`0030` | 2,204 | Twenty-nine architecture decisions with context, decision, consequences, rejected alternatives, and a revisit trigger. |
 | `docs/STATUS.md` | this file | Current state and the ordered implementation plan. |
 | `../AGENTS.md` | 193 | The durable instructions an agent or engineer follows when working in this repository. |
 | `../.gitattributes` | 15 | The line-ending convention (LF for every text file) and the binary-file rules. |
@@ -969,6 +973,38 @@ per-phone lockout (5 failures / 15 min, hashed identifiers), session invalidatio
 regeneration transaction, `attendance:write` + IP rate limit on the scan route, CSRF origin checks
 on mutations, service-identical audit events for credential and QR operations.
 
+### 5.X QR attendance Phase 1, Phase 2 & Phase 3 (Verification) — 2026-11-16 — `F-P2-05`
+
+Seven correctness gaps found during code review were fixed across Phase 1 and Phase 2, and verified with dedicated test coverage in Phase 3:
+
+| # | Bug | Fix |
+|---|---|---|
+| 1 | **Revocation did not stick** — `getOrGenerateStudentQrToken` auto-created a new token whenever `qrTokenHash` was null, silently undoing any revoke on the next page load | Introduced `getStudentQrToken` (read-only, returns `{status:"active"\|"disabled"}`). The GET `/api/students/[id]/qr` route now calls it; `status:"disabled"` is returned to the client and the UI shows the "No QR / Create QR" state correctly. The deprecated `getOrGenerateStudentQrToken` is kept for integration-test call sites only. |
+| 2 | **Late flag hardcoded to `false`** — `QrScannerPanel` always sent `markLate:false`, making AC-6 impossible | Added a "Mark as late" checkbox to the scanner UI; the state is included in every scan POST. `scanStudentQrSchema` and `scanStudentQrCode` accept and record `deviceId`. Both locales ship the new string (`markLateLabel`). |
+| 3 | **RATE_LIMITED surfaced as "Invalid QR"** — scanner error handler had no branch for `RATE_LIMITED` | Added explicit branch mapping `RATE_LIMITED → scanRateLimited` message. Also raised the rate limit from **10/min to 60/min** per IP, accommodating a full class of 30 students with retries. |
+| 4 | **Concurrent duplicate scan → 500** — a Prisma `P2002` unique-constraint violation escaped as `INTERNAL` | `scanStudentQrCode` catches `isUniqueViolation(error)` (Prisma P2002), audits `attendance.qr_rejected` with `{ reason: "duplicate_scan_race" }`, and maps to `409 CONFLICT` with `attendance.errors.alreadyScanned` key. |
+| 5 | **Cancelled-session rejection not audited** (AC-9) | The cancelled-session branch now writes `attendance.qr_rejected` with `reason:"session_cancelled"` before throwing. |
+| 6 | **Not-enrolled rejections not audited** (AC-8/AC-9) — two branches (no active enrollment anywhere; not on attendee roster) threw without logging | Both branches now write `attendance.qr_rejected` with specific reasons before throwing. |
+| 7 | **Signed-out student lost check-in token (Phase 2)** — scanning session QR while unauthenticated dropped `?checkin=` during redirect to `/portal`, and sign-in action redirected without it | `/portal/student` unauthorized redirect now carries `?checkin=` forward to `/portal`. `/portal` accepts and passes `checkin` into `PortalSignInForm` as a hidden field (and forward-redirects already-signed-in students with it). `studentPortalSignInAction` validates the token format (`^[a-zA-Z0-9_.-]{1,128}$`) and redirects to `/${locale}/portal/student?checkin=...`, allowing the self-check-in on the student overview client to execute seamlessly. |
+
+**Phase 3 Test Coverage Added:**
+- `tests/unit/student-qr-identity.test.ts`: Expanded to 14 tests verifying `getStudentQrToken` returns `{ status: "disabled" }` on revoked/null hashes without regenerating, `revokeStudentQrToken` sets hash to null, and `rotateStudentQrToken` creates a fresh active token.
+- `tests/unit/student-qr-scan.test.ts`: 7 new unit tests verifying audit rejections (`session_cancelled`, `invalid_or_revoked_student_qr`, `student_not_enrolled`, `student_not_on_attendee_roster`, `duplicate_scan`), concurrent duplicate scan race condition (Prisma P2002 mapped to 409 CONFLICT with `duplicate_scan_race` audit), and late toggle with `deviceId` persistence.
+- `tests/integration/student-qr-attendance.test.ts`: Added integration tests verifying durable revocation persistence across multiple reads, concurrent duplicate scan resolution (`Promise.allSettled` resulting in 1 fulfilled present mark and 1 rejected 409 conflict, with exactly 1 DB record), and cancelled session rejection audit trail.
+
+**Gate result (2026-11-16).**
+
+| Check | Result |
+|---|---|
+| `npm run lint` | **Passed** (eslint + project rules) |
+| `npm run typecheck` | **Passed** |
+| `npm test` | **Passed** — 69 unit files / 459 tests; 2 UI files / 25 tests |
+| `npm run build` | **Passed** (exit 0, 65 static pages, all routes compiled) |
+
+**Still not claimed:** camera capture on real hardware; integration-test suite requires embedded PostgreSQL.
+
+---
+
 **Staging deploy is blocked, not done.** No Railway credentials exist in this environment
 (`RAILWAY_TOKEN`/`RAILWAY_API_TOKEN`/`RAILWAY_SERVICE_TOKEN` unset; `railway whoami` →
 `Unauthorized`), and `.github/workflows/ci.yml` is test-and-build only with no deploy job. Item
@@ -1147,6 +1183,168 @@ between the original specification and the reality of Egyptian tutoring operatio
 **Not done here:**
 - Commit and push await repository owner direction; all changes remain uncommitted in the working tree.
 
+### 5.21 Google / Facebook social sign-in with explicit-only account linking on 2026-11-15
+
+Social authentication was added as an optional, non-destructive layer on top of email/password.
+**No end-to-end OAuth flow has been exercised: no Google or Facebook app credentials exist in this
+environment, and none were invented.** Everything below is implemented, unit-tested, and gated, but
+the first real login must happen after a provider app is created and its credentials are set.
+
+- **Migration `20261115000000_social_auth_account_constraints`.** Two unique indexes were added to
+  the existing Better Auth `account` table: `account_provider_id_account_id_key` on
+  `(providerId, accountId)` (one OAuth identity is at most one account row) and
+  `account_user_id_provider_id_key` on `(userId, providerId)` (a user holds at most one account per
+  provider). A pre-check verified zero duplicate rows on both pairs before applying. The migration
+  is hand-written SQL applied with `prisma migrate deploy` (`migrate dev` is interactive-only in
+  this harness), and `REQUIRED_MIGRATION_NAME` was updated to match. No new table and no column
+  changes were required.
+- **Provider configuration** (`src/lib/auth/auth-options.ts` `socialProviderConfig`). Each provider's
+  callback URL is pinned to Better Auth's canonical path derived from `BETTER_AUTH_URL`:
+  `${BETTER_AUTH_URL}/api/auth/callback/google` and `${BETTER_AUTH_URL}/api/auth/callback/facebook`.
+  A provider is registered only when **both** credentials are set, via a conditional spread of raw
+  options — an unconfigured provider yields no button and never reaches the OAuth redirect. Missing
+  credentials keep the `socialProviders` object empty; email/password is never affected.
+- **Explicit linking only.** `account.accountLinking` is `{ enabled: true, disableImplicitLinking: true,
+  allowDifferentEmails: false, allowUnlinkingAll: false }`, and `trustedProviders` is deliberately
+  unset, so a link succeeds only when the identity provider asserts a verified email that exactly
+  matches the account's email. A social sign-in that matches an existing email without an explicit
+  link is rejected, never silently linked (`account_not_linked`).
+- **Environment** (`src/lib/config/env.ts`). `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET` are optional (min length 1). An empty string is
+  rejected at startup rather than silently disabling a provider; local defaults set no stubs.
+- **Server actions** (`src/app/actions/auth.ts`). `signInSocialAction` (anonymous, origin-guarded)
+  starts the OAuth flow; `linkSocialAction` and `unlinkSocialAction` are staff-session-gated. Unlink
+  refuses the `credential` row (email/password must remain the recovery path) and refuses to remove
+  the last remaining account; Better Auth's own `allowUnlinkingAll: false` is the second line of
+  defence, and `SESSION_NOT_FRESH` maps to an explicit re-authentication notice instead of an opaque
+  failure. `redirect()` is never called inside a `try/catch` that would swallow `NEXT_REDIRECT`.
+- **UI.** Sign-in and sign-up render "Continue with Google/Facebook" buttons only for providers the
+  environment actually offers, followed by a generic failure notice on the error marker. The account
+  page gains a "Connected accounts" card: the email/password method is shown as the non-removable
+  primary method, each linked social account is labelled with its connection date, disconnect goes
+  through a confirmation dialog, a load failure shows an honest error instead of a fake empty list,
+  and the card explains that social sign-in is unavailable when neither provider is configured.
+- **i18n.** Arabic and English catalogues were extended in parity (2044 keys each, 0 missing).
+- **Tests.** `tests/unit/social-auth.test.ts` adds 12 tests: callback-URL pinning, provider on/off
+  per credential pair, one-sided credentials refused, the explicit-only linking policy, no implicit
+  provider trust in any environment, env parsing of absent/empty credentials, and provider/unlink
+  schema validation.
+
+**Gate results:**
+- `npm run lint`: passed (ESLint + project rules).
+- `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
+- `npm test`: passed (68 unit files / 446 tests + 1 UI file / 21 tests).
+- `npm run test:integration`: passed (20 files / 130 tests against the local PostgreSQL).
+- `npm run build`: passed (Prisma generate + production build, no warnings).
+- Route registry / generated matrices: unchanged — no route was added, removed, or renamed.
+- Dependencies: unchanged — Better Auth 1.7.12 as pinned; no package added.
+
+**Not done here / not verified:**
+- No Google or Facebook OAuth app has been created in this environment, and no credential set
+  exists. The end-to-end sign-in and link flows have therefore **not been executed**, and no claim
+  that social auth "works" is made until the manual setup in `docs/ENVIRONMENT.md`
+  §"Social providers" has been completed and exercised.
+- Callback URLs to register in each provider console — local:
+  `http://localhost:3000/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/facebook`;
+  production: `${BETTER_AUTH_URL}/api/auth/callback/google` and `${BETTER_AUTH_URL}/api/auth/callback/facebook`.
+- Per the repository rules, the work remains uncommitted in the working tree until the repository
+  owner gives direction; nothing was committed or pushed here.
+
+#### 5.21.1 Security audit of the social-auth surface — 2026-11-16
+
+Three reported findings were reproduced against the installed `better-auth@1.7.12` before any change.
+The reproduction is `tests/integration/social-auth-security.test.ts`, which ages `session.createdAt`
+in PostgreSQL and calls the Better Auth handler directly (the same public router the browser uses).
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| P0 — linking a social account accepted a session older than `freshAge` | **Confirmed** | A 13-hour-old session got `404 PROVIDER_NOT_FOUND` from `/link-social`, proving the request passed the middleware and reached the provider lookup. `unlink-account` returned `403 SESSION_NOT_FRESH` for the same session. |
+| P1 — unlinking a social account did not enforce freshness / mishandled the error | **False positive** | `/unlink-account` already returns `403 SESSION_NOT_FRESH`; `unlinkSocialAction` already maps it to `?error=reauthRequired`. Both are now pinned by tests. |
+| P1 — sign-up enumerated existing emails | **Confirmed, one configuration only** | With `EMAIL_TRANSPORT=none` (allowed outside production), a new address returned `200` while a duplicate returned `422 USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`. With a transport configured the library already returned the synthetic `200` for both. |
+
+**Fixes (minimal, no schema change, no new dependency):**
+
+- `src/modules/identity/hooks.ts` — `hooks.before` now resolves the session for `/link-social` and
+  rejects one at least `session.freshAge` (12 h) old with `403 SESSION_NOT_FRESH`, exactly as Better
+  Auth's `freshSessionMiddleware` does for `/unlink-account`. Enforcing it on the endpoint (not only
+  in the server action) is required because the route is publicly reachable (`NF-8`).
+- `src/app/actions/auth.ts` — a freshness rejection from either action now redirects to
+  `?error=reauthRequired`; the check is one shared `isSessionNotFresh` helper.
+- `src/lib/auth/auth-options.ts` — `emailAndPassword.autoSignIn` is `false` in every environment.
+  Better Auth returns a synthetic success for a duplicate email only when sign-up does not
+  auto-sign-in, so this makes registration non-enumerable even where no email transport exists. It
+  changes behaviour only for `EMAIL_TRANSPORT=none` (production already requires a transport; the
+  local default is `console`, where verification already suppressed the session).
+- `src/app/actions/auth.ts`, `src/app/[locale]/(auth)/sign-in/page.tsx`, `messages/{en,ar}.json` —
+  after a sign-up without a transport, the person is sent to sign-in with an explicit
+  `Auth.accountCreated` notice instead of a session that no longer exists.
+- `docs/SECURITY_AND_PRIVACY.md` §3.1/§3.2 and `docs/decisions/0030-social-auth-explicit-linking.md`
+  record the freshness rule and the non-enumerable registration invariant.
+
+**Tests:** `tests/integration/social-auth-security.test.ts` (5 tests) fails on the pre-fix code for
+the two confirmed findings and passes after the fix; `tests/unit/auth-options.test.ts` asserts the
+non-enumerability precondition. Full gate after the change: `npm run lint` passed,
+`npm run typecheck` passed, `npm test` passed (68 unit files / 447 tests + 21 UI tests), and
+`npm run test:integration` passed (21 files / 135 tests). `npm run build` passed.
+
+**Residual risks not fixed here:**
+
+- No live Google/Facebook flow was exercised (still no credentials), so the OAuth redirect, state,
+  and callback legs remain unverified end-to-end.
+- A duplicate sign-up with a transport configured receives the generic "check your email" screen,
+  but Better Auth does not send a message to an existing address (`onExistingUserSignUp` is unset).
+  The screen's copy is therefore slightly optimistic for that case; adding an "account already
+  exists" email is a product/email-template decision, not a code fix made here.
+- The OAuth callback appends `error=account_not_linked` to the sign-in URL when implicit linking is
+  refused. It is visible only to the person who controls that provider identity (they authenticated
+  as that address), so it is not a general enumeration oracle; the page renders a generic failure.
+
+### 5.22 Social buttons submitted the credential form instead of starting OAuth, fixed on 2026-11-16
+
+**Symptom.** With live Google credentials configured, clicking "Continue with Google" (or "تابع عبر
+Google") did nothing. The browser sent no request to the OAuth start endpoint; the server log showed
+only repeated `POST /{locale}/sign-up`.
+
+**Root cause.** `SocialSignInButtons` was rendered *inside* `SignInForm`/`SignUpForm`'s `<form>`, and
+it rendered a nested `<form>` per provider. Nested forms are invalid HTML: the parser drops the inner
+`<form>` tags, so the hidden `provider=google` input and the submit button became part of the
+credential form. The click therefore submitted `signInAction` (or `signUpAction`) with an empty
+email and password, and the resulting validation message read as "nothing happened". The provider
+input was already correct and the OAuth configuration was already reachable — only the DOM was wrong.
+
+**Fix.** The social block and the alternative links render as siblings of the credential form, inside
+a `.auth-tail` wrapper that reproduces the old `.form-stack` gap (`.auth-tail` in
+`src/styles/auth.css`), so the card is visually unchanged. No server, schema, or provider change.
+
+**Tests.** `tests/ui/auth-forms.test.tsx` renders the real `SignInForm` and `SignUpForm` and asserts
+the maximum `<form>` nesting depth is 1, that each enabled provider yields its own top-level form,
+that the hidden `provider` input sits in an opening form rather than after a closing one, and that no
+social block is emitted when no provider is configured. The pre-fix markup measures depth 2, so the
+first two assertions fail without the fix. The UI suite gained `next/navigation` and `next/link`
+stubs (`tests/stubs/`) and inlines `next-intl` so the locale-aware `Link` resolves under Node.
+
+**Verified end to end (local, through the Cloudflare quick tunnel).**
+- `/en/sign-in` and `/ar/sign-in` now render maximum form depth 1, with the Google form as a sibling.
+- Replaying the exact progressive-enhancement multipart POST that the browser makes returns
+  `303` with `Location: https://accounts.google.com/o/oauth2/v2/auth?...` and sets the
+  `kashkol.state` cookie.
+- Google serves its real consent page for that URL (no `redirect_uri_mismatch`), so the callback URI
+  is registered for the configured client.
+
+**Gate results:**
+- `npm run lint`: passed (ESLint + project rules).
+- `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
+- `npm test`: passed (68 unit files / 447 tests + 2 UI files / 25 tests).
+- `npm run build`: not run in this pass — the dev server owns `.next` while the tunnel is serving, so
+  the production build must be run in a window where `next dev` is stopped.
+
+**Not claimed here.** A real Google account has not completed the chooser → callback → `/app` leg, so
+"sign-in succeeds" is not asserted; what is verified is that the click now reaches Google with the
+correct client, callback URI, scope, and state. Credentials live only in the git-ignored `.env.local`.
+The quick-tunnel hostname is ephemeral: a tunnel restart requires registering the new
+`…/api/auth/callback/google` URI in the provider console before OAuth works again.
+
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work
@@ -1175,7 +1373,7 @@ task.
 | 0.13 | Build the route registry and the generated isolation and permission matrices | `F-P0-01` AC-6 passes: a route missing from the registry fails CI, and the matrices run against a real database | ◐ registry, missing-route gate, and hand-written isolation/authorization tests exist; generators pending |
 | 0.14 | Implement authentication: Better Auth, email verification, session policy, rate limits, sign-out, reset | `F-P0-02` AC-1…AC-10 all pass | ◐ all flows work and are tested; a live breached-password list and a distinct unverified sign-in state remain |
 | 0.15 | Implement workspace creation and the workspace profile | `F-P0-06` passes | ☑ atomic creation, settings, thresholds, audit, and UI tested |
-| 0.16 | Implement the audit substrate and the notification substrate | The fault-injection test proves atomicity (`NF-7`); `F-P0-10` passes | ◐ audit writer, redaction, atomicity, append-only grants, and auth events are done; notification substrate pending |
+| 0.16 | Implement the audit substrate and the notification substrate | The fault-injection test proves atomicity (`NF-7`); `F-P0-10` passes | ☑ audit writer, redaction, atomicity, append-only grants, auth events, and in-app notification substrate with recipient isolation, deduplication, and topbar bell UI are complete |
 | 0.17 | Implement i18n: locale routing, the bilingual catalogue, RTL layout, theming | `F-P0-03` and `F-P0-04` pass; a missing translation fails the build | ◐ routing, RTL shell, tokens, and parity check exist; full catalogue pending |
 | 0.18 | Build the design system primitives on Radix | `F-P0-05` passes; keyboard and screen-reader checks pass on every primitive | ☑ |
 | 0.19 | Implement the privacy groundwork: data minimisation, redaction, retention configuration, the export schema | `F-P0-08` AC-1 (minimisation) and AC-6 (no PII in logs) pass; AC-2 (export) and AC-3 (deletion) are scheduled for M1/M2 | ☐ |

@@ -18,6 +18,7 @@ import {
   getSessionWithGroup,
   removeSessionAttendeeTx,
   upsertAttendanceMarkTx,
+  isUniqueViolation,
 } from "./repository";
 import {
   verifyStudentQrTokenSignature,
@@ -689,10 +690,26 @@ export async function scanStudentQrCode(
   const session = await getSessionWithGroup(scope, input.sessionId);
   if (!session) throw new AppError("NOT_FOUND");
   if (session.status === "cancelled") {
+    // Audit the rejection before throwing so the teacher can review it.
+    await withScope(scope, async (tx) => {
+      await writeAuditEvent(tx, {
+        workspaceId: scope.workspaceId,
+        actorUserId: scope.actorUserId,
+        actorDisplayName: scope.actorDisplayName,
+        actorType: "user",
+        entityType: "teaching_session",
+        entityId: input.sessionId,
+        action: attendanceAuditActions.qrRejected,
+        diff: { reason: "session_cancelled", sessionId: input.sessionId },
+        requestId: ctx.requestId,
+        ipHash: ctx.ipHash,
+      });
+    });
     throw new AppError("CONFLICT", { messageKey: "attendance.errors.sessionCancelled" });
   }
 
-  const result = await withScope(scope, async (tx) => {
+  try {
+    const result = await withScope(scope, async (tx) => {
     // 1. Verify student QR token cryptographic signature and active hash in database
     const verified = verifyStudentQrTokenSignature(input.qrToken);
     const student = verified
@@ -750,6 +767,18 @@ export async function scanStudentQrCode(
       if (!primaryEnrollment) {
         const activeEnrollment = await getActiveEnrollmentForStudent(tx, scope.workspaceId, student.id);
         if (!activeEnrollment) {
+          await writeAuditEvent(tx, {
+            workspaceId: scope.workspaceId,
+            actorUserId: scope.actorUserId,
+            actorDisplayName: scope.actorDisplayName,
+            actorType: "user",
+            entityType: "teaching_session",
+            entityId: input.sessionId,
+            action: attendanceAuditActions.qrRejected,
+            diff: { reason: "student_not_enrolled", studentId: student.id },
+            requestId: ctx.requestId,
+            ipHash: ctx.ipHash,
+          });
           throw new AppError("NOT_FOUND", { messageKey: "attendance.errors.studentNotEnrolled" });
         }
         isCrossSeason = true;
@@ -758,6 +787,18 @@ export async function scanStudentQrCode(
     } else {
       const attendee = await getSessionAttendeeTx(tx, scope.workspaceId, input.sessionId, student.id);
       if (!attendee) {
+        await writeAuditEvent(tx, {
+          workspaceId: scope.workspaceId,
+          actorUserId: scope.actorUserId,
+          actorDisplayName: scope.actorDisplayName,
+          actorType: "user",
+          entityType: "teaching_session",
+          entityId: input.sessionId,
+          action: attendanceAuditActions.qrRejected,
+          diff: { reason: "student_not_on_attendee_roster", studentId: student.id },
+          requestId: ctx.requestId,
+          ipHash: ctx.ipHash,
+        });
         throw new AppError("NOT_FOUND", { messageKey: "attendance.errors.studentNotEnrolled" });
       }
     }
@@ -768,6 +809,7 @@ export async function scanStudentQrCode(
       studentId: student.id,
       mark: markValue,
       source: "qr",
+      deviceId: input.deviceId ?? null,
       isCrossSeason,
       primaryGroupId,
     });
@@ -785,6 +827,7 @@ export async function scanStudentQrCode(
         studentId: student.id,
         mark: markValue,
         source: "qr",
+        deviceId: input.deviceId ?? null,
         isCrossSeason,
       },
       requestId: ctx.requestId,
@@ -818,6 +861,26 @@ export async function scanStudentQrCode(
   }
 
   return result;
+} catch (error) {
+  if (isUniqueViolation(error)) {
+    await withScope(scope, async (tx) => {
+      await writeAuditEvent(tx, {
+        workspaceId: scope.workspaceId,
+        actorUserId: scope.actorUserId,
+        actorDisplayName: scope.actorDisplayName,
+        actorType: "user",
+        entityType: "teaching_session",
+        entityId: input.sessionId,
+        action: attendanceAuditActions.qrRejected,
+        diff: { reason: "duplicate_scan_race", deviceId: input.deviceId ?? null },
+        requestId: ctx.requestId,
+        ipHash: ctx.ipHash,
+      });
+    }).catch(() => {});
+    throw new AppError("CONFLICT", { messageKey: "attendance.errors.alreadyScanned" });
+  }
+  throw error;
+}
 }
 
 /**

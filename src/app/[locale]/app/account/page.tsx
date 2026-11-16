@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { SignOutButton, SignOutEverywhereDialog } from "@/components/app/account-actions";
+import { ConnectProviderButton, UnlinkAccountButton } from "@/components/app/connected-accounts";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Alert } from "@/components/ui/feedback";
 import { Icon } from "@/components/ui/icon";
 import { LanguageSwitch } from "@/components/ui/language-switch";
 import { PageHeader } from "@/components/ui/page-header";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { getAuth } from "@/lib/auth/auth";
+import { socialProviderConfig } from "@/lib/auth/auth-options";
+import { getServerEnv } from "@/lib/config/env";
 import { Link } from "@/i18n/navigation";
 import { getPreferredTheme } from "@/modules/identity/preferences";
 import { requireStaffSession } from "@/modules/identity/session";
@@ -24,17 +30,72 @@ export async function generateMetadata({
   return { title: t("title") };
 }
 
-export default async function AccountPage({ params }: { params: Promise<{ locale: string }> }) {
+type LinkedAccount = {
+  id: string;
+  providerId: string;
+  createdAt: Date;
+};
+
+export default async function AccountPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { locale } = await params;
   const { user, scope } = await requireStaffSession();
   const t = await getTranslations("Account");
+  const tRoot = await getTranslations();
   const shell = await getTranslations("Shell");
+
+  const query = await searchParams;
+  const notice =
+    query.linked === "1" || query.unlinked === "1"
+      ? query.linked === "1"
+        ? { tone: "success" as const, key: "auth.notice.accountLinked" }
+        : { tone: "success" as const, key: "auth.notice.accountUnlinked" }
+      : query.error === "SOCIAL_ACCOUNT_ALREADY_LINKED"
+        ? { tone: "error" as const, key: "auth.errors.socialAlreadyLinked" }
+        : query.error === "unlinkFailed"
+          ? { tone: "error" as const, key: "auth.errors.unlinkFailed" }
+          : query.error === "reauthRequired"
+            ? { tone: "error" as const, key: "auth.errors.reauthRequired" }
+            : query.linkError === "1" || query.error
+              ? { tone: "error" as const, key: "auth.errors.linkFailed" }
+              : null;
 
   const [membership, workspace, preferredTheme] = await Promise.all([
     getCallerMembership(scope),
     getWorkspaceIdentity(scope),
     getPreferredTheme().catch(() => null),
   ]);
+
+  const env = getServerEnv();
+  const providers = socialProviderConfig(env);
+
+  let accountsLoadFailed = false;
+  let linkedAccounts: LinkedAccount[] = [];
+  try {
+    const accounts = await getAuth().api.listUserAccounts({ headers: await headers() });
+    linkedAccounts = accounts.map((account) => ({
+      id: account.id,
+      providerId: account.providerId,
+      createdAt: new Date(account.createdAt),
+    }));
+  } catch {
+    // An honest failure note instead of a fake empty list.
+    accountsLoadFailed = true;
+  }
+
+  const linkedByProvider = new Map(linkedAccounts.map((account) => [account.providerId, account]));
+  const connectableProviders = (["google", "facebook"] as const).filter(
+    (provider) => providers[provider].enabled && !linkedByProvider.has(provider),
+  );
+  const linkedSocialAccounts = linkedAccounts.filter(
+    (account) => account.providerId === "google" || account.providerId === "facebook",
+  );
+  const hasCredentialAccount = linkedAccounts.some((account) => account.providerId === "credential");
 
   const dateFormat = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", {
     dateStyle: "long",
@@ -43,6 +104,13 @@ export default async function AccountPage({ params }: { params: Promise<{ locale
   const roleLabel =
     membership.role === "owner" ? t("roleOwner") : t("roleAssistant");
   const canSeeSettings = isAllowed(scope, "settings", "read");
+
+  const providerLabel = (providerId: string) =>
+    providerId === "google"
+      ? t("providerGoogle")
+      : providerId === "facebook"
+        ? t("providerFacebook")
+        : providerId;
 
   return (
     <div className="app-page">
@@ -164,6 +232,78 @@ export default async function AccountPage({ params }: { params: Promise<{ locale
             <SignOutButton locale={locale} />
             <SignOutEverywhereDialog locale={locale} />
           </div>
+        </CardBody>
+      </Card>
+
+      <Card labelledBy="account-connected-accounts-title">
+        <CardHeader
+          title={t("connectedAccountsSection")}
+          titleId="account-connected-accounts-title"
+          description={t("connectedAccountsHint")}
+        />
+        <CardBody>
+          {notice ? (
+            <p className="connected-account-notice" role="status">
+              <Alert tone={notice.tone} live={notice.tone === "success" ? "status" : "alert"}>
+                {tRoot(notice.key)}
+              </Alert>
+            </p>
+          ) : null}
+          {accountsLoadFailed ? (
+            <Alert tone="danger" live="alert">
+              {t("connectedAccountsLoadFailed")}
+            </Alert>
+          ) : (
+            <>
+              <ul className="connected-accounts-list">
+                {hasCredentialAccount ? (
+                  <li className="connected-account-row">
+                    <span className="connected-account-provider">
+                      <Icon name="mail" size={16} />
+                      <span>{t("signInMethodEmail")}</span>
+                    </span>
+                    <span className="connected-account-meta">{t("primaryMethodNote")}</span>
+                  </li>
+                ) : null}
+                {linkedSocialAccounts.map((account) => (
+                  <li className="connected-account-row" key={account.id}>
+                    <span className="connected-account-provider">
+                      <Icon name="globe" size={16} />
+                      <span>{providerLabel(account.providerId)}</span>
+                    </span>
+                    <span className="connected-account-meta">
+                      {t("connectedAtLabel")} {dateFormat.format(account.createdAt)}
+                    </span>
+                    <span className="connected-account-actions">
+                      <UnlinkAccountButton
+                        locale={locale}
+                        accountId={account.id}
+                        providerLabel={providerLabel(account.providerId)}
+                      />
+                    </span>
+                  </li>
+                ))}
+                {connectableProviders.map((provider) => (
+                  <li className="connected-account-row" key={provider}>
+                    <span className="connected-account-provider">
+                      <Icon name="globe" size={16} />
+                      <span>{providerLabel(provider)}</span>
+                    </span>
+                    <span className="connected-account-meta">{t("notConnected")}</span>
+                    <span className="connected-account-actions">
+                      <ConnectProviderButton locale={locale} provider={provider} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {!providers.google.enabled && !providers.facebook.enabled ? (
+                <p className="app-inline-note">
+                  <Icon name="info" size={15} />
+                  <span>{t("socialNotConfigured")}</span>
+                </p>
+              ) : null}
+            </>
+          )}
         </CardBody>
       </Card>
     </div>

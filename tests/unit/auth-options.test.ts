@@ -68,6 +68,21 @@ describe("Better Auth configuration", () => {
     expect(buildAuthOptions(stagingEnv).emailVerification?.sendOnSignUp).toBe(false);
   });
 
+  it("never auto-signs-in at sign-up, so a duplicate email is indistinguishable", () => {
+    // Better Auth returns a synthetic success for an existing email only when
+    // `requireEmailVerification` is set or `autoSignIn === false`. Holding the
+    // session back in every environment keeps registration non-enumerable even
+    // where no email transport exists (`SECURITY_AND_PRIVACY.md` §3.1).
+    for (const env of [localEnv, stagingEnv]) {
+      const options = buildAuthOptions(env);
+      expect(options.emailAndPassword?.autoSignIn).toBe(false);
+      expect(
+        Boolean(options.emailAndPassword?.requireEmailVerification) ||
+          options.emailAndPassword?.autoSignIn === false,
+      ).toBe(true);
+    }
+  });
+
   it("uses a 30-minute single-use reset token and revokes sessions on reset", () => {
     const options = buildAuthOptions(localEnv);
     expect(options.emailAndPassword?.resetPasswordTokenExpiresIn).toBe(30 * 60);

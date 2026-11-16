@@ -6,13 +6,14 @@ import { studentPortalSignInAction } from "@/app/actions/portal-auth";
 import { Field, FormMessage, SubmitButton } from "@/components/ui/form";
 import { initialFormState } from "@/lib/forms/action-state";
 
-export function PortalSignInForm({ locale }: { locale: string }) {
+export function PortalSignInForm({ locale, checkin }: { locale: string; checkin?: string | null }) {
   const t = useTranslations("Portal.signIn");
   const [state, action] = useActionState(studentPortalSignInAction, initialFormState);
 
   return (
     <form action={action} className="form-stack" noValidate>
       <input type="hidden" name="locale" value={locale} />
+      {checkin && <input type="hidden" name="checkin" value={checkin} />}
       <Field
         label={t("phoneLabel")}
         name="phone"

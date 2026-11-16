@@ -10,6 +10,36 @@ import {
 import { SESSION_SLIDING_DAYS } from "@/lib/auth/session-policy";
 
 /**
+ * Social provider configuration is parsed here so unit tests can assert the
+ * callback URLs without constructing the full Better Auth client.
+ *
+ * The Google callback URL is pinned to Better Auth's canonical path:
+ * `${BETTER_AUTH_URL}/api/auth/callback/google`
+ * The Facebook callback URL follows the same convention:
+ * `${BETTER_AUTH_URL}/api/auth/callback/facebook`
+ *
+ * Credentials are optional — when either `GOOGLE_CLIENT_ID` or
+ * `GOOGLE_CLIENT_SECRET` is missing, Google is simply not offered. The same
+ * applies to Facebook. Email/password authentication is never affected.
+ */
+export function socialProviderConfig(env: ServerEnv) {
+  return {
+    google: {
+      enabled: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+      clientId: env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: env.GOOGLE_CLIENT_SECRET ?? "",
+      callbackURL: `${env.BETTER_AUTH_URL}/api/auth/callback/google`,
+    },
+    facebook: {
+      enabled: Boolean(env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET),
+      clientId: env.FACEBOOK_CLIENT_ID ?? "",
+      clientSecret: env.FACEBOOK_CLIENT_SECRET ?? "",
+      callbackURL: `${env.BETTER_AUTH_URL}/api/auth/callback/facebook`,
+    },
+  };
+}
+
+/**
  * The non-database part of the Better Auth configuration, exported so the
  * cookie, session, and rate-limit policy can be unit-tested without a database.
  *
@@ -41,9 +71,15 @@ export function buildAuthOptions(env: ServerEnv): Omit<BetterAuthOptions, "datab
       minPasswordLength: 10,
       maxPasswordLength: 128,
       requireEmailVerification: emailConfigured,
-      // When verification is required, the user only gets a session after the
-      // link is opened; when no transport exists, sign-up continues locally.
-      autoSignIn: !emailConfigured,
+      // Sign-up never auto-signs-in. When verification is required the session
+      // is withheld until the link is opened; when no transport exists the
+      // person signs in with the password they just chose. This is also what
+      // makes the registration response non-enumerable: Better Auth returns a
+      // synthetic success for a duplicate email only when sign-up does not
+      // auto-sign-in (`autoSignIn === false`), so the status, the body, and the
+      // absence of a session cookie are identical for a new and an existing
+      // address (`SECURITY_AND_PRIVACY.md` §3.1).
+      autoSignIn: false,
       // Single-use, 30 minutes, invalidated on use (`F-P0-02` AC-8).
       resetPasswordTokenExpiresIn: 30 * 60,
       revokeSessionsOnPasswordReset: true,
@@ -53,6 +89,18 @@ export function buildAuthOptions(env: ServerEnv): Omit<BetterAuthOptions, "datab
       },
       onPasswordReset: async ({ user }, request) => {
         await recordPasswordReset(user, request);
+      },
+    },
+    account: {
+      // Explicit account linking only (approved social-auth plan). Linking an
+      // OAuth identity happens exclusively via `linkSocial()` while the user is
+      // authenticated. A social sign-in that matches an existing account by
+      // email is rejected instead of silently linked.
+      accountLinking: {
+        enabled: true,
+        disableImplicitLinking: true,
+        allowDifferentEmails: false,
+        allowUnlinkingAll: false,
       },
     },
     emailVerification: {
@@ -107,6 +155,26 @@ export function buildAuthOptions(env: ServerEnv): Omit<BetterAuthOptions, "datab
       disableOriginCheck: false,
     },
     hooks: authHooks,
+    socialProviders: {
+      ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+              enabled: true,
+            },
+          }
+        : {}),
+      ...(env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET
+        ? {
+            facebook: {
+              clientId: env.FACEBOOK_CLIENT_ID,
+              clientSecret: env.FACEBOOK_CLIENT_SECRET,
+              enabled: true,
+            },
+          }
+        : {}),
+    },
     // Keep the compiler honest about which options are deliberately absent.
   } satisfies Omit<BetterAuthOptions, "database" | "plugins">;
 }

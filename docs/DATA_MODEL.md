@@ -143,8 +143,14 @@ are present on every tenant table by convention (`DM-1`, `DM-5`).
 | `email_verified` | boolean | |
 | `image` | text nullable | |
 
-Better Auth owns this table and the `session`, `account`, and `verification` tables. Kashkol does
-not add columns to them; profile extensions live in `user_preference` and `workspace_member`.
+Better Auth owns this table and the `session`, `account`, and `verification` tables. Kashkol
+does not add columns to them; profile extensions live in `user_preference` and `workspace_member`.
+On `account`, migration `20261115000000_social_auth_account_constraints` adds the two unique
+indexes the social-auth feature needs: `account_provider_id_account_id_key` on
+`(provider_id, account_id)` — an OAuth identity is at most one account row — and
+`account_user_id_provider_id_key` on `(user_id, provider_id)` — a user holds at most one account
+per provider. The credential row (`provider_id = 'credential'`, `account_id = user.id`) already
+satisfies both.
 
 #### `user_preference`
 
@@ -1027,8 +1033,10 @@ consolidated form rather than one directory per row above:
 | `20261113000003_group_schedule_slots` | Adds `group_schedule_slot` (weekday, start/end time, room, capacity) with forced RLS, grants, and its tenant indexes; copies each group's former weekday/start/end into one slot; drops `group.weekday`, `group.start_time`, `group.end_time` (`ADR-0029`) |
 | `20261113000004_group_slot_drop_legacy_columns` | Drops `group.room` and `group.capacity`; room and capacity now live on `group_schedule_slot` (`ADR-0029`) |
 | `20261114000000_session_attendee` | `teaching_session.group_id` becomes nullable and `grade_label` is added; adds the `session_attendee_origin` enum and `session_attendee` table with composite tenant foreign keys, forced RLS, and application-role grants (`ADR-0029`) |
+| `20261115000000_social_auth_account_constraints` | Adds the two unique indexes on `account`: `account_provider_id_account_id_key` on `(provider_id, account_id)` and `account_user_id_provider_id_key` on `(user_id, provider_id)` (social-auth explicit linking) |
+| `20261116000000_notifications_substrate_reconciliation` | Reconciles the notification schema with §5.9: adds `notification_severity` enum, operational `notification_type` values, `recipient_user_id`, `severity`, `message_key`, `message_params`, `dedupe_key`, unique constraint on `(workspace_id, recipient_user_id, dedupe_key)`, and foreign key to `user` |
 
-The current local development database tracks all thirty-eight migrations above. `student` and
+The current local development database tracks all forty migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

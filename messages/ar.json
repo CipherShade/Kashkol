@@ -284,8 +284,12 @@
     "resetDone": "تم تعيين كلمة المرور. سجّل الدخول من جديد.",
     "emailDisabledNotice": "إرسال البريد غير مُعدّ في هذه البيئة. لا يمكن إكمال التحقق أو استعادة الحساب قبل اختيار مزوّد بريد.",
     "signedOut": "تم تسجيل خروجك.",
+    "accountCreated": "تم إنشاء حسابك. سجّل الدخول للمتابعة.",
     "sessionExpired": "انتهت صلاحية جلستك. سجّل الدخول من جديد.",
-    "signInLink": "الانتقال إلى تسجيل الدخول"
+    "signInLink": "الانتقال إلى تسجيل الدخول",
+    "socialDivider": "أو تابع باستخدام",
+    "continueWithGoogle": "تابع عبر Google",
+    "continueWithFacebook": "تابع عبر Facebook"
   },
   "auth": {
     "errors": {
@@ -301,6 +305,12 @@
       "nameTooLong": "الاسم طويل جدًا.",
       "tokenInvalid": "رابط الاستعادة غير صالح.",
       "generic": "تعذّر إكمال الطلب. حاول مرة أخرى.",
+      "providerUnavailable": "طريقة الدخول هذه غير متاحة في هذه البيئة.",
+      "socialSignInFailed": "تعذّر إتمام تسجيل الدخول عبر الخدمة. حاول مرة أخرى.",
+      "socialAlreadyLinked": "هذا الحساب مرتبط بالفعل بحساب آخر.",
+      "linkFailed": "تعذّر ربط حساب الخدمة هذا. حاول مرة أخرى.",
+      "unlinkFailed": "تعذّر فصل حساب الخدمة هذا. حاول مرة أخرى.",
+      "reauthRequired": "سجّل الدخول من جديد لتأكيد هذا التغيير، ثم حاول مرة أخرى.",
       "password": {
         "tooShort": "كلمة المرور يجب ألا تقل عن ١٠ أحرف.",
         "tooLong": "كلمة المرور طويلة جدًا.",
@@ -311,7 +321,9 @@
     "notice": {
       "verificationSent": "إن كان لهذا البريد حساب فسيصلك رابط التأكيد.",
       "resetSent": "إن كان لهذا البريد حساب فسيصلك رابط الاستعادة.",
-      "emailDisabled": "إرسال البريد غير مُعدّ في هذه البيئة، لذلك لم تُرسل أي رسالة."
+      "emailDisabled": "إرسال البريد غير مُعدّ في هذه البيئة، لذلك لم تُرسل أي رسالة.",
+      "accountLinked": "تم ربط حساب الخدمة بحسابك.",
+      "accountUnlinked": "تم فصل حساب الخدمة."
     }
   },
   "Workspace": {
@@ -509,7 +521,44 @@
     "quietStart": "بداية ساعات الهدوء",
     "quietEnd": "نهاية ساعات الهدوء",
     "save": "حفظ التفضيلات",
-    "saving": "جارٍ الحفظ…"
+    "saving": "جارٍ الحفظ…",
+    "resetToDefault": "إعادة ضبط للإعدادات الافتراضية",
+    "resetFailed": "تعذّرت استعادة الإعدادات الافتراضية. أعد المحاولة."
+  },
+  "Notifications": {
+    "bell": "الإشعارات",
+    "unreadCount": "{count, plural, =1 {إشعار واحد غير مقروء} other {# إشعارات غير مقروءة}}",
+    "empty": "لا توجد إشعارات جديدة",
+    "emptyHint": "ستظهر هنا التنبيهات الخاصة بك وبمجموعاتك.",
+    "markAllRead": "تحديد الكل كمقروء",
+    "markRead": "تحديد كمقروء",
+    "allRead": "تم تحديد جميع الإشعارات كمقروءة",
+    "viewDetails": "عرض التفاصيل",
+    "types": {
+      "attendance_present": "حضور",
+      "attendance_absent": "غياب",
+      "attendance_late": "تأخير",
+      "attendance_excused": "عذر",
+      "student_at_risk": "طالب معرّض للخطر",
+      "session_unrecorded": "حصة غير مسجلة",
+      "homework_due_soon": "واجب يقترب موعده",
+      "assessment_pending_grades": "رصد درجات معلّق",
+      "backup_ready": "النسخة الاحتياطية جاهزة",
+      "export_ready": "الملف المُصدَّر جاهز",
+      "general": "إشعار عام"
+    },
+    "messages": {
+      "studentAtRisk": "تراجع معدل حضور الطالب {studentName} إلى {rate}%، وهو أقل من حد الإنذار.",
+      "sessionUnrecorded": "انتهت حصة {groupName} منذ أكثر من ساعتين دون تسجيل الحضور.",
+      "homeworkDueSoon": "الواجب {homeworkTitle} لمجموعة {groupName} ينتهي خلال ٤٨ ساعة.",
+      "assessmentPendingGrades": "هناك درجات غير مرصودة لتقييم {assessmentTitle} لمجموعة {groupName}.",
+      "backupReady": "تم تجهيز النسخة الاحتياطية لمساحة العمل بنجاح وجاهزة للتنزيل.",
+      "exportReady": "ملف التصدير المطلوب جاهز للتنزيل الآن.",
+      "attendancePresent": "تم تسجيل حضور الطالب {studentName} في {groupName}.",
+      "attendanceAbsent": "تم تسجيل غياب الطالب {studentName} في {groupName}.",
+      "attendanceLate": "تم تسجيل تأخير الطالب {studentName} في {groupName}.",
+      "attendanceExcused": "تم تسجيل عذر للطالب {studentName} في {groupName}."
+    }
   },
   "Shell": {
     "greeting": "أهلًا، {name}",
@@ -782,7 +831,23 @@
     "signOutEverywhereAction": "تسجيل الخروج من كل الأجهزة",
     "signOutEverywhereTitle": "تسجيل الخروج من كل الأجهزة؟",
     "signOutEverywhereDescription": "ستُلغى كل جلسات حسابك فورًا، بما فيها هذه الجلسة. ستحتاج إلى تسجيل الدخول من جديد.",
-    "signOutEverywhereConfirm": "تسجيل الخروج من كل الأجهزة"
+    "signOutEverywhereConfirm": "تسجيل الخروج من كل الأجهزة",
+    "connectedAccountsSection": "الحسابات المرتبطة",
+    "connectedAccountsHint": "اربط Google أو Facebook لتسجيل الدخول دون كلمة المرور. يجب أن يطابق البريد الإلكتروني الموثّق لحساب الخدمة البريد الإلكتروني لهذا الحساب. لا يربط كاشكول الحسابات بصمت أبدًا؛ أنت من يربطها من هنا بنفسك.",
+    "connectedAccountsLoadFailed": "تعذّر تحميل حساباتك المرتبطة. أعد تحميل الصفحة للمحاولة مرة أخرى.",
+    "providerGoogle": "Google",
+    "providerFacebook": "Facebook",
+    "signInMethodEmail": "البريد الإلكتروني وكلمة المرور",
+    "primaryMethodNote": "طريقة الدخول الأساسية. لا يمكن إزالتها.",
+    "connectedAtLabel": "تم الربط في",
+    "notConnected": "غير مرتبط",
+    "connectGoogleAction": "ربط Google",
+    "connectFacebookAction": "ربط Facebook",
+    "disconnect": "فصل",
+    "disconnectConfirmTitle": "فصل هذا الحساب؟",
+    "disconnectConfirmDescription": "لن يُصبح بإمكان {provider} تسجيل الدخول إلى كاشكول. يمكنك ربطه مرة أخرى متى شئت.",
+    "disconnectConfirm": "فصل",
+    "socialNotConfigured": "تسجيل الدخول عبر الخدمات غير مُعدّ على هذا الخادم. اطلب من مسؤول نسخة كاشكول هذه إعداد بيانات اعتماد Google و Facebook."
   },
   "Students": {
     "eyebrow": "الطلاب",
@@ -1671,6 +1736,8 @@
       "scanDuplicate": "تم تسجيل حضور الطالب بالفعل في هذه الحصة",
       "scanNotEnrolled": "الطالب غير مسجل في أي مجموعة دراسية نشطة",
       "scanInvalid": "رمز QR غير صالح أو غير موثق",
+      "scanRateLimited": "كثافة مسح عالية — انتظر لحظة ثم أعد المحاولة",
+      "markLateLabel": "تسجيل كتأخير",
       "cameraNotSupported": "الكاميرا غير مدعومة على هذا المتصفح أو الجهاز",
       "cameraDenied": "تم رفض إذن الوصول إلى الكاميرا. يرجى تفعيل الكاميرا من إعدادات المتصفح.",
       "cameraError": "حدث خطأ أثناء تشغيل الكاميرا",

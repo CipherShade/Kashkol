@@ -135,7 +135,7 @@ Implements `F-P0-02`.
 | Minimum password length | 10 characters, enforced **server-side** (`F-P0-02` AC-1) |
 | Breached-password check | The password is checked against a public breached-password list before the hash is stored |
 | Hashing | Better Auth's default memory-hard KDF; the hash is never logged, never exported, and never in an audit diff |
-| Registration | The email must be unique; the response is identical whether or not the account exists |
+| Registration | The email must be unique; the response is identical whether or not the account exists. Sign-up never starts a session, so the absent session cookie cannot distinguish a new address from a duplicate one, and this holds even when no email transport is configured |
 | Email verification | Required before the workspace is marked active; an unverified account can sign in only into the "verify your email" state (`F-P0-02` AC-2) |
 | Verification link | Single use, 24 h validity, resend with a 60 s cooldown |
 | Password reset | Single-use link, valid 30 minutes, invalidated on use (`F-P0-02` AC-8) |
@@ -156,6 +156,7 @@ Implements `F-P0-02`.
 | Sign-out | Invalidates the session server-side immediately, then clears the cookie | `F-P0-02` AC-5 |
 | Sign out everywhere | Invalidates every session for that user | `F-P0-02` AC-6 |
 | Privilege change | Sessions are revoked when a member's permissions change or a member is removed | `F-P2-01` AC-6 |
+| Sensitive re-authentication | Linking a social identity, unlinking one, and the other Better Auth "fresh session" endpoints require a session younger than 12 hours. The check is enforced on the Better Auth endpoint itself, not only in the server action | `ADR-0030`, §3.1 |
 
 **Configuration note.** Better Auth's defaults are a 7-day expiry with a 1-day refresh. Those
 defaults **do not** satisfy `F-P0-02` AC-4 and must be overridden explicitly in `auth.ts`:

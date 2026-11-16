@@ -52,3 +52,47 @@ constant-time compared; the messaging route also accepts a staff session (`POST 
 the reports route does not — both tokens are independent and neither appears in the client bundle.
 
 Production startup validates `MESSAGING_WORKER_TOKEN` independently from `REPORT_EXPORT_WORKER_TOKEN`: the outbox worker must never reuse the report-export credential. Webhook verification returns `503` when `WHATSAPP_APP_SECRET` is unset, `401` for an invalid signature, and `400` for a malformed body. Verified webhook events are acknowledged but **not** processed until inbound event handling is implemented.
+
+## Social providers (Google / Facebook)
+
+| Variable | Required when | Description | Default (local) |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | offering Google sign-in | Google OAuth 2.0 client ID (`client_id`, not the API key) | — |
+| `GOOGLE_CLIENT_SECRET` | offering Google sign-in | Google OAuth 2.0 client secret | — |
+| `FACEBOOK_CLIENT_ID` | offering Facebook sign-in | Facebook App ID | — |
+| `FACEBOOK_CLIENT_SECRET` | offering Facebook sign-in | Facebook App Secret | — |
+
+A provider is offered in the sign-in/sign-up screens and in the account page's "Connected accounts"
+section only when **both** of its variables are set. An empty value is rejected at startup (it is not
+treated as "off"), and no credential ever appears in the client bundle, logs, or error reports.
+Email/password authentication is unchanged whether or not the variables are set.
+
+**Manual setup**
+
+1. Google: create a project in Google Cloud Console → APIs & Services → Credentials → OAuth client ID
+   (Web application). Set the authorised redirect URI to the exact callback URL below. Paste the
+   client ID and secret into the two `GOOGLE_*` variables.
+2. Facebook: create an app at developers.facebook.com → Facebook Login → Settings. Add the exact
+   callback URL below to "Valid OAuth Redirect URIs", make the app public, and paste the App ID and
+   App Secret into the two `FACEBOOK_*` variables.
+
+**Exact callback URLs to register**
+
+| Environment | Google | Facebook |
+|---|---|---|
+| Local | `http://localhost:3000/api/auth/callback/google` | `http://localhost:3000/api/auth/callback/facebook` |
+| Production | `${BETTER_AUTH_URL}/api/auth/callback/google` | `${BETTER_AUTH_URL}/api/auth/callback/facebook` |
+
+**Behaviour guarantees (nothing faked).** Linking is explicit only: `account.accountLinking` is
+`{ enabled: true, disableImplicitLinking: true, allowDifferentEmails: false, allowUnlinkingAll: false }`
+and `trustedProviders` is unset, so a social sign-in that merely matches an existing email is
+rejected (`account_not_linked`), a link succeeds only when the provider asserts a **verified** email
+that exactly matches the account email, and unlinking is only possible from the authenticated
+account page. Unlink refuses the credential row and the last remaining account, so nobody can lock
+themselves out. Database uniqueness on `(providerId, accountId)` and `(userId, providerId)`
+(migration `20261115000000_social_auth_account_constraints`) is the last line of defence against
+duplicate identities.
+
+**Not live-verified.** No Google/Facebook app credentials exist in this environment, so no end-to-end
+OAuth flow has been executed and no claim that social sign-in works is made until the setup above is
+completed and exercised against a real provider.

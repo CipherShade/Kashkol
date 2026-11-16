@@ -8,7 +8,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/form";
 import { Icon } from "@/components/ui/icon";
-import { formatReport } from "@/modules/attendance/report";
+import { formatReport, type AttendanceReportMode } from "@/modules/attendance/report";
 import { useToast } from "@/components/ui/toast";
 import type { SessionRevenueSummary } from "@/modules/payments/session-revenue";
 import type { SearchStudent } from "@/modules/search/schemas";
@@ -123,6 +123,7 @@ export function SessionAttendanceClient({
     reason: string;
   } | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [reportMode, setReportMode] = useState<AttendanceReportMode>("all");
   const [copied, setCopied] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   // Per-student offline homework completion state, seeded from the roster and
@@ -460,6 +461,7 @@ export function SessionAttendanceClient({
     const lang = (locale === "ar" ? "ar" : "en") as "ar" | "en";
     return formatReport({
       locale: lang,
+      mode: reportMode,
       workspaceName: session.groupName || "Kashkol",
       groupName: session.groupName || "",
       sessionDate: new Date(session.startsAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US"),
@@ -471,7 +473,7 @@ export function SessionAttendanceClient({
         mark: r.mark,
       })),
     });
-  }, [roster, session, locale]);
+  }, [roster, session, locale, reportMode]);
 
   const handleCopyReport = useCallback(async () => {
     try {
@@ -873,8 +875,35 @@ export function SessionAttendanceClient({
         </div>
       </Dialog>
 
-      <Dialog open={showReport} onOpenChange={setShowReport} title={locale === "ar" ? "تقرير الحضور" : "Attendance Report"}>
+      <Dialog open={showReport} onOpenChange={setShowReport} title={locale === "ar" ? "تقرير الحضور للمشاركة" : "Attendance Report to Share"}>
         <div className="space-y-3">
+          <div className="flex flex-wrap gap-2" role="group" aria-label={locale === "ar" ? "صيغة التقرير" : "Report format"}>
+            <Button
+              type="button"
+              data-variant={reportMode === "all" ? "primary" : "outline"}
+              data-size="sm"
+              onClick={() => setReportMode("all")}
+            >
+              {locale === "ar" ? "التقرير الكامل" : "Full Report"}
+            </Button>
+            <Button
+              type="button"
+              data-variant={reportMode === "attended_only" ? "primary" : "outline"}
+              data-size="sm"
+              onClick={() => setReportMode("attended_only")}
+            >
+              {locale === "ar" ? "الحاضرون فقط" : "Attended Only"}
+            </Button>
+            <Button
+              type="button"
+              data-variant={reportMode === "attended_and_late" ? "primary" : "outline"}
+              data-size="sm"
+              onClick={() => setReportMode("attended_and_late")}
+            >
+              {locale === "ar" ? "الحاضرون والمتأخرون" : "Attended & Late"}
+            </Button>
+          </div>
+
           <div className="max-h-[22rem] overflow-y-auto rounded-md border bg-muted p-3 whitespace-pre-wrap text-sm font-sans leading-relaxed">
             {reportText}
           </div>

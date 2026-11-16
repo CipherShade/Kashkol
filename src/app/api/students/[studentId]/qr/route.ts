@@ -5,7 +5,7 @@ import { newRequestId, REQUEST_ID_HEADER } from "@/lib/http/request-id";
 import { getServerEnv } from "@/lib/config/env";
 import { requireStaffSession } from "@/modules/identity/session";
 import {
-  getOrGenerateStudentQrToken,
+  getStudentQrToken,
   rotateStudentQrToken,
   revokeStudentQrToken,
 } from "@/modules/attendance/student-qr";
@@ -25,7 +25,7 @@ export async function GET(
   try {
     const { scope } = await requireStaffSession();
     const { studentId } = await params;
-    const result = await getOrGenerateStudentQrToken(scope, studentId, { requestId });
+    const result = await getStudentQrToken(scope, studentId);
     return NextResponse.json(result, {
       headers: { "x-request-id": requestId, "cache-control": "no-store" },
     });
