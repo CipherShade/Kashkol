@@ -8,6 +8,8 @@ import { groupQuerySchema } from "@/modules/groups/schemas";
 import { getStudents } from "@/modules/students/service";
 import { studentQuerySchema } from "@/modules/students/schemas";
 import { getReportTimezone } from "@/modules/reports/repository";
+import { currentTerm, previousTerm } from "@/modules/terms/resolution";
+import { getTermsForReporting } from "@/modules/terms/service";
 import { currentDateInTimezone } from "@/modules/payments/calculations";
 import type { ReportQuery } from "@/modules/reports/schemas";
 import { isAllowed } from "@/modules/tenancy/types";
@@ -43,7 +45,7 @@ export default async function ReportsPage({ params }: { params: Promise<{ locale
     );
   }
 
-  const [timezone, groups, students] = await Promise.all([
+  const [timezone, groups, students, terms] = await Promise.all([
     getReportTimezone(scope),
     isAllowed(scope, "grades", "read")
       ? getGroups(scope, groupQuerySchema.parse({}))
@@ -51,20 +53,32 @@ export default async function ReportsPage({ params }: { params: Promise<{ locale
     isAllowed(scope, "students", "read")
       ? getStudents(scope, studentQuerySchema.parse({ pageSize: 100, status: "active" }))
       : Promise.resolve({ items: [] }),
+    getTermsForReporting(scope),
   ]);
   const today = currentDateInTimezone(new Date(), timezone);
+  // F-P3-07 AC-2: reports default to the current term when one is defined.
+  // With no terms, the existing last-30-days default remains in force.
+  const defaultTerm = currentTerm(terms, today);
+  const defaultPrevious = previousTerm(terms, defaultTerm);
+  const defaultFrom = defaultTerm?.startDate ?? subtractDays(today, 29);
+  const defaultTo = defaultTerm?.endDate ?? today;
   return (
     <div className="app-page space-y-6">
       <PageHeader title={t("title")} description={t("subtitle")} />
       <ReportsClient
         availableTypes={availableTypes}
-        groups={groups.map(({ id, name }) => ({ id, name }))}
-        students={students.items.map(({ id, firstName, lastName }) => ({
+        groups={groups.map(({ id, name, grade }) => ({ id, name, grade: grade ?? null }))}
+        students={students.items.map(({ id, firstName, lastName, grade }) => ({
           id,
           name: `${firstName} ${lastName}`,
+          grade: grade ?? null,
         }))}
-        defaultFrom={subtractDays(today, 29)}
-        defaultTo={today}
+        terms={terms}
+        defaultTermId={defaultTerm?.id ?? null}
+        defaultPreviousTermId={defaultPrevious?.id ?? null}
+        today={today}
+        defaultFrom={defaultFrom}
+        defaultTo={defaultTo}
         locale={locale}
       />
     </div>

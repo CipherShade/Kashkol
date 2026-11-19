@@ -36,6 +36,9 @@ const serverEnvSchema = z
     FILE_STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
     FILE_LOCAL_STORAGE_PATH: z.string().min(1).default(".data/files"),
     REPORT_EXPORT_WORKER_TOKEN: z.string().min(32).optional(),
+    PDF_RENDERER_DRIVER: z.enum(["none", "chromium", "fake"]).default("none"),
+    PDF_CHROMIUM_EXECUTABLE_PATH: z.string().min(1).optional(),
+    PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
     MESSAGING_WORKER_TOKEN: z.string().min(32).optional(),
     WHATSAPP_APP_SECRET: z.string().min(16).optional(),
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().min(8).optional(),
@@ -149,6 +152,20 @@ const serverEnvSchema = z
         message: "non-local environments require a dedicated messaging outbox worker token",
       });
     }
+    if (env.APP_ENV !== "local" && env.PDF_RENDERER_DRIVER === "fake") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["PDF_RENDERER_DRIVER"],
+        message: "PDF_RENDERER_DRIVER=fake is local/test-only",
+      });
+    }
+    if (env.PDF_RENDERER_DRIVER === "chromium" && !env.PDF_CHROMIUM_EXECUTABLE_PATH) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["PDF_CHROMIUM_EXECUTABLE_PATH"],
+        message: "PDF_CHROMIUM_EXECUTABLE_PATH is required when PDF_RENDERER_DRIVER=chromium",
+      });
+    }
     const hasPublicVapid = Boolean(env.WEB_PUSH_VAPID_PUBLIC_KEY);
     const hasPrivateVapid = Boolean(env.WEB_PUSH_VAPID_PRIVATE_KEY);
     if (hasPublicVapid !== hasPrivateVapid) {
@@ -231,6 +248,9 @@ export type ServerEnv = {
   FILE_STORAGE_DRIVER: "local" | "s3";
   FILE_LOCAL_STORAGE_PATH: string;
   REPORT_EXPORT_WORKER_TOKEN?: string;
+  PDF_RENDERER_DRIVER: "none" | "chromium" | "fake";
+  PDF_CHROMIUM_EXECUTABLE_PATH?: string;
+  PDF_RENDER_TIMEOUT_MS: number;
   MESSAGING_WORKER_TOKEN?: string;
   WHATSAPP_APP_SECRET?: string;
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
@@ -282,6 +302,7 @@ export function getServerEnv(): ServerEnv {
     BETTER_AUTH_URL: "http://localhost:3000",
     EMAIL_TRANSPORT: "console",
     VIDEO_PROVIDER_DRIVER: "none",
+    PDF_RENDERER_DRIVER: "none",
   };
   const merged: Record<string, string | undefined> = { ...localDefaults };
   for (const [key, value] of Object.entries(process.env)) {
@@ -345,6 +366,14 @@ export function isVideoProviderConfigured(
     );
   }
   return false;
+}
+
+/** True when a PDF renderer is configured; `none` fails closed (ADR-0032). */
+export function isPdfRendererConfigured(
+  env: Pick<ServerEnv, "PDF_RENDERER_DRIVER" | "PDF_CHROMIUM_EXECUTABLE_PATH"> = getServerEnv(),
+): boolean {
+  if (env.PDF_RENDERER_DRIVER === "fake") return true;
+  return env.PDF_RENDERER_DRIVER === "chromium" && Boolean(env.PDF_CHROMIUM_EXECUTABLE_PATH);
 }
 
 /**

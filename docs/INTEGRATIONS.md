@@ -45,7 +45,7 @@ be pinned by an ADR before the milestone that uses them is closed:
 | Email provider client | **No** | ADR, before M1 |
 | ClamAV `clamd` protocol | No SDK | ADR-0017 |
 | Logger / error tracker SDK | **No** | ADR, before M0 close |
-| PDF renderer | **No** | ADR, before M1 |
+| `puppeteer-core` (PDF renderer) | Yes — `24.31.0` | ADR-0032 |
 | `exceljs` | Yes — `4.4.0` | ADR-0016 |
 | Playwright / axe (E2E) | **No** | ADR, before M0 close |
 | Scheduling | **No** — no package; the app's own worker loop | ADR-0008 |
@@ -70,6 +70,7 @@ entry fails the dependency-policy CI check. **[CI]**
 | IN-8 | Observability (logs, errors, metrics) | Platform | M0 | Degraded diagnosis, not a user-facing failure |
 | IN-9 | Payments (Kashier / PayMob / Fawry) | Payment gateway | P3 | Deferred |
 | IN-10 | Recorded video hosting (Cloudflare Stream) | Media provider | P3 | Video attachment/playback disabled with explicit setup state (`docs/VIDEO_PROVIDER.md`); core app unaffected |
+| IN-11 | PDF renderer (headless Chromium via `puppeteer-core`) | Local process, no network | M2 | PDF export fails closed with a translated error; CSV and XLSX exports continue (`ADR-0032`) |
 
 ---
 

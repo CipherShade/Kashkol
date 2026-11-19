@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const session = await requireSession(req);
-    const workspaceId = await getWorkspaceIdForUser(session.user.id);
+    const workspaceId = await getWorkspaceIdForUser(session.user.id, session.session.id);
     if (!workspaceId) throw new Error("NO_WORKSPACE");
     const scope = await resolveScope(session.user.id, workspaceId);
     const result = await retryMessage(scope, id, { requestId });

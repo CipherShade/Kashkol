@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Select, Textarea } from "@/components/ui/form";
+import { Icon } from "@/components/ui/icon";
 
 type Student = { id: string; firstName: string; lastName: string };
 type Group = { id: string; name: string };
@@ -17,6 +18,13 @@ type Submission = {
   teacherFeedback: string | null;
   score: number | null;
   submittedAt: string | null;
+  files: Array<{
+    fileId: string;
+    displayName: string;
+    mime: string;
+    sizeBytes: number;
+    downloadUrl: string;
+  }>;
 };
 type Assignment = {
   id: string;
@@ -169,7 +177,7 @@ export function HomeworkClient({
         <Card>
           <CardBody className="space-y-4">
             <h2 className="ui-card-title">{t("createTitle")}</h2>
-            <p className="text-sm text-muted">{t("noOnlineSubmission")}</p>
+            <p className="text-sm text-muted">{t("onlineSubmissionAvailable")}</p>
             <form onSubmit={createAssignment} className="grid gap-4 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
                 <span>{t("assignmentType")}</span>
@@ -435,6 +443,20 @@ export function HomeworkClient({
                       <Button type="submit" variant="secondary" disabled={busy}>
                         {t("saveStatus")}
                       </Button>
+                    ) : null}
+                    {submission.files.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 md:col-span-4">
+                        {submission.files.map((file) => (
+                          <a
+                            key={file.fileId}
+                            href={file.downloadUrl}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+                          >
+                            <Icon name="download" size={13} />
+                            <span>{file.displayName}</span>
+                          </a>
+                        ))}
+                      </div>
                     ) : null}
                   </form>
                 ))}

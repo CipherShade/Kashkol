@@ -34,6 +34,14 @@ export async function listHomeworkRows(scope: Scope, query: HomeworkQuery) {
                 },
               },
             },
+            submissionFiles: {
+              orderBy: { createdAt: "asc" },
+              include: {
+                file: {
+                  select: { id: true, title: true, mime: true, sizeBytes: true },
+                },
+              },
+            },
           },
           orderBy: [{ student: { firstName: "asc" } }, { student: { lastName: "asc" } }],
         },

@@ -40,6 +40,7 @@ export const reportExportSchema = z
     studentId: uuid.optional(),
     limit: z.coerce.number().int().min(1).max(5000).default(5000),
     locale: z.enum(["ar", "en"]).default("ar"),
+    format: z.enum(["csv", "xlsx", "pdf"]).default("csv"),
   })
   .refine((value) => !value.from || !value.to || value.from <= value.to, {
     path: ["to"],

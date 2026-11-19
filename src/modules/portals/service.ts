@@ -19,6 +19,7 @@ import {
   type PortalContext,
 } from "@/modules/identity/session";
 import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
+import { submitStudentHomeworkWithFiles } from "./homework-submission-files";
 import { getWebPushPublicConfig } from "./push";
 import {
   generatePortalPassword,
@@ -42,7 +43,6 @@ import {
   markPortalNotificationReadForGrants,
   revokePortalGrantTx,
   revokePortalInvitationTx,
-  submitStudentHomeworkInScope,
   updatePortalGrantPermissionsTx,
   updatePortalPushPreferenceForUser,
   upsertPortalPushSubscriptionForUser,
@@ -1143,37 +1143,18 @@ export async function getStudentPortalOverview(
   return detail;
 }
 
+/**
+ * Submit without attachments. Kept as the public entry point for callers that
+ * only mark completion; the HTTP route uses `submitStudentHomeworkWithFiles`
+ * so file uploads and the status change share one transaction and audit event.
+ */
 export async function submitStudentHomework(
   portal: PortalContext,
   homeworkId: string,
   studentId?: string | null,
   now: Date = new Date(),
 ) {
-  const studentGrants = portal.grants.filter((grant) => grant.kind === "student");
-  if (studentGrants.length === 0) {
-    throw new AppError("FORBIDDEN", { messageKey: "errors.portalNoGrant" });
-  }
-
-  const targetStudentId = studentId ?? studentGrants[0].studentId;
-  const resolved = await resolvePortalStudent(portal, targetStudentId, "student");
-  const permissions = resolvePortalPermissions("student", resolved.grant.permissions);
-
-  if (!permissions.showHomework) {
-    throw new AppError("FORBIDDEN", { messageKey: "errors.forbidden" });
-  }
-
-  const submission = await submitStudentHomeworkInScope(
-    resolved.grant,
-    portal.user?.id ?? portal.userId,
-    homeworkId,
-    now,
-  );
-
-  if (!submission) {
-    throw new AppError("NOT_FOUND");
-  }
-
-  return submission;
+  return submitStudentHomeworkWithFiles(portal, homeworkId, studentId, [], now);
 }
 
 export async function listPortalNotifications(portal: PortalContext) {

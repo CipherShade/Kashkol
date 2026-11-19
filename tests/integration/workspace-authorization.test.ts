@@ -5,7 +5,11 @@ import { disconnectDb, getDb } from "@/lib/db/client";
 import { withScope, withUserScope } from "@/lib/db/scope";
 import { insertAuditEvent } from "@/modules/audit/repository";
 import { writeAuditEvent } from "@/modules/audit/service";
-import { findActiveMemberships, findActivePortalGrants } from "@/modules/identity/repository";
+import {
+  findActiveMemberships,
+  findActivePortalGrants,
+  findSessionWorkspaceSelection,
+} from "@/modules/identity/repository";
 import type { PortalContext } from "@/modules/identity/session";
 import { resolvePortalStudent } from "@/modules/identity/session";
 import {
@@ -16,6 +20,7 @@ import {
   reactivateMember,
   removeMember,
   resolveScope,
+  switchWorkspace,
   suspendMember,
   updateMemberPermissions,
   updateWorkspaceProfile,
@@ -114,41 +119,228 @@ describe("workspace creation and ownership", () => {
 
     const memberships = await findActiveMemberships(user.id);
     expect(memberships.map((row) => row.workspaceId)).toContain(created.workspaceId);
+  });
 
-    await expect(
-      createWorkspace({ userId: user.id, displayName: NEW_OWNER_DISPLAY }, inputFor("Again")),
-    ).rejects.toThrow(AppError);
+  it("lets a member own a second workspace and binds the session to the new one", async () => {
+    const user = await createTestUser("multi-workspace-owner");
+    const sessionId = randomUUID();
+    const firstRequestId = `test-second-workspace-first-${user.id}`;
+    const secondRequestId = `test-second-workspace-second-${user.id}`;
+
+    try {
+      await getDb().session.create({
+        data: {
+          id: sessionId,
+          token: randomUUID(),
+          expiresAt: new Date(Date.now() + 60_000),
+          userId: user.id,
+        },
+      });
+
+      const first = await createWorkspace(
+        {
+          userId: user.id,
+          displayName: NEW_OWNER_DISPLAY,
+          sessionId,
+          previousWorkspaceId: null,
+        },
+        inputFor(`First Workspace ${user.id.slice(0, 8)}`),
+        { requestId: firstRequestId },
+      );
+      expect(await findSessionWorkspaceSelection(sessionId)).toBe(first.workspaceId);
+
+      const second = await createWorkspace(
+        {
+          userId: user.id,
+          displayName: NEW_OWNER_DISPLAY,
+          sessionId,
+          previousWorkspaceId: first.workspaceId,
+        },
+        inputFor(`Second Workspace ${user.id.slice(0, 8)}`),
+        { requestId: secondRequestId },
+      );
+      expect(second.workspaceId).not.toBe(first.workspaceId);
+      expect(await findSessionWorkspaceSelection(sessionId)).toBe(second.workspaceId);
+
+      const [memberships, switchAudit] = await Promise.all([
+        findActiveMemberships(user.id),
+        withScope({ workspaceId: second.workspaceId }, (tx) =>
+          tx.auditEvent.findFirst({
+            where: { action: "workspace.switched", requestId: secondRequestId },
+          }),
+        ),
+      ]);
+      expect(memberships.map((row) => row.workspaceId).sort()).toEqual(
+        [first.workspaceId, second.workspaceId].sort(),
+      );
+      expect(switchAudit?.diff).toMatchObject({
+        fromWorkspaceId: first.workspaceId,
+        toWorkspaceId: second.workspaceId,
+      });
+    } finally {
+      // Sessions cascade to session_activity; the workspace fixtures remain as
+      // append-only history, which is the same treatment production receives.
+      await getDb().session.deleteMany({ where: { id: sessionId } });
+      await deleteTestUser(user);
+    }
   });
 
   it("derives the owner scope from the session membership, not from input", async () => {
     const user = await createTestUser("scope-owner");
-    const created = await createWorkspace(
-      { userId: user.id, displayName: NEW_OWNER_DISPLAY },
-      inputFor(`Scope Workspace ${user.id.slice(0, 8)}`),
-    );
-    const scope = await ownerScopeFor(created.workspaceId, user.id);
+    try {
+      const created = await createWorkspace(
+        { userId: user.id, displayName: NEW_OWNER_DISPLAY },
+        inputFor(`Scope Workspace ${user.id.slice(0, 8)}`),
+      );
+      const scope = await ownerScopeFor(created.workspaceId, user.id);
 
-    const overview = await getWorkspaceOverview(scope);
-    expect(overview.workspace.id).toBe(created.workspaceId);
+      const overview = await getWorkspaceOverview(scope);
+      expect(overview.workspace.id).toBe(created.workspaceId);
 
-    const updated = await updateWorkspaceProfile(
-      scope,
-      updateWorkspaceSchema.parse({
-        ...inputFor(overview.workspace.name),
-        name: `${overview.workspace.name} Updated`,
-        inactiveAfter: 5,
-      }),
-      { requestId: "test-update" },
-    );
-    expect(updated.workspace.name).toContain("Updated");
-    expect(updated.settings.inactiveAfter).toBe(5);
+      const updated = await updateWorkspaceProfile(
+        scope,
+        updateWorkspaceSchema.parse({
+          ...inputFor(overview.workspace.name),
+          name: `${overview.workspace.name} Updated`,
+          inactiveAfter: 5,
+        }),
+        { requestId: "test-update" },
+      );
+      expect(updated.workspace.name).toContain("Updated");
+      expect(updated.settings.inactiveAfter).toBe(5);
 
-    const audit = await withScope({ workspaceId: created.workspaceId }, (tx) =>
-      tx.auditEvent.findFirst({
-        where: { workspaceId: created.workspaceId, action: "settings.updated" },
-      }),
-    );
-    expect(audit).not.toBeNull();
+      const audit = await withScope({ workspaceId: created.workspaceId }, (tx) =>
+        tx.auditEvent.findFirst({
+          where: { workspaceId: created.workspaceId, action: "settings.updated" },
+        }),
+      );
+      expect(audit).not.toBeNull();
+    } finally {
+      await deleteTestUser(user);
+    }
+  });
+});
+
+describe("explicit workspace switching", () => {
+  it("writes the session pointer and switch audit in the target workspace transaction", async () => {
+    const user = await createTestUser("workspace-switch");
+    const sessionId = randomUUID();
+    const requestId = `test-workspace-switch-${user.id}`;
+
+    try {
+      await getDb().session.create({
+        data: {
+          id: sessionId,
+          token: randomUUID(),
+          expiresAt: new Date(Date.now() + 60_000),
+          userId: user.id,
+        },
+      });
+      await getDb().sessionActivity.create({
+        data: { sessionId, lastSeenAt: new Date(), activeWorkspaceId: NILE },
+      });
+      await withScope({ workspaceId: NILE }, (tx) =>
+        tx.workspaceMember.create({
+          data: {
+            workspaceId: NILE,
+            userId: user.id,
+            role: "assistant",
+            status: "active",
+          },
+        }),
+      );
+      await withScope({ workspaceId: DELTA }, (tx) =>
+        tx.workspaceMember.create({
+          data: {
+            workspaceId: DELTA,
+            userId: user.id,
+            role: "assistant",
+            status: "active",
+          },
+        }),
+      );
+
+      const result = await switchWorkspace(
+        {
+          userId: user.id,
+          displayName: "Switching Teacher",
+          sessionId,
+          currentWorkspaceId: NILE,
+        },
+        { workspaceId: DELTA },
+        { requestId },
+      );
+
+      expect(result.workspaceId).toBe(DELTA);
+      expect(result.role).toBe("assistant");
+      expect(await findSessionWorkspaceSelection(sessionId)).toBe(DELTA);
+
+      const audit = await withScope({ workspaceId: DELTA }, (tx) =>
+        tx.auditEvent.findFirst({
+          where: { workspaceId: DELTA, action: "workspace.switched", requestId },
+        }),
+      );
+      expect(audit?.actorDisplayName).toBe("Switching Teacher");
+      expect(audit?.diff).toMatchObject({
+        fromWorkspaceId: NILE,
+        toWorkspaceId: DELTA,
+      });
+    } finally {
+      await getDb().session.deleteMany({ where: { id: sessionId } });
+      await deleteTestUser(user);
+    }
+  });
+
+  it("rejects a workspace with no active membership without moving the pointer", async () => {
+    const user = await createTestUser("workspace-switch-forbidden");
+    const sessionId = randomUUID();
+    const requestId = `test-workspace-switch-reject-${user.id}`;
+
+    try {
+      await getDb().session.create({
+        data: {
+          id: sessionId,
+          token: randomUUID(),
+          expiresAt: new Date(Date.now() + 60_000),
+          userId: user.id,
+        },
+      });
+      await getDb().sessionActivity.create({
+        data: { sessionId, lastSeenAt: new Date(), activeWorkspaceId: NILE },
+      });
+      await withScope({ workspaceId: NILE }, (tx) =>
+        tx.workspaceMember.create({
+          data: {
+            workspaceId: NILE,
+            userId: user.id,
+            role: "assistant",
+            status: "active",
+          },
+        }),
+      );
+
+      await expect(
+        switchWorkspace(
+          {
+            userId: user.id,
+            displayName: "Switching Teacher",
+            sessionId,
+            currentWorkspaceId: NILE,
+          },
+          { workspaceId: DELTA },
+          { requestId },
+        ),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+      expect(await findSessionWorkspaceSelection(sessionId)).toBe(NILE);
+      const audit = await withScope({ workspaceId: DELTA }, (tx) =>
+        tx.auditEvent.findFirst({ where: { requestId } }),
+      );
+      expect(audit).toBeNull();
+    } finally {
+      await getDb().session.deleteMany({ where: { id: sessionId } });
+      await deleteTestUser(user);
+    }
   });
 });
 
@@ -480,7 +672,7 @@ describe("assistant and owner-only authorisation", () => {
       }
     });
 
-    it("rejects expired, unverified, mismatched-email, and cross-workspace acceptance", async () => {
+    it("rejects expired, unverified, and mismatched-email invitations but allows a second membership", async () => {
       const invitee = await createTestUser("invitation-invalid");
       const expiredId = randomUUID();
       const foreignId = randomUUID();
@@ -559,23 +751,43 @@ describe("assistant and owner-only authorisation", () => {
             foreignToken,
           ),
         ).rejects.toMatchObject({ messageKey: "errors.emailNotVerified" });
-        await expect(
-          acceptInvitation(
-            {
-              userId: invitee.id,
-              email: invitee.email,
-              displayName: "Invitee",
-              emailVerified: true,
+        const accepted = await acceptInvitation(
+          {
+            userId: invitee.id,
+            email: invitee.email,
+            displayName: "Invitee",
+            emailVerified: true,
+          },
+          foreignToken,
+          { requestId: `test-second-membership-accepted-${invitee.id}` },
+        );
+        expect(accepted.workspaceId).toBe(NILE);
+
+        const memberships = await findActiveMemberships(invitee.id);
+        expect(memberships.map((row) => row.workspaceId).sort()).toEqual([NILE, DELTA].sort());
+        const switchAudit = await withScope({ workspaceId: NILE }, (tx) =>
+          tx.auditEvent.findFirst({
+            where: {
+              action: "team.invitation_accepted",
+              requestId: `test-second-membership-accepted-${invitee.id}`,
             },
-            foreignToken,
-          ),
-        ).rejects.toMatchObject({ messageKey: "team.errors.activeWorkspace" });
-      } finally {
-        await withScope({ workspaceId: NILE }, (tx) =>
-          tx.workspaceInvitation.deleteMany({
-            where: { workspaceId: NILE, id: { in: [expiredId, foreignId] } },
           }),
         );
+        expect(switchAudit?.actorUserId).toBe(invitee.id);
+      } finally {
+        await withScope({ workspaceId: NILE }, async (tx) => {
+          const member = await tx.workspaceMember.findFirst({
+            where: { workspaceId: NILE, userId: invitee.id },
+            select: { id: true },
+          });
+          if (member) {
+            await tx.permissionGrant.deleteMany({ where: { workspaceId: NILE, memberId: member.id } });
+            await tx.workspaceMember.deleteMany({ where: { workspaceId: NILE, id: member.id } });
+          }
+          await tx.workspaceInvitation.deleteMany({
+            where: { workspaceId: NILE, id: { in: [expiredId, foreignId] } },
+          });
+        });
         await withScope({ workspaceId: DELTA }, (tx) =>
           tx.workspaceMember.deleteMany({ where: { workspaceId: DELTA, userId: invitee.id } }),
         );

@@ -52,6 +52,9 @@ Every ADR uses the same sections:
 | [0028](0028-session-scoped-finance.md) | Session-scoped finance (replaces per-student ledger) | Accepted (approved 2026-11-13) | M2 |
 | [0029](0029-group-slots-and-session-modes.md) | Multiple weekly slots per group, and sessions beyond a group | Accepted (approved 2026-11-14) | M1–M2 |
 | [0030](0030-social-auth-explicit-linking.md) | Google / Facebook social sign-in with explicit-only account linking | Accepted (approved 2026-11-15; implementation not live-verified) | M1–M2 |
+| [0031](0031-session-active-workspace-pointer.md) | Active workspace as a session-activity pointer | Accepted (approved 2026-11-17) | M2 |
+| [0032](0032-headless-chromium-pdf-reports.md) | PDF report export through a headless-Chromium adapter | Accepted (approved 2026-11-18) | M2 |
+| [0033](0033-academic-terms-only.md) | Academic-year handling ships terms only | Accepted (approved 2026-11-18) | M3a |
 
 ## Conventions
 

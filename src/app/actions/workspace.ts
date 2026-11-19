@@ -68,7 +68,6 @@ export async function createWorkspaceAction(
 
   const gate = await getStaffGate();
   if (gate.state === "anonymous") redirect(`/${locale}/sign-in`);
-  if (gate.state === "staff") redirect(`/${locale}/app`);
 
   const parsed = createWorkspaceSchema.safeParse(workspaceInputFrom(formData));
   if (!parsed.success) {
@@ -77,7 +76,12 @@ export async function createWorkspaceAction(
 
   try {
     await createWorkspace(
-      { userId: gate.user.id, displayName: gate.user.name },
+      {
+        userId: gate.user.id,
+        displayName: gate.user.name,
+        sessionId: gate.sessionId,
+        previousWorkspaceId: gate.state === "staff" ? gate.scope.workspaceId : null,
+      },
       parsed.data,
       await actionRequestContext(),
     );

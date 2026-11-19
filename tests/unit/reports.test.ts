@@ -113,7 +113,7 @@ describe("report filters and CSV security", () => {
       limit: 500,
       locale: "en",
     });
-    const csv = await exportReport(owner, query);
+    const csv = (await exportReport(owner, query)).toString("utf8");
     expect(csv.startsWith("\uFEFF")).toBe(true);
     expect(csv).toContain("'=HYPERLINK");
     expect(loadReport).toHaveBeenCalledWith(
@@ -209,7 +209,7 @@ describe("report filters and CSV security", () => {
       locale: "en",
     });
 
-    const csv = await exportReport(owner, query);
+    const csv = (await exportReport(owner, query)).toString("utf8");
 
     expect(csv).toContain('"Collected (EGP)"');
     expect(csv).toContain("'+=IMPORT");

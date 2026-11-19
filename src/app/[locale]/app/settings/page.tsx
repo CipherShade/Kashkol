@@ -18,6 +18,9 @@ import { getWorkspaceOverview, listMembers } from "@/modules/tenancy/service";
 import { isAllowed } from "@/modules/tenancy/types";
 import { WorkspaceSettingsForm } from "@/components/workspace/forms";
 import { NotificationPreferencesForm } from "@/components/workspace/notification-preferences";
+import { AcademicTermsClient } from "@/components/terms/terms-client";
+import { getTerms } from "@/modules/terms/service";
+import { currentDateInTimezone } from "@/modules/payments/calculations";
 
 export async function generateMetadata({
   params,
@@ -59,9 +62,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
     );
   }
 
-  const [overview, preferredTheme] = await Promise.all([
+  const [overview, preferredTheme, terms] = await Promise.all([
     getWorkspaceOverview(scope),
     getPreferredTheme().catch(() => null),
+    getTerms(scope),
   ]);
   const canSeeTeam = isAllowed(scope, "team", "read");
   const canWrite = isAllowed(scope, "settings", "write");
@@ -75,9 +79,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
     timeZone: "UTC",
   });
 
+  const termsT = await getTranslations("AcademicTerms");
   const tabItems = [
     { value: "workspace", label: t("tabWorkspace") },
     ...(canSeeTeam ? [{ value: "team", label: t("tabTeam") }] : []),
+    { value: "terms", label: termsT("tab") },
     { value: "sessions", label: t("tabSessions") },
   ];
 
@@ -231,6 +237,24 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
             </Card>
           </TabPanel>
         ) : null}
+
+        <TabPanel value="terms">
+          <Card labelledBy="terms-title">
+            <CardHeader
+              title={termsT("title")}
+              titleId="terms-title"
+              description={termsT("subtitle")}
+            />
+            <CardBody>
+              <AcademicTermsClient
+                initialTerms={terms}
+                gradeOptions={overview.workspace.gradesTaught}
+                canWrite={canWrite}
+                today={currentDateInTimezone(new Date(), overview.settings.timezone)}
+              />
+            </CardBody>
+          </Card>
+        </TabPanel>
 
         <TabPanel value="sessions">
           <Card labelledBy="sessions-title">

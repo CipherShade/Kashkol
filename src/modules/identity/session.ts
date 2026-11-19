@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { getAuth } from "@/lib/auth/auth";
 import { evaluateSessionPolicy, SESSION_ACTIVITY_TOUCH_MS } from "@/lib/auth/session-policy";
 import { AppError } from "@/lib/http/errors";
+import { selectActiveMembership } from "./active-workspace";
 import type { Permission } from "@/modules/tenancy/types";
 import { permissionKey, type MemberRole, type Scope } from "@/modules/tenancy/types";
 import {
@@ -12,11 +13,14 @@ import {
   findPortalLoginByUserId,
   findPortalStudentProjection,
   findSessionActivity,
+  findSessionWorkspaceSelection,
   findStudentInWorkspace,
   findWorkspaceState,
   touchSessionActivity,
   type PortalGrantRow,
 } from "./repository";
+
+export { selectActiveMembership } from "./active-workspace";
 
 export type AuthUser = {
   id: string;
@@ -128,10 +132,22 @@ export async function getStaffGate(requestHeaders?: Headers): Promise<StaffGate>
     return { state: "no_workspace", user, sessionId };
   }
 
-  // P1 has exactly one active workspace. M2 adds explicit switching; until
-  // then the earliest active membership is the only one used.
-  const membership = memberships[0];
-  const workspace = await findWorkspaceState(membership.workspaceId);
+  const selectedWorkspaceId = await findSessionWorkspaceSelection(sessionId);
+  let membership = selectActiveMembership(memberships, selectedWorkspaceId)!;
+  let workspace = await findWorkspaceState(membership.workspaceId);
+
+  // A pointer to a workspace that has since been deactivated is not a reason to
+  // lock the user out of a different active workspace: fall back once.
+  if ((!workspace || workspace.status !== "active") && selectedWorkspaceId) {
+    const fallback = selectActiveMembership(
+      memberships.filter((item) => item.workspaceId !== selectedWorkspaceId),
+      null,
+    );
+    if (fallback) {
+      membership = fallback;
+      workspace = await findWorkspaceState(fallback.workspaceId);
+    }
+  }
   if (!workspace || workspace.status !== "active") {
     throw new AppError("FORBIDDEN", { messageKey: "errors.workspaceInactive" });
   }

@@ -28,6 +28,20 @@ The existing `console` transport and WhatsApp Cloud adapter remain untouched. `n
 
 Production must use `cloudflare_stream` with a valid account ID, API token, signing key ID, and RSA private key. Playback tokens are signed with `RS256` and carry the signing key ID as `kid`; a shared HMAC secret is not accepted by Cloudflare Stream. `fake` is local/test-only (refused when `APP_ENV != local`) and keeps assets in memory. `CloudflareStreamAdapter` uses real `api.cloudflare.com` endpoints with a timeout and sanitized errors, and enforces `requireSignedURLs` at the provider before an asset can be attached. Credentials never appear in logs or adapter interfaces.
 
+## PDF renderer (report exports)
+
+| Variable | Required when | Description | Default (local) |
+|---|---|---|---|
+| `PDF_RENDERER_DRIVER` | always | `none` (fail closed), `chromium`, or `fake` (local/test-only) | `none` |
+| `PDF_CHROMIUM_EXECUTABLE_PATH` | `chromium` | Absolute path to a Chromium/Chrome executable in the deployment image | — |
+| `PDF_RENDER_TIMEOUT_MS` | always | Per-attempt render timeout in milliseconds (`1,000`–`120,000`) | `30000` |
+
+With `none`, CSV and XLSX exports work normally; a PDF export fails with a translated conflict error
+and no file is written. `chromium` launches the configured executable with a bounded timeout and two
+attempts, and never fetches external resources while rendering. The deployment image must include an
+Arabic-capable font for correct RTL PDF output. `fake` is refused outside `APP_ENV=local` and returns
+a marked buffer for deterministic tests; it is never a production renderer. See ADR-0032.
+
 ## Messaging, Web Push, and worker tokens
 
 | Variable | Required when | Description | Default (local) |

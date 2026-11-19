@@ -99,7 +99,10 @@ not navigation sketches.
 2. **[BOUNDARY]** The server verifies the password hash, checks the lockout counter, and issues a
    server-side session.
    - Session cookie: `HttpOnly`, `Secure`, `SameSite=Lax`, `__Host-` prefixed.
-   - The `workspace_id` and `role` are bound into the session record, not trusted from the client.
+   - The session identifies the user; the workspace is not taken from the client. P1 resolves the
+     single active membership; P2+ resolves `session_activity.active_workspace_id` when it still
+     points to an active membership, otherwise the earliest active membership (`F-P2-08`,
+     ADR-0031). The role is resolved from that membership.
    - Audit: `auth.signed_in` (with IP and user agent).
 3. Teacher lands on the dashboard for the session's active workspace.
 4. If the account is not verified, the flow diverts to a "verify your email" screen before the
@@ -465,7 +468,7 @@ the lesson ended; it never freezes the record.
 | Duplicate submission marking | Idempotent — no new audit event if the status did not change. |
 | Homework with no resource attached | Allowed. |
 | Homework archived | Hidden from the default list; the completion history is retained. |
-| Online file submission | Not available; the teacher records status manually. Student upload is a separate portal capability and is not claimed here. |
+| Online file submission | The teacher records status manually here and can download files a student attached from the portal (F18). Upload itself is the student portal capability, not the teacher workflow. |
 
 **AC:** F-P1-08
 
@@ -601,8 +604,9 @@ one-to-one messages
 **Actor:** Teacher · **Tier:** P1 (read) / P2 (export) · **Preconditions:** signed in
 
 1. Teacher opens **Reports**.
-2. Teacher selects a period: last 7 days / last 30 days / this term / custom range. Default: last 30
-   days.
+2. Teacher selects a period: an academic term (current or named, when terms are defined) or a custom
+   range. Default: the current term when at least one term exists; otherwise the last 30 days.
+   Grade-specific terms override workspace-wide terms for that grade.
 3. The page loads four panels:
    - **Attendance trend** (line) — daily attendance rate over the period.
    - **Homework completion trend** (line) — weekly completion rate.
@@ -611,6 +615,15 @@ one-to-one messages
 4. Every value is computed from records within the selected period and the signed-in workspace.
 5. **[P2]** Teacher taps **"Export summary"** → a job is queued; the UI shows "Preparing…", then
    "Ready — Download" with an expiring link.
+6. **[P3, F-P3-07 terms only]** When a previous term exists, Teacher may select **"Compare with the
+   previous term"**. The page fetches the same authorized report a second time with the previous
+   term's dates and shows it as a separate computed table. The export contains the selected primary
+   period only, and the UI states this.
+
+**F-P3-07 scope note (ADR-0033).** The implemented period choices are current term, named terms, and
+custom range; the week/month shortcuts in `F-P1-12` are not part of this incremental implementation.
+The printable Arabic report card (AC-3), its reproducibility (AC-4), and rollover/copy of prior-year
+data are not built and must not be implied by a control. `F-P3-07` stays open in `docs/STATUS.md`.
 
 **Error / edge cases**
 
@@ -722,12 +735,19 @@ parent has a phone number
 4. The portal shows:
    - **Next session** — date, time, room, group.
    - **My attendance** — the rate and the per-session history.
-   - **My homework** — assignments with due dates and submission status, and a **Submit** action.
+   - **My homework** — assignments with due dates, submission status, a **Submit / Add Files** action,
+     an optional file picker (up to five scanned files), and the files already attached to the submission.
    - **My results** — assessment scores.
    - **Files** — files shared with their group or assigned to them.
-5. The student taps **Submit** on a homework item → **[WRITE]** the submission status becomes
-   `submitted` with a server timestamp. Audit: `homework.submitted`.
-6. The teacher's completion bar updates immediately.
+5. The student optionally selects files, then taps **Submit / Add Files** on a homework item. Each file
+   is content-validated, virus-scanned fail-closed, and stored privately before the tenant transaction;
+   on a clean scan **[WRITE]** the file record, its link to the student's own submission, the submission
+   status (`submitted`), and the audit event are committed together. Audit: `homework.submitted` with
+   the homework id, outcome, and file count — never file content. A later failure deletes the stored
+   objects so a failed attempt leaves no residue.
+6. The teacher sees the attached files on the submission row and can download them through the
+   authorized file route; the completion bar updates immediately. The student can download only files
+   linked to their own submission, and the parent portal never exposes submission files.
 
 **Error / edge cases**
 
@@ -737,7 +757,10 @@ parent has a phone number
 | Code belongs to another student | Rejected. |
 | Student tries a teacher endpoint | `403` on every teacher route. |
 | Student sees another student | Impossible by construction; queries are scoped to their own student id. |
-| Homework already submitted | The student can re-submit if the teacher allows it; the first timestamp is retained and the latest is shown. |
+| Homework already submitted | Re-submitting updates the timestamp and appends files (up to five per submission); the latest status is shown. |
+| More than five files, or a file over 25 MB / wrong type | Rejected before any storage write; an inline error is shown and no submission row is changed. |
+| Malware scan blocks a file or the scanner is unconfigured | Fail closed — nothing is stored or linked, the submission is not changed, and the error is shown. |
+| Forged or another student's file id on download | `404`; the lookup is scoped to the requesting student's own submission, the homework, and the file scope. |
 | Device lost | The teacher revokes access; sessions are invalidated. |
 
 **AC:** F-P2-03
@@ -846,6 +869,10 @@ parent has a phone number
 
 **AC:** F-P2-05, F-P0-07
 
+**Device verification:** the camera/decode path in step 5 cannot be exercised without real hardware.
+`docs/QR_CAMERA_VERIFICATION_PROTOCOL.md` is the human-executable protocol; until it is completed
+and signed, no real-camera verification is claimed.
+
 ---
 
 ## F21 — Review a student's progress and follow up
@@ -886,10 +913,15 @@ homework history
 **Actor:** Teacher (own data) / Owner (full workspace + audit) · **Tier:** P2
 
 **Reports export**
-1. Teacher opens **Reports** and taps **"Export summary"**.
-2. The server creates an export job. The UI shows **Preparing…** → **Ready**.
-3. **[WRITE]** The export file is written to the workspace's storage. Audit: `export.created`.
-4. Teacher downloads via a short-lived signed link.
+1. Teacher opens **Reports**, chooses an export format (**CSV**, **Excel .xlsx**, or **PDF**), and taps
+   **"Export filtered report"**.
+2. The server creates an export job with the chosen format in its stored query. The UI shows
+   **Preparing…** → **Ready**.
+3. **[WRITE]** The worker generates the file server-side from the same filtered, tenant-scoped rows and
+   writes it to the workspace's storage. Audit: `report.export_created` with the report type and format.
+4. Teacher downloads via a short-lived signed link whose content type matches the chosen format.
+   CSV keeps a UTF-8 BOM and sanitised cells; XLSX uses an RTL sheet view for Arabic; PDF renders an
+   escaped, self-contained RTL document.
 
 **Full workspace export**
 1. Owner opens **Settings → Data** and taps **"Download full backup (JSON)"**.
@@ -911,6 +943,7 @@ homework history
 | Case | Behaviour |
 |---|---|
 | Export job fails | The teacher sees the failure and can retry; no partial file is offered. |
+| PDF selected but no renderer configured | The export fails with a visible translated error and no file is written; CSV and XLSX remain available (`ADR-0032`). |
 | Archive from an incompatible schema version | Rejected at pre-flight with an explanation. |
 | Restore interrupted | The workspace rolls back to the pre-restore state. |
 | Restore by a non-owner | Refused (`403`). |

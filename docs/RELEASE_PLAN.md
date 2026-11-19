@@ -18,6 +18,12 @@ phone, and nothing in it lies."*
 | **M2 — Expansion** | P2 | Assistants + enforced permissions, parent portal, student portal, manual payments, QR attendance, progress & follow-up, notifications, exports | **Public beta**, Arabic-first, with a paid pilot cohort |
 | **M3 — Advanced** | P3 | Online exams, recorded video via external provider, admin console, subscription, scale hardening, printable report cards | **General availability** |
 
+**M3 scope note (2026-11-18, ADR-0033):** `F-P3-07` is delivered **"terms only for now"** — AC-1
+(term definitions) and AC-2 (current-term default and previous-term comparison) only. The printable
+Arabic report card (AC-3), its reproducibility (AC-4), and rollover/copy of prior-year data are not
+built, are not claimed by the UI, and do not satisfy the M3 exit criteria. The milestone headline
+above remains the full product target; `docs/STATUS.md` tracks the partial delivery.
+
 Each milestone ends with a release, not a demo. There is no milestone whose exit is "the screens
 exist".
 
@@ -88,7 +94,7 @@ Kashkol shows them is derived from what they entered.
 | F-P1-05 | Schedule and sessions |
 | F-P1-06 | Manual attendance |
 | F-P1-07 | Attendance corrections and history |
-| F-P1-08 | Homework | Group or selected-student assignments, permitted existing resources, manual status, optional teacher feedback/grade; no online upload claim |
+| F-P1-08 | Homework | Group or selected-student assignments, permitted existing resources, manual status, optional teacher feedback/grade; teacher-side upload is not claimed here (student file attachments arrive via F-P2-03) |
 | F-P1-09 | Paper assessments and grade entry | Paper exam/quiz types, explicit missing/excused/not-taken statuses, normalized averages, optional per-assessment extra-credit allowance, audited corrections |
 | F-P1-10 | Parent updates via prepared WhatsApp message |
 | F-P1-11 | Files and PDFs |
@@ -176,12 +182,12 @@ money is tracked.
 |---|---|---|
 | F-P2-01 | Assistants, invitations, enforced permissions | Deny-by-default; server-side enforcement |
 | F-P2-02 | Parent portal (authenticated) | Real auth; teacher-issued or request-then-approve linking |
-| F-P2-03 | Student portal (authenticated) | Online homework file submission is a separate capability; it is not implemented by the teacher-side homework workflow |
+| F-P2-03 | Student portal (authenticated) | Students attach up to five scanned files when submitting homework from the portal; validation, scanning, storage, submission, and audit are atomic, and downloads reauthorize against the student's own submission |
 | F-P2-04 | Manual payment tracking | EGP, partial payments, void-not-delete |
 | F-P2-05 | QR attendance | Server-validated tokens |
 | F-P2-06 | Academic progress and follow-up | Source-backed rules and staff-only follow-up tasks; parent access requires an explicit allowlisted route |
 | F-P2-07 | Notifications expansion | Rule-generated, deep-linking, optional email digest |
-| F-P2-08 | Multi-workspace switching | |
+| F-P2-08 | Multi-workspace switching | Active workspace on `session_activity`; audited switch in the target workspace; full client reload (ADR-0031) |
 | F-P2-09 | Teacher-side portal preview | Labelled preview only |
 | F-P2-10 | Reports and export | CSV/XLSX/PDF, asynchronous |
 | F-P2-11 | Server-side import/export and backup restore | Pre-flight validation |
@@ -231,7 +237,7 @@ SaaS needs.
 | F-P3-04 | Subscription, plan, and billing | **Billing provider contract** |
 | F-P3-05 | Scale, performance, reliability hardening | None |
 | F-P3-06 | Rich notification channels | Push provider |
-| F-P3-07 | Advanced reporting and academic-year handling | None |
+| F-P3-07 | Advanced reporting and academic-year handling — terms only for now (AC-1–2; AC-3–4 deferred) | None |
 | F-P3-08 | Duplicate-student detection and roster hygiene | None |
 | F-P3-09 | Forms and surveys foundation (no visual builder) | None |
 
@@ -241,7 +247,7 @@ Because P3 contains a genuinely independent item (online exams) and two items th
 without a third party, M3 is split:
 
 - **M3a — Internal only:** F-P3-01 (online exams), F-P3-03 (admin console), F-P3-05 (scale),
-  F-P3-07 (academic year), F-P3-08 (duplicates), F-P3-09 (forms foundation).
+  F-P3-07 (terms only for now — AC-1–2), F-P3-08 (duplicates), F-P3-09 (forms foundation).
 - **M3b — Gated on contracts:** F-P3-02 (video), F-P3-04 (billing), F-P3-06 (push). Each starts only
   when its provider contract and sandbox access exist. **If a contract does not land, that feature does
   not ship in that release** — it is deferred, and no placeholder is released in its place.
@@ -486,6 +492,6 @@ A requirement is "done" only when **all** of the following hold:
 | F-P3-04 | — | M3b | M3 |
 | F-P3-05 | — | M3a | M3 |
 | F-P3-06 | — | M3b | M3 |
-| F-P3-07 | — | M3a | M3 |
+| F-P3-07 (terms only) | — | M3a | M3 |
 | F-P3-08 | F6 | M3a | M3 |
 | F-P3-09 | — | M3a | M3 |

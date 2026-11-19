@@ -3,11 +3,13 @@ import { THEME_COOKIE, isThemePreference } from "@/lib/theme";
 import {
   deleteSessionsForUser,
   findActiveMemberships,
+  findSessionWorkspaceSelection,
   findUserPreference,
   findWorkspaceTheme,
   upsertUserPreference,
 } from "./repository";
-import { getOptionalUser } from "./session";
+import { selectActiveMembership } from "./active-workspace";
+import { getVerifiedSession } from "./session";
 
 export type UserPreferences = {
   locale: "ar" | "en";
@@ -47,11 +49,13 @@ export async function signOutEverywhere(userId: string): Promise<number> {
  * Anonymous visitors fall back to the theme cookie and then to localStorage/system.
  */
 export async function getPreferredTheme(): Promise<"light" | "dark" | "system" | null> {
-  const user = await getOptionalUser();
-  if (user) {
-    const preference = await findUserPreference(user.id);
+  const session = await getVerifiedSession();
+  if (session) {
+    const userId = session.user.id;
+    const preference = await findUserPreference(userId);
     if (preference && isThemePreference(preference.theme)) return preference.theme;
-    const membership = (await findActiveMemberships(user.id))[0];
+    const selection = await findSessionWorkspaceSelection(session.session.id);
+    const membership = selectActiveMembership(await findActiveMemberships(userId), selection);
     if (membership) {
       const workspaceTheme = await findWorkspaceTheme(membership.workspaceId);
       if (workspaceTheme && isThemePreference(workspaceTheme)) return workspaceTheme;

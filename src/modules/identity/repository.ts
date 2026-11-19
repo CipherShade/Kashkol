@@ -15,9 +15,68 @@ export async function findActiveMemberships(userId: string): Promise<MembershipR
     tx.workspaceMember.findMany({
       where: { userId, status: "active" },
       select: { id: true, workspaceId: true, role: true, joinedAt: true },
-      orderBy: { joinedAt: "asc" },
+      // A deterministic tie-break is required: two memberships can share a
+      // `joinedAt`, and the fallback must never depend on physical row order.
+      orderBy: [{ joinedAt: "asc" }, { workspaceId: "asc" }],
     }),
   );
+}
+
+/**
+ * The active workspace bound to this Better Auth session (`F-P2-08` AC-2).
+ *
+ * The pointer is read by session id, which itself comes from the verified
+ * session cookie. It is never read from a request parameter or a client store.
+ * A null pointer means "use the deterministic earliest membership".
+ */
+export async function findSessionWorkspaceSelection(sessionId: string): Promise<string | null> {
+  const row = await getDb().sessionActivity.findUnique({
+    where: { sessionId },
+    select: { activeWorkspaceId: true },
+  });
+  return row?.activeWorkspaceId ?? null;
+}
+
+/** Write the pointer in the caller's transaction, beside the switch audit event. */
+export async function setSessionWorkspaceSelectionTx(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  workspaceId: string,
+  now: Date,
+): Promise<void> {
+  await tx.sessionActivity.upsert({
+    where: { sessionId },
+    create: { sessionId, lastSeenAt: now, activeWorkspaceId: workspaceId },
+    update: { activeWorkspaceId: workspaceId },
+  });
+}
+
+export type SelectableWorkspace = {
+  id: string;
+  name: string;
+  slug: string;
+  role: "owner" | "assistant";
+};
+
+/**
+ * Every active, non-deleted workspace this user may switch into.
+ *
+ * A suspended membership is deliberately absent: it cannot grant a scope.
+ */
+export async function listSelectableWorkspaces(userId: string): Promise<SelectableWorkspace[]> {
+  const memberships = await findActiveMemberships(userId);
+  const workspaces: SelectableWorkspace[] = [];
+  for (const membership of memberships) {
+    const workspace = await findWorkspaceState(membership.workspaceId);
+    if (!workspace || workspace.status !== "active") continue;
+    workspaces.push({
+      id: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+      role: membership.role,
+    });
+  }
+  return workspaces;
 }
 
 export async function findGrantedPermissions(workspaceId: string, memberId: string) {

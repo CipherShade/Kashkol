@@ -114,6 +114,29 @@
   padding-inline: 0.65rem;
 }
 
+.app-context-trigger {
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.app-context-trigger:hover {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+}
+
+.app-context-switch-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.app-context-copy {
+  display: block;
+  min-inline-size: 0;
+}
+
 .app-context-initial {
   display: none;
   align-items: center;
@@ -1291,6 +1314,88 @@
 .app-pagination-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+/* Workspace switcher ----------------------------------------------------- */
+.app-workspace-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.app-workspace-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  inline-size: 100%;
+  min-inline-size: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding-block: 0.7rem;
+  padding-inline: 0.75rem;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.app-workspace-option:hover:not(:disabled),
+.app-workspace-option[data-active="true"] {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+}
+
+.app-workspace-option:disabled {
+  cursor: default;
+}
+
+.app-workspace-option-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--primary-strong);
+  font-weight: 800;
+}
+
+.app-workspace-option-copy {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.app-workspace-option-name {
+  overflow: hidden;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-option-slug {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-block-start: 0.9rem;
+  color: var(--primary-strong);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-workspace-create:hover {
+  text-decoration: underline;
 }
 
 /* Mobile drawer ---------------------------------------------------------- */

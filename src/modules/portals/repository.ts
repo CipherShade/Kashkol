@@ -1,6 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { getDb } from "@/lib/db/client";
-import { withPortalInvitationScope, withScope } from "@/lib/db/scope";
+import { AppError } from "@/lib/http/errors";
+import { withPortalInvitationScope, withScope, type DbTransactionClient } from "@/lib/db/scope";
 import { newUuidV7 } from "@/lib/id";
 import type { PortalGrantRow } from "@/modules/identity/repository";
 import type { Scope } from "@/modules/tenancy/types";
@@ -1565,6 +1566,7 @@ export async function loadStudentPortalDetail(
     }
 
     // 3. Assigned Homework (excluding teacherFeedback private notes)
+    // A student's own submission may include the files they attached.
     let homework: Array<{
       id: string;
       title: string;
@@ -1576,6 +1578,13 @@ export async function loadStudentPortalDetail(
         status: "not_submitted" | "submitted" | "late" | "excused";
         score: number | null;
         submittedAt: string | null;
+        files: Array<{
+          fileId: string;
+          title: string;
+          mime: string;
+          sizeBytes: number;
+          downloadUrl: string;
+        }>;
       };
       resources: Array<{
         fileId: string;
@@ -1612,6 +1621,19 @@ export async function loadStudentPortalDetail(
               status: true,
               score: true,
               submittedAt: true,
+              submissionFiles: {
+                orderBy: { createdAt: "asc" },
+                select: {
+                  file: {
+                    select: {
+                      id: true,
+                      title: true,
+                      mime: true,
+                      sizeBytes: true,
+                    },
+                  },
+                },
+              },
             },
           },
           resources: {
@@ -1650,6 +1672,13 @@ export async function loadStudentPortalDetail(
             status: sub?.status ?? "not_submitted",
             score: sub?.score !== null && sub?.score !== undefined ? Number(sub.score) : null,
             submittedAt: sub?.submittedAt?.toISOString() ?? null,
+            files: (sub?.submissionFiles ?? []).map(({ file }) => ({
+              fileId: file.id,
+              title: file.title,
+              mime: file.mime,
+              sizeBytes: file.sizeBytes,
+              downloadUrl: `/api/portal/student/homework/${hw.id}/files/${file.id}/download`,
+            })),
           },
           resources: hw.resources.map((res) => ({
             fileId: res.file.id,
@@ -1923,11 +1952,28 @@ export async function loadStudentPortalDetail(
   });
 }
 
+/** A file already validated, scanned, and stored before the transaction opens. */
+export type PreparedSubmissionFile = {
+  fileId: string;
+  storageKey: string;
+  title: string;
+  mime: string;
+  sizeBytes: number;
+};
+
+export const MAX_HOMEWORK_SUBMISSION_FILES = 5;
+
 export async function submitStudentHomeworkInScope(
   grant: PortalGrantRow,
   portalUserId: string,
   homeworkId: string,
   now: Date = new Date(),
+  uploads: PreparedSubmissionFile[] = [],
+  onSubmitted?: (
+    tx: DbTransactionClient,
+    submission: { id: string; status: string },
+    fileIds: string[],
+  ) => Promise<void>,
 ) {
   return withScope({ workspaceId: grant.workspaceId }, async (tx) => {
     const enrollments = await tx.enrollment.findMany({
@@ -1991,12 +2037,95 @@ export async function submitStudentHomeworkInScope(
       },
     });
 
+    if (uploads.length > 0) {
+      const currentCount = await tx.homeworkSubmissionFile.count({
+        where: { workspaceId: grant.workspaceId, submissionId: submission.id },
+      });
+      if (currentCount + uploads.length > MAX_HOMEWORK_SUBMISSION_FILES) {
+        throw new AppError("VALIDATION_FAILED", {
+          messageKey: "errors.homeworkSubmissionFileLimit",
+          fields: { files: ["tooMany"] },
+        });
+      }
+      for (const upload of uploads) {
+        await tx.file.create({
+          data: {
+            id: upload.fileId,
+            workspaceId: grant.workspaceId,
+            scope: "homework_submission",
+            title: upload.title,
+            storageKey: upload.storageKey,
+            sizeBytes: upload.sizeBytes,
+            mime: upload.mime,
+            scanStatus: "clean",
+            uploadedBy: "system",
+          },
+        });
+        await tx.homeworkSubmissionFile.create({
+          data: {
+            workspaceId: grant.workspaceId,
+            submissionId: submission.id,
+            fileId: upload.fileId,
+          },
+        });
+      }
+    }
+
+    if (onSubmitted) {
+      await onSubmitted(
+        tx,
+        { id: submission.id, status: submission.status },
+        uploads.map((upload) => upload.fileId),
+      );
+    }
+
     return {
       homeworkId: submission.homeworkId,
       status: submission.status,
       submittedAt: submission.submittedAt?.toISOString() ?? now.toISOString(),
+      fileIds: uploads.map((upload) => upload.fileId),
     };
   });
+}
+
+/**
+ * Resolve one of the authenticated student's own submitted files. Workspace,
+ * homework, submission owner, and scope are all part of the lookup so a forged
+ * file id can never escape the student's own record.
+ */
+export async function findOwnHomeworkSubmissionFile(
+  grant: PortalGrantRow,
+  homeworkId: string,
+  fileId: string,
+) {
+  return withScope({ workspaceId: grant.workspaceId }, (tx) =>
+    tx.homeworkSubmissionFile.findFirst({
+      where: {
+        workspaceId: grant.workspaceId,
+        fileId,
+        submission: {
+          homeworkId,
+          studentId: grant.studentId,
+        },
+        file: {
+          scope: "homework_submission",
+          deletedAt: null,
+          archivedAt: null,
+          scanStatus: "clean",
+        },
+      },
+      select: {
+        file: {
+          select: {
+            id: true,
+            title: true,
+            mime: true,
+            storageKey: true,
+          },
+        },
+      },
+    }),
+  );
 }
 
 export async function listPortalNotificationsForGrants(grants: PortalGrantRow[]) {

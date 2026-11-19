@@ -50,6 +50,14 @@ export const ROUTES: RouteEntry[] = [
       "Workspace overview and profile. The workspace id comes from the session; the body and query cannot name one.",
   },
   {
+    path: "/api/workspace/switch",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: false,
+    description:
+      "Bind the verified session to another active workspace membership. The target is validated inside its own scoped transaction, and the pointer change is audited.",
+  },
+  {
     path: "/api/team",
     methods: ["GET", "POST"],
     access: "workspace",
@@ -203,7 +211,7 @@ export const ROUTES: RouteEntry[] = [
     methods: ["POST"],
     access: "workspace",
     tenantScoped: true,
-    description: "Queue an authorized, filtered tenant-scoped CSV export.",
+    description: "Queue an authorized, filtered tenant-scoped CSV, XLSX, or PDF export.",
   },
   {
     path: "/api/reports/exports/[exportId]",
@@ -232,6 +240,20 @@ export const ROUTES: RouteEntry[] = [
     access: "workspace",
     tenantScoped: true,
     description: "Download CSV or XLSX sample import template in Arabic or English.",
+  },
+  {
+    path: "/api/terms",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "List workspace academic terms or create a workspace-wide or grade-specific term.",
+  },
+  {
+    path: "/api/terms/[termId]",
+    methods: ["GET", "PATCH", "DELETE"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Read, update, or delete one academic term owned by the session's workspace.",
   },
   {
     path: "/api/groups",
@@ -625,7 +647,15 @@ export const ROUTES: RouteEntry[] = [
     access: "session",
     tenantScoped: true,
     description:
-      "Mark the authenticated student's own active homework assignment as submitted.",
+      "Attach scanned files and mark the authenticated student's own active homework assignment as submitted.",
+  },
+  {
+    path: "/api/portal/student/homework/[homeworkId]/files/[fileId]/download",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Reauthorize the linked student against their own submitted homework file before signing a download.",
   },
   {
     path: "/api/portal/attendance/checkin",

@@ -133,10 +133,13 @@ afterEach(async () => {
   CREATED_USERS.length = 0;
 });
 
+// A per-run namespace keeps failed-login lockouts from one run from bleeding
+// into the next while remaining stable inside a single process.
+const phoneNamespace = Number.parseInt(randomUUID().replace(/-/g, "").slice(0, 7), 16) % 10_000_000;
 let phoneCounter = 0;
 function freshPhone(): string {
   phoneCounter += 1;
-  return `+2011${String(20000000 + phoneCounter).slice(-8)}`;
+  return `+2011${String((phoneNamespace + phoneCounter) % 10_000_000).padStart(8, "0")}`;
 }
 
 async function createServiceStudent(phone: string | null = null) {
@@ -363,7 +366,7 @@ describe("student attendance QR against PostgreSQL", () => {
       }),
     );
     expect(
-      audits.some((a) => (a.diff as { reason?: string })?.reason === "invalid_or_revoked_student_qr"),
+      audits.some((a) => (a.diff as { outcome?: string })?.outcome === "invalid_or_revoked_student_qr"),
     ).toBe(true);
 
     // Re-issuing restores active state and allows scanning again
@@ -594,7 +597,7 @@ describe("student attendance QR against PostgreSQL", () => {
       }),
     );
     expect(
-      cancelledAudits.some((a) => (a.diff as { reason?: string })?.reason === "session_cancelled"),
+      cancelledAudits.some((a) => (a.diff as { outcome?: string })?.outcome === "session_cancelled"),
     ).toBe(true);
     await expect(
       markAttendance(

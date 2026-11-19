@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const requestId = newRequestId();
   try {
     const session = await requireSession(req);
-    const workspaceId = await getWorkspaceIdForUser(session.user.id);
+    const workspaceId = await getWorkspaceIdForUser(session.user.id, session.session.id);
     if (!workspaceId) throw new Error("NO_WORKSPACE");
     const scope = await resolveScope(session.user.id, workspaceId);
     const body = await req.json();

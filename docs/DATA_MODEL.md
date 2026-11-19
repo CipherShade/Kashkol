@@ -169,10 +169,13 @@ Per-user, not per-workspace, so a person keeps their preferences when they switc
 |---|---|---|
 | `session_id` | text | PK, FK → `session` on delete cascade |
 | `last_seen_at` | timestamptz | Updated at most once a minute by the session guard |
+| `active_workspace_id` | uuid nullable | Active workspace for this session (`F-P2-08`, ADR-0031); no FK — a stale pointer is ignored and the earliest active membership is used instead |
 
 The table exists because the 12-hour idle timeout (`F-P0-02` AC-4) cannot be derived from Better
 Auth's sliding `expiresIn`/`updateAge` alone. It adds no column to the Better Auth-owned `session`
-table.
+table. The pointer is app-owned session state: the workspace id is never accepted from a URL, a body
+field, or a client header, and a switch writes the pointer and its `workspace.switched` audit event
+in one scoped transaction.
 
 #### `auth_event` (security log, not tenant-scoped)
 
@@ -450,12 +453,33 @@ later in a group assignment creates their row through the homework module's publ
 | `status` | `homework_submission_status` enum | `not_submitted` / `submitted` / `late` / `excused` |
 | `teacher_feedback` | text nullable | Staff-only feedback |
 | `score` | numeric(6,2) nullable | Optional grade, bounded by the homework maximum |
-| `submitted_at` | timestamptz nullable | Manual teacher record; no online upload is implemented |
-| `updated_by` | text | Staff actor |
+| `submitted_at` | timestamptz nullable | Set by the student's own submission or by the teacher's manual record |
+| `updated_by` | text | Staff or student-portal actor |
 
-`UNIQUE (homework_id, student_id)`. Status and optional grade/feedback are per-student facts. Online
-file submission remains unavailable until the student-portal submission flow is implemented; the
-teacher may only record a submission manually.
+`UNIQUE (homework_id, student_id)`. Status and optional grade/feedback are per-student facts. A
+student may submit from the authenticated portal (optionally with scanned files below) or the teacher
+may record a submission manually.
+
+#### `homework_submission_file`
+
+| Column | Type | Notes |
+|---|---|---|
+| `workspace_id` | uuid | Tenant FK |
+| `submission_id` | uuid | Tenant-composite FK to `homework_submission.id` |
+| `file_id` | uuid | Tenant-composite FK to `file.id` |
+| `created_at` | timestamptz | When the file was attached |
+
+`PRIMARY KEY (workspace_id, submission_id, file_id)` plus an index on `(workspace_id, file_id)`.
+A scanned file is stored as a `file` row with `scope = 'homework_submission'` and no group or student
+target; the owning student is recorded only by the submission the join points to. Validation,
+malware scanning, and object storage complete before the tenant transaction; the `file` row, this
+join, the submission status change, and the `homework.submitted` audit event are written atomically,
+and stored objects are deleted on any later failure. A student can download only a file joined to
+their own submission; the parent portal never exposes these files. Forced RLS and a tenant policy
+bind every row to `app.workspace_id` (`ADR-0006`). Added in migration
+`20261117020000_homework_submission_files`; the `homework_submission` scope enum value is added in
+the separate preceding migration because PostgreSQL forbids using a new enum value in the same
+transaction that adds it.
 
 #### `homework_completion_mark` (offline yes/no)
 
@@ -606,7 +630,7 @@ text as prepared, and the link is generated from live data when the teacher open
 | Column | Type | Notes |
 |---|---|---|
 | `workspace_id` | uuid | FK |
-| `scope` | `file_scope` enum | `teacher_only` / `groups` / `students` |
+| `scope` | `file_scope` enum | `teacher_only` / `groups` / `students` / `form_upload` / `homework_submission` |
 | `group_id` | uuid nullable | Legacy primary target, migrated to `file_group_access` |
 | `student_id` | uuid nullable | Legacy primary target, migrated to `file_student_access` |
 | `title` | text | Safe display title; never used as a path |
@@ -738,7 +762,7 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | `break_glass_grant` | Reserved — Ticket reference, reason, actor, expiry (default 1 h) |
 | `platform_admin`, `platform_audit_event` | Reserved — Platform operators and their own log |
 | `subscription` | Reserved — Plan, state, provider ids — webhook-driven |
-| `academic_term` | Reserved — Start/end dates per workspace and grade |
+| `academic_term` | **Implemented (`F-P3-07` AC-1, terms only)** — `name`, nullable `grade` (null = workspace-wide; a grade-specific term overrides it for that grade), `start_date` and `end_date` with a `>=` check, forced RLS and tenant policy (`ADR-0033`) |
 | `student_merge` | Reserved — Merge record with both original ids (the tombstone on `student.merged_into_id` is the row) |
 
 ### 5.11 Forms tables (`20261104120000_forms_foundation`, `20261106120000_forms_public_lifecycle`, `F-P3-09`, `F-P3-12`)
@@ -756,7 +780,9 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | `form_upload` | Provenance for a respondent file uploaded through the public route: `workspace_id`, `form_id`, `question_id`, `file_id`, and `upload_session_hash` (SHA-256 of the server-issued capability token, never the token itself). Unique `(workspace_id, file_id)`; the submission path accepts a claimed file only when its form, question, and upload-session hash all match |
 
 Public respondent files are `file` rows with `scope = 'form_upload'` and no group or student target;
-the `file_scope_check` constraint allows exactly that combination. `form_upload` carries forced row-level
+student homework attachments use `scope = 'homework_submission'` with the same null-target shape. The
+`file_scope_check` constraint allows exactly those two null-target scopes alongside the three
+original targeted scopes (see §5.5 `homework_submission_file`). `form_upload` carries forced row-level
 security and four tenant foreign keys to `workspace`, `form`, `form_question`, and `file`.
 
 Every table has a non-null `workspace_id`, a composite tenant foreign key, an index on `workspace_id`,
@@ -903,6 +929,7 @@ no screen displays one (`ADR-0028`).
 | `attendance_mark` | `(session_id, student_id)` unique | Idempotent attendance save |
 | `attendance_revision` | `(attendance_mark_id, created_at)` | History chain |
 | `homework_submission` | `(homework_id, status)` | Completion rate |
+| `homework_submission_file` | `(workspace_id, file_id)` | Own-file lookup for authorized downloads |
 | `assessment` | `(workspace_id, date)` | Assessment history |
 | `assessment_score` | `(assessment_id, student_id)` unique, `(student_id)` | Grade entry and student history |
 | `homework_resource` | `(workspace_id)` | Tenant-scoped permitted resources |
@@ -1035,8 +1062,12 @@ consolidated form rather than one directory per row above:
 | `20261114000000_session_attendee` | `teaching_session.group_id` becomes nullable and `grade_label` is added; adds the `session_attendee_origin` enum and `session_attendee` table with composite tenant foreign keys, forced RLS, and application-role grants (`ADR-0029`) |
 | `20261115000000_social_auth_account_constraints` | Adds the two unique indexes on `account`: `account_provider_id_account_id_key` on `(provider_id, account_id)` and `account_user_id_provider_id_key` on `(user_id, provider_id)` (social-auth explicit linking) |
 | `20261116000000_notifications_substrate_reconciliation` | Reconciles the notification schema with §5.9: adds `notification_severity` enum, operational `notification_type` values, `recipient_user_id`, `severity`, `message_key`, `message_params`, `dedupe_key`, unique constraint on `(workspace_id, recipient_user_id, dedupe_key)`, and foreign key to `user` |
+| `20261117000000_session_workspace_selection` | Adds `session_activity.active_workspace_id` as a nullable UUID with no foreign key, so a stale pointer can be discarded deterministically (`F-P2-08`, ADR-0031) |
+| `20261117010000_homework_submission_file_scope` | Adds `homework_submission` to the `file_scope` enum in its own migration; PostgreSQL forbids using a new enum value in the transaction that adds it (`F-P2-03`) |
+| `20261117020000_homework_submission_files` | Adds `homework_submission_file` with composite tenant primary key, foreign keys, index, forced RLS and tenant policy, and application-role grants; extends `file_scope_check` so a `homework_submission` file has null group and student targets (`F-P2-03`) |
+| `20261118000000_academic_terms` | Adds `academic_term` with `start_date`/`end_date` order check, tenant indexes, forced RLS and tenant policy, and application-role grants (`F-P3-07` AC-1, `ADR-0033`) |
 
-The current local development database tracks all forty migrations above. `student` and
+The current local development database tracks all forty-four migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

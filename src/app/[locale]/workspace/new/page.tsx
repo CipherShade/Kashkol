@@ -26,7 +26,6 @@ export default async function NewWorkspacePage({ params }: PageProps) {
   }
 
   if (gate.state === "anonymous") redirect(`/${locale}/sign-in`);
-  if (gate.state === "staff") redirect(`/${locale}/app`);
 
   const t = await getTranslations("Workspace");
   const app = await getTranslations("App");

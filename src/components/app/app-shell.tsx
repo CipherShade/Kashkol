@@ -13,6 +13,7 @@ export function AppShell({
   labels,
   locale,
   workspace,
+  workspaces,
   user,
   roleLabel,
   settingsVisible,
@@ -23,7 +24,8 @@ export function AppShell({
   groups: VisibleNavGroup[];
   labels: Readonly<Record<string, string>>;
   locale: string;
-  workspace: { name: string; slug: string };
+  workspace: { id: string; name: string; slug: string };
+  workspaces: Array<{ id: string; name: string; slug: string; role: "owner" | "assistant" }>;
   user: { name: string; email: string };
   roleLabel: string;
   settingsVisible: boolean;
@@ -41,6 +43,7 @@ export function AppShell({
       <Sidebar
         groups={groups}
         workspace={{ ...workspace, roleLabel }}
+        workspaces={workspaces}
         user={user}
         settingsVisible={settingsVisible}
         mobileOpen={mobileOpen}

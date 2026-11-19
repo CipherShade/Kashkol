@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app/app-shell";
 import { routing } from "@/i18n/routing";
 import { AppError } from "@/lib/http/errors";
 import { NAV_GROUPS, isDevelopmentBuild, visibleNavGroups } from "@/lib/navigation/nav";
+import { listSelectableWorkspaces } from "@/modules/identity/repository";
 import { getPreferredTheme } from "@/modules/identity/preferences";
 import { getStaffGate, type StaffGate } from "@/modules/identity/session";
 import { getWorkspaceIdentity } from "@/modules/tenancy/service";
@@ -44,11 +45,12 @@ export default async function AppLayout({
     redirect(`/${locale}/sign-in?error=forbidden`);
   }
 
-  const [shell, nav, workspaceT, preferredTheme] = await Promise.all([
+  const [shell, nav, workspaceT, preferredTheme, workspaces] = await Promise.all([
     getTranslations("Shell"),
     getTranslations("Nav"),
     getTranslations("Workspace"),
     getPreferredTheme().catch(() => null),
+    listSelectableWorkspaces(gate.user.id),
   ]);
 
   const settingsVisible = isAllowed(gate.scope, "settings", "read");
@@ -75,10 +77,12 @@ export default async function AppLayout({
 
   return (
     <AppShell
+      key={gate.scope.workspaceId}
       groups={groups}
       labels={labels}
       locale={locale}
-      workspace={{ name: workspace.name, slug: workspace.slug }}
+      workspace={{ id: gate.scope.workspaceId, name: workspace.name, slug: workspace.slug }}
+      workspaces={workspaces}
       user={{ name: gate.user.name, email: gate.user.email }}
       roleLabel={roleLabel}
       settingsVisible={settingsVisible}

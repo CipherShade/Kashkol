@@ -104,11 +104,13 @@ describe("P0 — /link-social enforces session freshness", () => {
       body: JSON.stringify({ provider: "google" }),
     });
 
-    // No provider is configured locally: 404 PROVIDER_NOT_FOUND is the honest
-    // answer, and proves the freshness check did not block a fresh session.
+    // A fresh session passes the freshness middleware. What follows depends on
+    // the environment: 404 PROVIDER_NOT_FOUND without credentials, or the
+    // provider's 200 authorization response when they are configured. A 403
+    // SESSION_NOT_FRESH is the only outcome that would fail this assertion.
     const body = await errorBody(response);
-    expect(response.status).toBe(404);
-    expect(body.code).toBe("PROVIDER_NOT_FOUND");
+    expect([200, 404]).toContain(response.status);
+    if (response.status === 404) expect(body.code).toBe("PROVIDER_NOT_FOUND");
   });
 });
 

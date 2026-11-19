@@ -48,6 +48,21 @@ export type RequestContext = {
   ipHash?: string | null;
 };
 
+/**
+ * A QR scan refusal that must be audited after the rollback of the scan
+ * transaction. The audit row is written by the outer catch, not by the code
+ * that throws inside the transaction.
+ */
+class QrScanRejection extends Error {
+  constructor(
+    readonly code: "FORBIDDEN" | "CONFLICT" | "NOT_FOUND",
+    readonly messageKey: string,
+    readonly outcome: string,
+  ) {
+    super(messageKey);
+  }
+}
+
 function context(req: RequestContext | undefined) {
   return {
     requestId: req?.requestId ?? newRequestId(),
@@ -532,7 +547,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
         entityType: "teaching_session",
         entityId: input.sessionId ?? "unknown",
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "invalid_or_expired_token" },
+        diff: { outcome: "invalid_or_expired_token" },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -548,7 +563,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
         entityType: "teaching_session",
         entityId: token.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "session_mismatch" },
+        diff: { outcome: "session_mismatch" },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -564,7 +579,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
         entityType: "teaching_session",
         entityId: token.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "session_cancelled" },
+        diff: { outcome: "session_cancelled" },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -581,7 +596,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
         entityType: "teaching_session",
         entityId: token.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "missing_student_identity" },
+        diff: { outcome: "missing_student_identity" },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -601,7 +616,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
           entityType: "teaching_session",
           entityId: token.sessionId,
           action: attendanceAuditActions.qrRejected,
-          diff: { reason: "not_enrolled", studentId },
+          diff: { outcome: "not_enrolled", studentId },
           requestId: ctx.requestId,
           ipHash: ctx.ipHash,
         });
@@ -618,7 +633,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
           entityType: "teaching_session",
           entityId: token.sessionId,
           action: attendanceAuditActions.qrRejected,
-          diff: { reason: "not_on_roster", studentId },
+          diff: { outcome: "not_on_roster", studentId },
           requestId: ctx.requestId,
           ipHash: ctx.ipHash,
         });
@@ -639,7 +654,7 @@ export async function scanQrCode(scope: Scope, input: ScanQrInput, reqCtx?: Requ
         entityType: "teaching_session",
         entityId: token.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "already_checked_in", studentId },
+        diff: { outcome: "already_checked_in", studentId },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -700,7 +715,7 @@ export async function scanStudentQrCode(
         entityType: "teaching_session",
         entityId: input.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "session_cancelled", sessionId: input.sessionId },
+        diff: { outcome: "session_cancelled", sessionId: input.sessionId },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -717,19 +732,13 @@ export async function scanStudentQrCode(
       : null;
 
     if (!student || !validateStudentQrAgainstRecord(input.qrToken, student.qrTokenHash)) {
-      await writeAuditEvent(tx, {
-        workspaceId: scope.workspaceId,
-        actorUserId: scope.actorUserId,
-        actorDisplayName: scope.actorDisplayName,
-        actorType: "user",
-        entityType: "teaching_session",
-        entityId: input.sessionId,
-        action: attendanceAuditActions.qrRejected,
-        diff: { reason: "invalid_or_revoked_student_qr" },
-        requestId: ctx.requestId,
-        ipHash: ctx.ipHash,
-      });
-      throw new AppError("FORBIDDEN", { messageKey: "attendance.errors.invalidQrCode" });
+      // Throw a marker and audit after the transaction rolls back: an audit
+      // written inside it would be lost with the transaction.
+      throw new QrScanRejection(
+        "FORBIDDEN",
+        "attendance.errors.invalidQrCode",
+        "invalid_or_revoked_student_qr",
+      );
     }
 
     // 2. Duplicate scan check
@@ -749,7 +758,7 @@ export async function scanStudentQrCode(
         entityType: "teaching_session",
         entityId: input.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "duplicate_scan", studentId: student.id },
+        diff: { outcome: "duplicate_scan", studentId: student.id },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });
@@ -775,7 +784,7 @@ export async function scanStudentQrCode(
             entityType: "teaching_session",
             entityId: input.sessionId,
             action: attendanceAuditActions.qrRejected,
-            diff: { reason: "student_not_enrolled", studentId: student.id },
+            diff: { outcome: "student_not_enrolled", studentId: student.id },
             requestId: ctx.requestId,
             ipHash: ctx.ipHash,
           });
@@ -795,7 +804,7 @@ export async function scanStudentQrCode(
           entityType: "teaching_session",
           entityId: input.sessionId,
           action: attendanceAuditActions.qrRejected,
-          diff: { reason: "student_not_on_attendee_roster", studentId: student.id },
+          diff: { outcome: "student_not_on_attendee_roster", studentId: student.id },
           requestId: ctx.requestId,
           ipHash: ctx.ipHash,
         });
@@ -862,6 +871,23 @@ export async function scanStudentQrCode(
 
   return result;
 } catch (error) {
+  if (error instanceof QrScanRejection) {
+    await withScope(scope, async (tx) => {
+      await writeAuditEvent(tx, {
+        workspaceId: scope.workspaceId,
+        actorUserId: scope.actorUserId,
+        actorDisplayName: scope.actorDisplayName,
+        actorType: "user",
+        entityType: "teaching_session",
+        entityId: input.sessionId,
+        action: attendanceAuditActions.qrRejected,
+        diff: { outcome: error.outcome },
+        requestId: ctx.requestId,
+        ipHash: ctx.ipHash,
+      });
+    });
+    throw new AppError(error.code, { messageKey: error.messageKey });
+  }
   if (isUniqueViolation(error)) {
     await withScope(scope, async (tx) => {
       await writeAuditEvent(tx, {
@@ -872,7 +898,7 @@ export async function scanStudentQrCode(
         entityType: "teaching_session",
         entityId: input.sessionId,
         action: attendanceAuditActions.qrRejected,
-        diff: { reason: "duplicate_scan_race", deviceId: input.deviceId ?? null },
+        diff: { outcome: "duplicate_scan_race", deviceId: input.deviceId ?? null },
         requestId: ctx.requestId,
         ipHash: ctx.ipHash,
       });

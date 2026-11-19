@@ -2,6 +2,14 @@ import { AppError } from "@/lib/http/errors";
 import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { writeAuditEvent } from "@/modules/audit/service";
+import {
+  generateReportXlsx,
+  getPdfRendererAdapter,
+  renderReportPdfHtml,
+  type ReportCell,
+  type ReportTable,
+} from "./adapters";
+import { reportExportContentType, reportExportExtension, type ReportExportFormat } from "./formats";
 import { getFileStorageAdapter } from "@/modules/files/adapters";
 import { authorize, type Scope } from "@/modules/tenancy/types";
 import { sanitizeSpreadsheetFormula } from "@/modules/students/schemas";
@@ -166,7 +174,7 @@ function serializeRows(
   rows: Array<Record<string, string | number | Date | null>>,
   timezone: string,
   type: ReportQuery["type"],
-) {
+): Array<Record<string, ReportCell>> {
   return rows.map((row) =>
     Object.fromEntries(
       Object.entries(row).map(([key, value]) => [
@@ -229,16 +237,17 @@ function serializeMoneyRow(
   return row;
 }
 
-export async function exportReport(scope: Scope, query: ReportExportQuery): Promise<string> {
+export async function exportReport(scope: Scope, query: ReportExportQuery): Promise<Buffer> {
   authorize(scope, "exports", "write");
   authorizeReport(scope, query.type);
-  return generateReportCsv(scope, query);
+  return generateReportContent(scope, query);
 }
 
-async function generateReportCsv(
+/** Loads and serializes the filtered rows once, independently of output format. */
+async function buildReportTable(
   scope: Pick<Scope, "workspaceId">,
   query: ReportExportQuery,
-) {
+): Promise<ReportTable> {
   const timezone = await getReportTimezone(scope);
   const reportQuery: ReportQuery = {
     ...query,
@@ -286,18 +295,45 @@ async function generateReportCsv(
     ],
   } as const;
   const headers: readonly string[] = columns[query.type];
-  const localizedHeaders = headers.map(
-    (key) => HEADERS[query.locale][key as ReportName] ?? key,
-  );
+  return {
+    columns: headers,
+    headers: headers.map((key) => HEADERS[query.locale][key as ReportName] ?? key),
+    rows,
+  };
+}
+
+function generateReportCsv(table: ReportTable): string {
   const csvCell = (value: unknown) => {
     const safe = sanitizeSpreadsheetFormula(value === null || value === undefined ? "" : String(value));
     return `"${safe.replaceAll('"', '""')}"`;
   };
   const body = [
-    localizedHeaders.map(csvCell).join(","),
-    ...rows.map((row) => headers.map((key) => csvCell(row[key])).join(",")),
+    table.headers.map(csvCell).join(","),
+    ...table.rows.map((row) => table.columns.map((key) => csvCell(row[key])).join(",")),
   ].join("\r\n");
   return `\uFEFF${body}`;
+}
+
+async function generateReportContent(
+  scope: Pick<Scope, "workspaceId">,
+  query: ReportExportQuery,
+): Promise<Buffer> {
+  const table = await buildReportTable(scope, query);
+  if (query.format === "xlsx") return generateReportXlsx(table, query.locale);
+  if (query.format === "pdf") {
+    return getPdfRendererAdapter().render(renderReportPdfHtml(table, query));
+  }
+  return Buffer.from(generateReportCsv(table), "utf8");
+}
+
+/** Legacy jobs stored before `format` existed are CSV. Never trust another field. */
+function formatFromStoredQuery(query: unknown): ReportExportFormat {
+  if (query && typeof query === "object" && !Array.isArray(query)) {
+    return reportExportSchema.shape.format.parse(
+      (query as Record<string, unknown>).format ?? "csv",
+    );
+  }
+  return "csv";
 }
 
 export async function requestReportExport(
@@ -308,7 +344,7 @@ export async function requestReportExport(
   authorize(scope, "exports", "write");
   authorizeReport(scope, query.type);
   const id = newUuidV7();
-  const filename = `kashkol-${query.type}-${id}.csv`;
+  const filename = `kashkol-${query.type}-${id}.${reportExportExtension(query.format)}`;
   const job = await createReportExportJob(scope, { id, query, filename }, async (tx, jobId) => {
     await writeAuditEvent(tx, {
       workspaceId: scope.workspaceId,
@@ -318,7 +354,7 @@ export async function requestReportExport(
       entityType: "report_export",
       entityId: jobId,
       action: "report.export_requested",
-      diff: { type: query.type },
+      diff: { type: query.type, format: query.format },
       requestId,
     });
   });
@@ -339,7 +375,7 @@ export async function getReportExportStatus(scope: Scope, exportId: string) {
       key: job.storageKey,
       ttlSeconds: 300,
       filename: job.filename,
-      contentType: "text/csv; charset=utf-8",
+      contentType: reportExportContentType(formatFromStoredQuery(job.query)),
     });
   }
   return {
@@ -374,15 +410,12 @@ export async function processReportExportBatch(limit = 5) {
         throw new AppError("FORBIDDEN");
       }
 
-      const content = Buffer.from(
-        await generateReportCsv({ workspaceId }, parsed.data),
-        "utf8",
-      );
-      storageKey = `ws/${workspaceId}/reports/${newUuidV7()}.csv`;
+      const content = await generateReportContent({ workspaceId }, parsed.data);
+      storageKey = `ws/${workspaceId}/reports/${newUuidV7()}.${reportExportExtension(parsed.data.format)}`;
       await getFileStorageAdapter().put({
         key: storageKey,
         body: content,
-        contentType: "text/csv; charset=utf-8",
+        contentType: reportExportContentType(parsed.data.format),
       });
 
       const auditRequestId = newRequestId();
@@ -399,7 +432,7 @@ export async function processReportExportBatch(limit = 5) {
             entityType: "report_export",
             entityId: jobId,
             action: "report.export_created",
-            diff: { type: parsed.data.type },
+            diff: { type: parsed.data.type, format: parsed.data.format },
             requestId: auditRequestId,
           }),
       );

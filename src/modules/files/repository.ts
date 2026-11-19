@@ -27,9 +27,9 @@ export async function listMaterialRows(scope: Scope, query: FilesQuery) {
         workspaceId: scope.workspaceId,
         deletedAt: null,
         archivedAt: query.archived ? { not: null } : null,
-        // Public form uploads are respondent files; they belong to the forms
-        // surface and must never appear in the learning-materials library.
-        scope: { not: "form_upload" },
+        // Form responses and student homework submissions belong to their own
+        // surfaces and must never appear in the learning-materials library.
+        scope: { notIn: ["form_upload", "homework_submission"] },
         ...(query.search
           ? {
               OR: [

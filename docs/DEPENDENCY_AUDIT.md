@@ -23,6 +23,15 @@
 node scripts/audit-deps.mjs
 ```
 
+## Addendum — 2026-11-18 (PDF renderer)
+
+Installing the exact pin `puppeteer-core@24.31.0` (`ADR-0032`) reported **30 advisories (8 moderate,
+22 high)** across the full dependency tree, an increase from the 2026-11-01 audit. No automatic
+upgrade was run: `npm audit fix --force` proposes breaking changes and is explicitly out of scope.
+The new advisories must be reviewed before M2 public beta, alongside the existing `minimatch`, `uuid`,
+and `glob` chain. The renderer is behind a fail-closed adapter (`PDF_RENDERER_DRIVER=none` by default),
+so an unconfigured deployment exposes no PDF rendering path.
+
 ## Next review trigger
 
 - Before M2 public beta.

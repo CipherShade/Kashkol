@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { getDb } from "@/lib/db/client";
-import { withScope } from "@/lib/db/scope";
+import { withScope, withUserScope } from "@/lib/db/scope";
 import type { Permission, PermissionAction, PermissionResource, Scope } from "@/modules/tenancy/types";
 import { permissionKey } from "@/modules/tenancy/types";
 
@@ -57,7 +57,29 @@ export async function createTestUser(prefix = "user"): Promise<TestUser> {
 export async function deleteTestUser(user: TestUser): Promise<void> {
   const db = getDb();
   await db.portalGrant.deleteMany({ where: { portalUserId: user.id } });
-  await db.workspaceMember.deleteMany({ where: { userId: user.id } });
+
+  // An unscoped delete matches zero rows under RLS. Discover the user's
+  // memberships through the SELECT-only self policy, then delete grants and
+  // memberships inside each workspace scope before removing the user.
+  const memberships = await withUserScope(user.id, (tx) =>
+    tx.workspaceMember.findMany({
+      where: { userId: user.id },
+      select: { id: true, workspaceId: true },
+    }),
+  );
+  const memberIdsByWorkspace = new Map<string, string[]>();
+  for (const member of memberships) {
+    const ids = memberIdsByWorkspace.get(member.workspaceId) ?? [];
+    ids.push(member.id);
+    memberIdsByWorkspace.set(member.workspaceId, ids);
+  }
+  for (const [workspaceId, memberIds] of memberIdsByWorkspace) {
+    await withScope({ workspaceId }, async (tx) => {
+      await tx.permissionGrant.deleteMany({ where: { memberId: { in: memberIds } } });
+      await tx.workspaceMember.deleteMany({ where: { id: { in: memberIds } } });
+    });
+  }
+
   await db.session.deleteMany({ where: { userId: user.id } });
   await db.account.deleteMany({ where: { userId: user.id } });
   // `auth_event` is append-only for the application role. Test rows are left in

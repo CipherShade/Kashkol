@@ -103,6 +103,16 @@ export const updateWorkspaceSchema = z
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;
 
+/**
+ * The target is named by the switch request; the source workspace and the
+ * session are never taken from the body. Membership is rechecked server-side.
+ */
+export const switchWorkspaceSchema = z.object({
+  workspaceId: z.string().trim().uuid("workspace.errors.switchInvalid"),
+});
+
+export type SwitchWorkspaceInput = z.infer<typeof switchWorkspaceSchema>;
+
 const emailField = z.string().trim().toLowerCase().pipe(z.email("team.errors.emailInvalid"));
 
 export const permissionGrantSchema = z.object({

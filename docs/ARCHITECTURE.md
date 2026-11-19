@@ -116,8 +116,9 @@ ranges are used only in `package.json` for patch-level updates.
 8. `middleware.ts` is renamed `proxy.ts` and runs on the Node.js runtime only.
 
 **Packages deliberately left unpinned** (selected during M0 implementation, version recorded in an
-ADR when chosen): email delivery client, PDF/XLSX parsing and writing, antivirus scanner client,
-structured logger, error-tracking SDK, Playwright + axe, and the job-runner scheduler.
+ADR when chosen): email delivery client, antivirus scanner client, structured logger, error-tracking
+SDK, Playwright + axe, and the job-runner scheduler. XLSX writing is pinned to `exceljs` `4.4.0`
+(`ADR-0016`) and PDF rendering to `puppeteer-core` `24.31.0` (`ADR-0032`); see `INTEGRATIONS.md` §1.1.
 
 ### 3.2 Why this stack and not the alternatives
 

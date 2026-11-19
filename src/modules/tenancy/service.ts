@@ -5,7 +5,14 @@ import { getServerEnv, isEmailConfigured } from "@/lib/config/env";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { assertWorkspaceWriteAllowedTx } from "@/modules/platform-admin/enforcement";
 import { getEmailTransport, workspaceInvitationEmail } from "@/modules/identity/email";
-import { deleteSessionsForUserTx, findActiveMemberships, findGrantedPermissions, findUser, findWorkspaceState } from "@/modules/identity/repository";
+import {
+  deleteSessionsForUserTx,
+  findActiveMemberships,
+  findGrantedPermissions,
+  findUser,
+  findWorkspaceState,
+  setSessionWorkspaceSelectionTx,
+} from "@/modules/identity/repository";
 import {
   findCallerMembership,
   findInvitationByTokenHash,
@@ -42,6 +49,7 @@ import {
   type CreateWorkspaceInput,
   type InviteMemberInput,
   type PermissionGrantInput,
+  type SwitchWorkspaceInput,
   type UpdateWorkspaceInput,
 } from "./schemas";
 import {
@@ -95,6 +103,33 @@ function context(request: RequestContext | undefined) {
     requestId: request?.requestId ?? newRequestId(),
     ipHash: request?.ipHash ?? null,
   };
+}
+
+async function writeWorkspaceSwitchAudit(
+  tx: Parameters<typeof writeAuditEvent>[0],
+  input: {
+    workspaceId: string;
+    actorUserId: string;
+    actorDisplayName: string;
+    fromWorkspaceId: string | null;
+    log: ReturnType<typeof context>;
+  },
+): Promise<void> {
+  await writeAuditEvent(tx, {
+    workspaceId: input.workspaceId,
+    actorUserId: input.actorUserId,
+    actorDisplayName: input.actorDisplayName,
+    actorType: "user",
+    entityType: "workspace",
+    entityId: input.workspaceId,
+    action: "workspace.switched",
+    requestId: input.log.requestId,
+    ipHash: input.log.ipHash,
+    diff: {
+      fromWorkspaceId: input.fromWorkspaceId,
+      toWorkspaceId: input.workspaceId,
+    },
+  });
 }
 
 function slugFor(name: string, id: string): string {
@@ -170,25 +205,28 @@ export async function getWorkspaceIdentity(scope: Scope) {
 }
 
 /**
- * Create the first workspace for a signed-in user.
+ * Create another workspace for a signed-in user (`F-P2-08` AC-1).
  *
  * The workspace, its settings, the owner membership, the onboarding checklist,
- * and the audit event are written in one scoped transaction. A failure leaves
- * no orphaned workspace (`F-P0-06` AC-2).
+ * and the audit events are written in one scoped transaction. A failure leaves
+ * no orphaned workspace (`F-P0-06` AC-2). When the caller supplies the verified
+ * session, the new workspace becomes the session's active workspace; the
+ * activation is audited in the same transaction as the switch flow.
  */
 export async function createWorkspace(
-  actor: { userId: string; displayName: string },
+  actor: {
+    userId: string;
+    displayName: string;
+    sessionId?: string;
+    previousWorkspaceId?: string | null;
+  },
   input: CreateWorkspaceInput,
   request?: RequestContext,
 ): Promise<{ workspaceId: string; slug: string }> {
-  const memberships = await findActiveMemberships(actor.userId);
-  if (memberships.length > 0) {
-    throw new AppError("CONFLICT", { messageKey: "workspace.errors.alreadyMember" });
-  }
-
   const workspaceId = newUuidV7();
   const slug = slugFor(input.name, workspaceId);
   const log = context(request);
+  const now = new Date();
 
   await withScope({ workspaceId }, async (tx) => {
     await insertWorkspace(tx, {
@@ -216,7 +254,7 @@ export async function createWorkspace(
       userId: actor.userId,
       role: "owner",
       status: "active",
-      joinedAt: new Date(),
+      joinedAt: now,
     });
 
     await insertOnboardingTasks(tx, workspaceId);
@@ -240,9 +278,87 @@ export async function createWorkspace(
         inactiveAfter: input.inactiveAfter,
       },
     });
+
+    if (actor.sessionId) {
+      await setSessionWorkspaceSelectionTx(tx, actor.sessionId, workspaceId, now);
+      await writeWorkspaceSwitchAudit(tx, {
+        workspaceId,
+        actorUserId: actor.userId,
+        actorDisplayName: actor.displayName,
+        fromWorkspaceId: actor.previousWorkspaceId ?? null,
+        log,
+      });
+    }
   });
 
   return { workspaceId, slug };
+}
+
+export type WorkspaceSwitchResult = {
+  workspaceId: string;
+  name: string;
+  slug: string;
+  role: "owner" | "assistant";
+};
+
+/**
+ * Bind the server session to another workspace the signed-in user already
+ * belongs to (`F-P2-08` AC-2 and AC-3).
+ *
+ * The target id is the only client-supplied workspace identifier. It is a
+ * candidate, not a scope: membership and workspace state are rechecked inside
+ * a transaction scoped to that candidate. The session pointer and the audit
+ * event commit together, so a switch can never be audited without taking
+ * effect, or take effect without an audit event.
+ */
+export async function switchWorkspace(
+  actor: {
+    userId: string;
+    displayName: string;
+    sessionId: string;
+    currentWorkspaceId: string;
+  },
+  input: SwitchWorkspaceInput,
+  request?: RequestContext,
+): Promise<WorkspaceSwitchResult> {
+  const log = context(request);
+  const targetWorkspaceId = input.workspaceId;
+
+  return withScope({ workspaceId: targetWorkspaceId }, async (tx) => {
+    const membership = await tx.workspaceMember.findFirst({
+      where: {
+        workspaceId: targetWorkspaceId,
+        userId: actor.userId,
+        status: "active",
+      },
+      select: { role: true },
+    });
+    if (!membership) throw new AppError("NOT_FOUND");
+
+    const workspace = await tx.workspace.findFirst({
+      where: { id: targetWorkspaceId, deletedAt: null },
+      select: { id: true, name: true, slug: true, status: true },
+    });
+    if (!workspace || workspace.status !== "active") {
+      throw new AppError("FORBIDDEN", { messageKey: "errors.workspaceInactive" });
+    }
+
+    await setSessionWorkspaceSelectionTx(tx, actor.sessionId, targetWorkspaceId, new Date());
+    await writeWorkspaceSwitchAudit(tx, {
+      workspaceId: targetWorkspaceId,
+      actorUserId: actor.userId,
+      actorDisplayName: actor.displayName,
+      fromWorkspaceId: actor.currentWorkspaceId,
+      log,
+    });
+
+    return {
+      workspaceId: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+      role: membership.role as "owner" | "assistant",
+    };
+  });
 }
 
 function changedFields<T extends Record<string, unknown>>(
@@ -651,11 +767,6 @@ export async function acceptInvitation(
   if (normalizeInvitationEmail(actor.email) !== normalizeInvitationEmail(invitation.email)) {
     throw new AppError("FORBIDDEN", { messageKey: "team.errors.invitationEmailMismatch" });
   }
-  const activeMemberships = await findActiveMemberships(actor.userId);
-  if (activeMemberships.some((membership) => membership.workspaceId !== invitation.workspaceId)) {
-    throw new AppError("CONFLICT", { messageKey: "team.errors.activeWorkspace" });
-  }
-
   const grants = grantsFromJson(invitation.grants);
 
   const result = await withScope({ workspaceId: invitation.workspaceId }, async (tx) => {

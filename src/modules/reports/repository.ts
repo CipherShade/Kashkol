@@ -396,6 +396,7 @@ export async function createReportExportJob(
     ...(input.query.studentId ? { studentId: input.query.studentId } : {}),
     limit: input.query.limit,
     locale: input.query.locale,
+    format: input.query.format,
   };
   return withScope(scope, async (tx) => {
     const job = await tx.reportExport.create({
@@ -425,6 +426,7 @@ export async function findReportExport(scope: Scope, exportId: string) {
       select: {
         id: true,
         type: true,
+        query: true,
         status: true,
         filename: true,
         storageKey: true,

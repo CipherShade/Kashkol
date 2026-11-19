@@ -85,6 +85,13 @@ type StudentPortalDetail = {
       status: "not_submitted" | "submitted" | "late" | "excused";
       score: number | null;
       submittedAt: string | null;
+      files: Array<{
+        fileId: string;
+        title: string;
+        mime: string;
+        sizeBytes: number;
+        downloadUrl: string;
+      }>;
     };
     resources: Array<{
       fileId: string;
@@ -232,6 +239,8 @@ export function StudentPortalClient({
   const [submittingHomeworkId, setSubmittingHomeworkId] = useState<
     string | null
   >(null);
+  const [homeworkFiles, setHomeworkFiles] = useState<Record<string, File[]>>({});
+  const [homeworkSubmitError, setHomeworkSubmitError] = useState<string | null>(null);
   const [activeVideoPlayback, setActiveVideoPlayback] = useState<{
     videoId: string;
     title: string;
@@ -476,19 +485,28 @@ export function StudentPortalClient({
   ];
   const availableTabs = allTabs.filter((tab) => tab.visible);
 
-  const handleMarkHomeworkSubmitted = async (homeworkId: string) => {
+  const handleSubmitHomework = async (homeworkId: string) => {
     setSubmittingHomeworkId(homeworkId);
+    setHomeworkSubmitError(null);
     try {
+      const body = new FormData();
+      for (const file of homeworkFiles[homeworkId] ?? []) {
+        body.append("files", file);
+      }
       const res = await fetch(
         `/api/portal/student/homework/${encodeURIComponent(homeworkId)}/submit?studentId=${encodeURIComponent(detail.student.id)}`,
-        { method: "POST" },
+        { method: "POST", body },
       );
-      if (!res.ok) return;
+      if (!res.ok) {
+        setHomeworkSubmitError(t("homeworkSubmitFailed"));
+        return;
+      }
       const data = (await res.json()) as {
         submission: {
           homeworkId: string;
           status: "submitted" | "late";
           submittedAt: string;
+          fileIds: string[];
         };
       };
 
@@ -503,11 +521,24 @@ export function StudentPortalClient({
                     ...hw.submission,
                     status: data.submission.status,
                     submittedAt: data.submission.submittedAt,
+                    files: [
+                      ...hw.submission.files,
+                      ...(homeworkFiles[homeworkId] ?? []).map((file, index) => ({
+                        fileId: data.submission.fileIds[index] ?? "",
+                        title: file.name,
+                        mime: file.type,
+                        sizeBytes: file.size,
+                        downloadUrl: `/api/portal/student/homework/${hw.id}/files/${data.submission.fileIds[index] ?? ""}/download`,
+                      })),
+                    ],
                   },
                 }
               : hw,
           ) ?? null,
       }));
+      setHomeworkFiles((prev) => ({ ...prev, [homeworkId]: [] }));
+    } catch {
+      setHomeworkSubmitError(t("homeworkSubmitFailed"));
     } finally {
       setSubmittingHomeworkId(null);
     }
@@ -700,6 +731,11 @@ export function StudentPortalClient({
         {/* Tab 2: Assigned Homework */}
         {activeTab === "homework" && detail.homework && (
           <div className="space-y-4">
+            {homeworkSubmitError && (
+              <p className="rounded-lg border border-[var(--border-subtle)] p-3 text-xs text-[var(--danger-fg)]" role="alert">
+                {homeworkSubmitError}
+              </p>
+            )}
             {detail.homework.length === 0 ? (
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
                 {t("noHomework")}
@@ -730,12 +766,12 @@ export function StudentPortalClient({
                           : ""}
                       </span>
 
-                      {hw.submission.status === "not_submitted" && (
+                      {hw.submission.status !== "excused" && (
                         <Button
                           type="button"
                           size="sm"
                           disabled={submittingHomeworkId === hw.id}
-                          onClick={() => void handleMarkHomeworkSubmitted(hw.id)}
+                          onClick={() => void handleSubmitHomework(hw.id)}
                           className="gap-1.5"
                         >
                           <Icon name="checkCircle" size={14} />
@@ -749,6 +785,47 @@ export function StudentPortalClient({
                     <p className="mt-2.5 text-xs leading-relaxed text-[var(--text-secondary)]">
                       {hw.instructions}
                     </p>
+                  )}
+
+                  {hw.submission.status !== "excused" && (
+                    <div className="mt-3 flex flex-col gap-1.5">
+                      <label className="text-xs font-medium text-[var(--text-secondary)]">
+                        {t("homeworkFilesLabel")}
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.pptx"
+                          disabled={submittingHomeworkId === hw.id}
+                          onChange={(event) =>
+                            setHomeworkFiles((prev) => ({
+                              ...prev,
+                              [hw.id]: Array.from(event.target.files ?? []),
+                            }))
+                          }
+                          className="mt-1 block w-full text-xs"
+                        />
+                      </label>
+                      {(homeworkFiles[hw.id] ?? []).length > 0 && (
+                        <p className="text-xs text-[var(--text-secondary)]">
+                          {(homeworkFiles[hw.id] ?? []).map((file) => file.name).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {hw.submission.files.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {hw.submission.files.map((file) => (
+                        <a
+                          key={file.fileId}
+                          href={file.downloadUrl}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)]"
+                        >
+                          <Icon name="download" size={14} />
+                          <span>{file.title}</span>
+                        </a>
+                      ))}
+                    </div>
                   )}
 
                   {hw.resources.length > 0 && (

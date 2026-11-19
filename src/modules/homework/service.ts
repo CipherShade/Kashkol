@@ -69,6 +69,13 @@ export async function listHomework(scope: Scope, query: HomeworkQuery) {
         teacherFeedback: submission.teacherFeedback,
         score: !canReadGrades || submission.score === null ? null : Number(submission.score),
         submittedAt: submission.submittedAt,
+        files: submission.submissionFiles.map(({ file }) => ({
+          fileId: file.id,
+          displayName: file.title,
+          mime: file.mime,
+          sizeBytes: file.sizeBytes,
+          downloadUrl: `/api/files/${file.id}/download`,
+        })),
       })),
     };
   });

@@ -63,7 +63,7 @@ health/readiness probes, the route registry, and the project-rule checks.
   `/[locale]/portal/student`, `/[locale]/portal/link/[token]`):
   - Verified invitation/account linking/revocation (`portal_invitation` hashed tokens, verified-email match, granular per-link permissions, immediate revocation, and audit logging).
   - Parent portal scoped strictly to explicitly linked children, permitted attendance, published/locked grades (`assessment.lockedAt !== null`), assigned homework, clean shared resources, approved payment/balance ledger data (when `showPayments` is enabled), schedule changes, and private notifications — never exposing other students, other guardians, private teacher notes, or assistant activity.
-  - Student portal scoped strictly to the linked student's own upcoming sessions, permitted attendance, assigned homework (with self-submission status marking), published grades, and clean shared learning materials.
+  - Student portal scoped strictly to the linked student's own upcoming sessions, permitted attendance, assigned homework (with self-submission status marking and scanned file attachments), published grades, and clean shared learning materials.
   - Installable PWA (`/manifest.webmanifest`, `/manifest.json`, `/sw.js`, icons, iOS Home Screen guidance, offline indicator) and optional VAPID Web Push (`/api/portal/push`) with lock-screen-safe generic payload defaults (`includeSensitiveDetails = false`) and an always-available in-app notification center fallback (`/api/portal/notifications`).
 - Append-only audit writer with field redaction, an atomicity test, and append-only revision chains.
 - Core domain schema: subject, group, enrollment, teaching session, attendance mark and revision,
@@ -108,11 +108,12 @@ health/readiness probes, the route registry, and the project-rule checks.
   `EMAIL_TRANSPORT=none`, so a real deployment must configure SMTP. Verification and recovery work
   locally.
 - Live Cloudflare Stream credentials in this local checkout (`VIDEO_PROVIDER_DRIVER` defaults to `none`; live Cloudflare API calls require `VIDEO_PROVIDER_ACCOUNT_ID`, `VIDEO_PROVIDER_API_TOKEN`, `VIDEO_PROVIDER_SIGNING_KEY_ID`, and `VIDEO_PROVIDER_SIGNING_PRIVATE_KEY` as documented in `docs/VIDEO_PROVIDER.md`).
+- No PDF renderer is configured in this checkout (`PDF_RENDERER_DRIVER` defaults to `none`). PDF export is implemented behind the adapter but fails closed with a translated error until a deployment supplies `PDF_CHROMIUM_EXECUTABLE_PATH` and an Arabic-capable font; CSV and XLSX exports work without a browser (`ADR-0032`, `docs/ENVIRONMENT.md`).
 - The generated isolation/permission matrices. The registry, the missing-route gate, hand-written
   authorization tests, and permission-filtered navigation exist; matrix generators remain
-  unimplemented. Workspace switching is also not implemented, so invitation acceptance rejects an
-  account that already has an active membership in another workspace.
-- Online homework file uploads remain unimplemented; students can mark assigned homework as submitted and take assigned online exams from the student portal, and teachers can record/grade submissions.
+  unimplemented. Workspace switching is implemented (`F-P2-08`, ADR-0031), so an invitation can now
+  add a second membership and the new workspace becomes active for the verified session.
+- Live WhatsApp delivery is not claimed. The prepared-message flow (`F-P1-10`) opens `wa.me` deep links, which the teacher sends from their own WhatsApp; Kashkol never asserts send or delivery. A separate, committed message-outbox subsystem contains SMTP and WhatsApp Cloud send transports (`src/modules/messaging/adapters/`) with `sent` status semantics and worker/admin-outbox surfaces. Whether that subsystem stays as a generic email/SMS transport or must be reconciled with the no-delivery-claim requirement is a product decision; it is recorded here rather than silently changed as part of another feature.
 - CI, staging deployment, provisioned production object storage, and observability integrations. A
   long-running worker process exists (`npm run worker`, an in-image loop, see `docs/STATUS.md`
   §6 "Background worker"): it drains the message outbox per workspace and queued report exports
@@ -1407,19 +1408,67 @@ task.
 |---|---|---|---|
 | 2.1 | Assistants with server-enforced permissions | `F-P2-01` passes; the generated permission matrix covers every role | ◐ owner administration UI, safe invitations, granular server checks, audit history, direct-request authorization tests, and permission-filtered navigation implemented; generated matrix pending |
 | 2.2 | Parent portal with scoped access | `F-P2-02` passes; a parent can view only explicitly linked children, permitted attendance, locked grades, homework, clean resources, approved payment/balance summaries, schedule changes, and notifications, and cannot reach another child or private notes | ☑ |
-| 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; invitation tokens are hashed, single-use, email-verified, expiry-checked, and revocable; student portal shows only own upcoming sessions, permitted attendance, homework, locked grades, and shared clean materials | ☑ |
+| 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; invitation tokens are hashed, single-use, email-verified, expiry-checked, and revocable; student portal shows only own upcoming sessions, permitted attendance, homework (with scanned file attachments), locked grades, and shared clean materials | ☑ |
 | 2.4 | Manual payments with a ledger and no settlement claim | `F-P2-04` passes for EGP/monthly fees **and** per-session attendance-based billing (`ADR-0025`); parent payment views remain disabled | ☑ |
 | 2.5 | QR attendance | `F-P2-05` passes | ◐ student QR identity tab with SVG/PNG/print download on the student profile and a session-page QR scanner panel exist; integration and unit tests exist; camera capture was not exercised on real hardware in this checkout |
 | 2.6 | Academic progress and follow-up | Source-backed flags and staff follow-up tasks are implemented; full progress series and configurable non-attendance rules remain | Partial |
 | 2.7 | Notifications expansion | `F-P2-07` passes; the email digest is opt-in and contains no note content | ☐ |
-| 2.8 | Multi-workspace switching | `F-P2-08` passes; the current workspace is explicit in the sidebar | ☐ |
+| 2.8 | Multi-workspace switching | `F-P2-08` passes; the current workspace is explicit in the sidebar | ☑ |
 | 2.9 | Teacher-side preview of the portals | `F-P2-09` passes; the preview is labelled as a preview and is not a portal | ☐ |
-| 2.10 | Reports and export | Filtered tenant-scoped asynchronous CSV for attendance, enrollment, academics, homework, payments, and balances passes; XLSX/PDF from the broader product requirement remain unimplemented | ◐ |
+| 2.10 | Reports and export | Filtered tenant-scoped asynchronous CSV, XLSX, and PDF exports for attendance, enrollment, academics, homework, payments, and session revenue pass; PDF fails closed unless a renderer is explicitly configured | ☑ |
 | 2.11 | Data import/export and backup (server-side) | `F-P2-11` passes; the export includes the audit log and a schema version | ☐ |
 | 2.12 | Session correction workflow | `F-P2-12` passes; a correction requires a reason and is audited | ☐ |
 | 2.13 | Publish the privacy notice (Arabic and English) | Signed off by the legal reviewer (`F-P0-08` AC-7) | ☐ |
 | 2.14 | External penetration test | A third-party report with no open critical or high findings | ☐ |
 | 2.15 | Run the M2 release gate | Every gate item is checked with evidence | ☐ |
+
+**2.8 — Multi-workspace switching (`F-P2-08`, ADR-0031).** The active workspace is stored on
+`session_activity.active_workspace_id`, never in a URL or a request body. A stale pointer falls back
+deterministically to the earliest active membership. `POST /api/workspace/switch` validates the
+target inside a transaction scoped to that workspace, writes the pointer and the `workspace.switched`
+audit event together, and the client reloads so no workspace-scoped component state survives the
+switch. Workspace creation and invitation acceptance now permit an account with an existing
+membership elsewhere and activate the newly entered workspace for a verified session. Unit and
+integration tests cover the pointer, the fallback, cross-workspace creation, invitation acceptance,
+and the audit transaction. Full gate passed on 2026-11-17.
+
+**2.3 — Online homework file submissions (`F-P2-03`).** A verified student can attach up to five
+scanned files (PDF, PNG, JPEG, DOCX, XLSX, PPTX; 25 MB each) when submitting homework from the
+student portal. Validation, ClamAV fail-closed scanning, and private-object storage all complete
+before the transaction opens; the `File` row, the `homework_submission_file` join, the submission
+status change, and the `homework.submitted` audit event are written atomically inside one scoped
+transaction. On any later failure the stored objects are deleted, so a failed attempt leaves no
+residue. Files use the `homework_submission` file scope and are excluded from the learning-materials
+library. The student reauthorizes against their own submission via
+`GET /api/portal/student/homework/[homeworkId]/files/[fileId]/download` before a short-lived signed
+download; the teacher views the same attachments through the existing authorized file route. The
+parent portal remains read-only and never exposes submission files. A new enum value and a new
+tenant table are added in two migrations (`...010000_homework_submission_file_scope`,
+`...020000_homework_submission_files`); `homework_submission_file` carries RLS enable/force, a
+tenant policy, composite tenant FKs, indexes, grants, and a `TENANT_TABLES` entry. Unit and
+PostgreSQL integration tests cover scan/storage ordering, failure cleanup, the file limit,
+own-file reauthorization, and tenant isolation. Full gate passed on 2026-11-17.
+
+**2.10 — CSV, XLSX, and PDF report exports (`F-P2-10`, ADR-0032).** The reports screen offers an export
+format selector; the requested `format` is validated by `reportExportSchema` and stored in the existing
+`ReportExport.query` JSONB column, so no migration is required. One shared table builder loads and
+serializes the filtered rows; CSV keeps its BOM and formula sanitisation, XLSX uses the pinned `exceljs`
+`4.4.0` with RTL sheet view and formula sanitisation (`ADR-0016`), and PDF escapes the same rows into a
+self-contained RTL HTML document rendered through `PdfRendererAdapter`. The driver defaults to `none`,
+which fails closed with a translated conflict error and writes no file; `chromium` uses a configured
+executable path with a bounded timeout and two attempts and sanitises every failure; `fake` is a
+deterministic test double refused outside `APP_ENV=local`. Filename extension, storage-key extension
+(`ws/<workspace>/reports/<uuid>.(csv|xlsx|pdf)`), and signed-download content type all derive from the
+stored format. Unit tests cover each format, HTML escaping, storage-key validation, fail-closed PDF,
+and the new environment rules. Full gate passed on 2026-11-18.
+
+**2.11 — Real-device QR camera verification protocol (`F-P2-05`).** `docs/QR_CAMERA_VERIFICATION_PROTOCOL.md`
+is a human-executable procedure for the one acceptance path this checkout cannot exercise: real
+`getUserMedia` capture, `BarcodeDetector`/`jsQR` decoding of a printed QR, one-scan suppression,
+late marking, the documented rejection states, and the Arabic pass. It records the device/browser,
+the decoder branch actually used, a case-by-case result table, and a sign-off. **It was not executed
+here** — no camera hardware or real device is available — so `F-P2-05` remains `◐` until a human
+fills in and signs the evidence table. No simulated camera result is claimed.
 
 ### M3 — Advanced (P3)
 
@@ -1437,6 +1486,17 @@ task.
 | 3.10 | Forms HTTP API (`F-P3-09`) | 10 service routes exposed; registry updated; integration verified | ☑ |
 | 3.11 | Forms visual builder (`F-P3-09` extension / M4) | Dashboard, `/forms/new`, and editor (all 11 types, sections/page breaks, conditional logic, preview); explicit save with `updatedAt` concurrency guard; Arabic/English and light/dark; no autosave and no public submission | ☑ |
 | 3.12 | Run the M3 release gate | Every gate item is checked with evidence | ☐ |
+
+**3.7 — Terms-only academic-year handling (`F-P3-07`, ADR-0033).** AC-1 and AC-2 are implemented:
+a forced-RLS `academic_term` table stores workspace-wide and grade-specific term boundaries; grade
+terms override workspace-wide terms; overlap is rejected in the scoped transaction; reports default
+to the current term when one exists and can fetch the same authorized report for the previous term.
+There is no report-schema or export-format change. **"Terms only for now" is the explicit scope:**
+the printable Arabic report card (AC-3) and its reproducibility (AC-4) are not built and remain open
+exit conditions; rollover/copy of prior-year data is also excluded and has no `F-P3-07` acceptance
+criterion. None is shown as an available capability. Item 3.7 therefore stays `☐`. Unit and
+PostgreSQL integration tests passed, the migration was applied with
+`npm run db:deploy`, and the full gate passed on 2026-11-18.
 
 ---
 

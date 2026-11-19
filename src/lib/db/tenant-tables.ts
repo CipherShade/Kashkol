@@ -32,6 +32,7 @@ export const TENANT_TABLES = [
   "assessment_score",
   "homework",
   "homework_submission",
+  "homework_submission_file",
   "homework_resource",
   "student_follow_up",
   "student_follow_up_event",
@@ -67,6 +68,7 @@ export const TENANT_TABLES = [
   "form_answer_file",
   "form_upload",
   "homework_completion_mark",
+  "academic_term",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scope } from "@/modules/tenancy/types";
 import { permissionKey } from "@/modules/tenancy/types";
 
@@ -27,6 +27,7 @@ vi.mock("@/modules/reports/repository", () => repository);
 vi.mock("@/modules/files/adapters", () => ({ getFileStorageAdapter: () => storage }));
 vi.mock("@/modules/audit/service", () => audit);
 
+import { setPdfRendererAdapterForTests } from "@/modules/reports/adapters";
 import {
   getReportExportStatus,
   processReportExportBatch,
@@ -44,7 +45,7 @@ const ownerScope: Scope = {
 const workerJob = {
   id: "33333333-3333-4333-8333-333333333333",
   type: "attendance",
-  query: { type: "attendance", limit: 5000, locale: "en" },
+  query: { type: "attendance", limit: 5000, locale: "en", format: "csv" },
   status: "processing",
   requestedBy: ownerScope.actorUserId,
   filename: "kashkol-attendance.csv",
@@ -59,6 +60,11 @@ describe("report export lifecycle", () => {
     storage.put.mockResolvedValue(undefined);
     storage.delete.mockResolvedValue(undefined);
     audit.writeAuditEvent.mockResolvedValue(undefined);
+    setPdfRendererAdapterForTests(null);
+  });
+
+  afterEach(() => {
+    setPdfRendererAdapterForTests(null);
   });
 
   it("creates a queued job and writes the request audit event in the same callback", async () => {
@@ -71,7 +77,7 @@ describe("report export lifecycle", () => {
 
     const result = await requestReportExport(
       ownerScope,
-      { type: "attendance", limit: 5000, locale: "en" },
+      { type: "attendance", limit: 5000, locale: "en", format: "csv" },
       "request-1",
     );
 
@@ -142,6 +148,7 @@ describe("report export lifecycle", () => {
     repository.findReportExport.mockResolvedValue({
       id: workerJob.id,
       type: "attendance",
+      query: workerJob.query,
       status: "ready",
       filename: workerJob.filename,
       storageKey: `ws/${ownerScope.workspaceId}/reports/export.csv`,
@@ -160,6 +167,7 @@ describe("report export lifecycle", () => {
     repository.findReportExport.mockResolvedValue({
       id: workerJob.id,
       type: "attendance",
+      query: workerJob.query,
       status: "queued",
       filename: workerJob.filename,
       storageKey: null,
@@ -169,5 +177,127 @@ describe("report export lifecycle", () => {
     });
     const queued = await getReportExportStatus(ownerScope, workerJob.id);
     expect(queued.downloadUrl).toBeNull();
+  });
+
+  it("names the requested format's filename extension and records the format in the audit diff", async () => {
+    repository.createReportExportJob.mockImplementation(
+      async (_scope, input, onCreated: (tx: unknown, id: string) => Promise<void>) => {
+        await onCreated({}, input.id);
+        return { id: input.id, status: "queued", createdAt: new Date("2026-01-01") };
+      },
+    );
+
+    await requestReportExport(
+      ownerScope,
+      { type: "homework", limit: 5000, locale: "ar", format: "xlsx" },
+      "request-2",
+    );
+
+    expect(repository.createReportExportJob).toHaveBeenCalledWith(
+      ownerScope,
+      expect.objectContaining({ filename: expect.stringMatching(/\.xlsx$/) }),
+      expect.any(Function),
+    );
+    expect(audit.writeAuditEvent).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ diff: { type: "homework", format: "xlsx" } }),
+    );
+  });
+
+  it("generates a real XLSX buffer with the spreadsheet content type", async () => {
+    repository.claimReportExportJobs.mockResolvedValue([
+      { job_id: workerJob.id, workspace_id: ownerScope.workspaceId },
+    ]);
+    repository.findReportExportForWorker.mockResolvedValue({
+      ...workerJob,
+      query: { ...workerJob.query, format: "xlsx" },
+    });
+    repository.canUserReadReport.mockResolvedValue(true);
+    repository.completeReportExport.mockImplementation(
+      async (_ws, _id, _key, onCompleted: (tx: unknown) => Promise<void>) => {
+        await onCompleted({});
+        return { count: 1 };
+      },
+    );
+
+    const results = await processReportExportBatch(5);
+
+    expect(results).toEqual([{ id: workerJob.id, status: "ready" }]);
+    expect(storage.put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: expect.stringMatching(/\.xlsx$/),
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        body: expect.any(Buffer),
+      }),
+    );
+    expect((storage.put.mock.calls[0][0] as { body: Buffer }).body.subarray(0, 2).toString()).toBe(
+      "PK",
+    );
+  });
+
+  it("renders a PDF through the injected adapter with escaped HTML", async () => {
+    const renderer = {
+      driver: "fake" as const,
+      isConfigured: true,
+      render: vi.fn(async (_html: string) => Buffer.from("%PDF-1.4 fake")),
+    };
+    setPdfRendererAdapterForTests(renderer);
+    repository.loadReport.mockResolvedValue({
+      items: [{ student: "<script>alert(1)</script>", group: "Group A" }],
+      total: 1,
+    });
+    repository.claimReportExportJobs.mockResolvedValue([
+      { job_id: workerJob.id, workspace_id: ownerScope.workspaceId },
+    ]);
+    repository.findReportExportForWorker.mockResolvedValue({
+      ...workerJob,
+      query: { ...workerJob.query, format: "pdf" },
+    });
+    repository.canUserReadReport.mockResolvedValue(true);
+    repository.completeReportExport.mockImplementation(
+      async (_ws, _id, _key, onCompleted: (tx: unknown) => Promise<void>) => {
+        await onCompleted({});
+        return { count: 1 };
+      },
+    );
+
+    const results = await processReportExportBatch(5);
+
+    expect(results).toEqual([{ id: workerJob.id, status: "ready" }]);
+    expect(renderer.render).toHaveBeenCalledOnce();
+    const html = renderer.render.mock.calls[0][0] as string;
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(storage.put).toHaveBeenCalledWith(
+      expect.objectContaining({ key: expect.stringMatching(/\.pdf$/), contentType: "application/pdf" }),
+    );
+  });
+
+  it("fails a PDF job closed when no renderer is configured", async () => {
+    repository.claimReportExportJobs.mockResolvedValue([
+      { job_id: workerJob.id, workspace_id: ownerScope.workspaceId },
+    ]);
+    repository.findReportExportForWorker.mockResolvedValue({
+      ...workerJob,
+      query: { ...workerJob.query, format: "pdf" },
+    });
+    repository.canUserReadReport.mockResolvedValue(true);
+    repository.failReportExport.mockImplementation(
+      async (_ws, _id, _code, onFailed: (tx: unknown) => Promise<void>) => {
+        await onFailed({});
+        return { count: 1 };
+      },
+    );
+
+    const results = await processReportExportBatch(5);
+
+    expect(results).toEqual([{ id: workerJob.id, status: "failed" }]);
+    expect(storage.put).not.toHaveBeenCalled();
+    expect(repository.failReportExport).toHaveBeenCalledWith(
+      ownerScope.workspaceId,
+      workerJob.id,
+      "EXPORT_FAILED",
+      expect.any(Function),
+    );
   });
 });

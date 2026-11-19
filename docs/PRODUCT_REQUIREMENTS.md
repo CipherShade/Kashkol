@@ -685,8 +685,8 @@ know who is keeping up.
    teacher may access and share with every assigned student.
 2. Every assigned student has a **submission record** with status `not_submitted` / `submitted` /
    `late` / `excused`, plus optional teacher feedback, optional grade, and optional submitted-at
-   timestamp. The current teacher workflow records status manually; it does not accept online file
-   submissions.
+   timestamp. The teacher workflow records status manually; online file attachments are submitted by
+   the student through F-P2-03 and displayed to the teacher here.
 3. The teacher can mark each student's record individually. A bulk action, if added, must write an
    individual submission record per student (never a single shared boolean).
 4. Each homework card shows group, title, due date, and a completion bar with `submitted/assigned`
@@ -967,9 +967,14 @@ to prepare.
 3. A student sees only their own data. No peer data, no group aggregates.
 4. Submitting homework sets the submission status to `submitted` with a server timestamp and updates
    the teacher's completion bar immediately.
-5. The prototype's student portal is a hardcoded mock bound to `data.students[3]`; it is replaced by
+5. A student may attach up to five scanned files to a submission. Each file is content-validated,
+   virus-scanned fail-closed, and stored privately before the tenant transaction; the file record,
+   its link to the student's own submission, the status change, and the audit event are written
+   atomically. The student can download only files linked to their own submission, and the parent
+   portal never exposes submission files.
+6. The prototype's student portal is a hardcoded mock bound to `data.students[3]`; it is replaced by
    the authenticated implementation.
-6. A student session can never read teacher-side endpoints — an API test asserts `403` across the
+7. A student session can never read teacher-side endpoints — an API test asserts `403` across the
    teacher surface.
 
 ---
@@ -1161,7 +1166,9 @@ analyse or share them.
 **Acceptance criteria**
 1. Exportable reports: student roster, attendance records (with corrections applied and the revision
    chain available as a separate sheet), assessment scores, homework submissions, payments.
-2. Formats: CSV (UTF-8 with BOM for Excel), XLSX, and PDF summary. Filenames are localised.
+2. Formats: CSV (UTF-8 with BOM for Excel), XLSX, and PDF summary. Filenames are localised. PDF requires
+   an explicitly configured renderer; when none is configured the PDF export fails visibly and no file
+   is written — no counterfeit document is produced (`ADR-0032`).
 3. Exports are generated asynchronously; the UI shows a queued/processing/ready state and notifies on
    completion (F-P0-10).
 4. Export generation is **server-side** and reads through the same tenant-scoped data layer, so an
@@ -1346,6 +1353,14 @@ school year.
    attendance, homework, assessments, and teacher notes.
 4. Generated report cards are reproducible: regenerating with unchanged data yields an identical
    document except for a generation timestamp.
+
+**Current scope (2026-11-18, ADR-0033): "Terms only for now."** AC-1 and AC-2 are implemented.
+AC-2 changes the `F-P1-12` AC-3 default only when at least one academic term exists: reports then
+open on the current term instead of the last 30 days; with no terms, the last-30-days default stays.
+Grade-specific terms override workspace-wide terms for that grade. Comparison uses the same
+authorized report with the previous term's real dates; no report-card or rollover/copy capability is
+implied. AC-3 and AC-4 are not built, and rollover/copy is outside this scope. The feature remains
+open in `docs/STATUS.md` until those criteria are implemented.
 
 ---
 

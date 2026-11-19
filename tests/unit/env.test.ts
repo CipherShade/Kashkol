@@ -133,4 +133,39 @@ describe("server environment", () => {
       }),
     ).toThrow(/VIDEO_PROVIDER_DRIVER/);
   });
+
+  it("defaults PDF rendering to none and requires an executable for chromium", () => {
+    const parsed = parseServerEnv(valid);
+    expect(parsed.PDF_RENDERER_DRIVER).toBe("none");
+    expect(parsed.PDF_RENDER_TIMEOUT_MS).toBe(30_000);
+
+    expect(() => parseServerEnv({ ...valid, PDF_RENDERER_DRIVER: "chromium" })).toThrow(
+      /PDF_CHROMIUM_EXECUTABLE_PATH/,
+    );
+    expect(
+      parseServerEnv({
+        ...valid,
+        PDF_RENDERER_DRIVER: "chromium",
+        PDF_CHROMIUM_EXECUTABLE_PATH: "/usr/bin/chromium",
+        PDF_RENDER_TIMEOUT_MS: "60000",
+      }).PDF_RENDER_TIMEOUT_MS,
+    ).toBe(60_000);
+  });
+
+  it("forbids the fake PDF renderer outside local development", () => {
+    expect(() =>
+      parseServerEnv({
+        ...valid,
+        APP_ENV: "staging",
+        BETTER_AUTH_URL: "https://app.example.test",
+        FILE_STORAGE_DRIVER: "s3",
+        S3_BUCKET: "private-files",
+        S3_REGION: "eu-west-1",
+        CLAMAV_HOST: "clamav.internal",
+        REPORT_EXPORT_WORKER_TOKEN: "w".repeat(32),
+        MESSAGING_WORKER_TOKEN: "m".repeat(32),
+        PDF_RENDERER_DRIVER: "fake",
+      }),
+    ).toThrow(/PDF_RENDERER_DRIVER/);
+  });
 });
