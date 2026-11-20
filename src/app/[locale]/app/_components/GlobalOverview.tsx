@@ -29,47 +29,55 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
         })
       : null;
 
+  const revenuePercent =
+    revenue.expectedMinor !== null && revenue.expectedMinor > 0
+      ? Math.min(100, Math.round((revenue.collectedMinor / revenue.expectedMinor) * 100))
+      : null;
+
+  const revenueTone =
+    revenue.expectedMinor !== null && revenue.collectedMinor < revenue.expectedMinor
+      ? "warn"
+      : "success";
+
+  const attendanceTone =
+    attendance.rate !== null && attendance.rate < 75 ? "danger" : "success";
+
   return (
-    <div className="app-stat-grid" style={{ marginBottom: "24px" }}>
-      {/* 1. Students Card */}
-      <Link
-        href="/app/students"
-        className="ui-stat"
-        data-interactive="true"
-        data-variant="invert"
-        style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
-      >
+    <div className="app-stat-grid">
+      {/* 1. Attendance */}
+      <Link href="/app/sessions" className="ui-stat" data-interactive="true" data-tone={attendanceTone}>
         <div className="ui-stat-top">
-          <span className="ui-stat-label">{t("kpiStudentsTitle")}</span>
+          <span className="ui-stat-label">{t("kpiAttendanceTitle")}</span>
           <span className="ui-stat-icon" aria-hidden="true">
-            <Icon name="users" size={18} />
+            <Icon name="checkCircle" size={18} />
           </span>
         </div>
-        <div className="ui-stat-value">{students.total}</div>
-        <div className="ui-stat-hint" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+        <div className="ui-stat-value">
+          {attendance.rate !== null ? `${attendance.rate}%` : "—"}
+        </div>
+        {attendance.rate !== null ? (
+          <div className="ui-stat-meter" aria-hidden="true">
+            <span data-tone={attendanceTone} style={{ inlineSize: `${attendance.rate}%` }} />
+          </div>
+        ) : null}
+        <div className="ui-stat-hint">
           <span>
-            {t("kpiStudentsActive", { count: students.active })}
-            {students.inactive > 0 ? ` • ${t("kpiStudentsInactive", { count: students.inactive })}` : ""}
+            {t("kpiAttendanceCounts", {
+              present: attendance.presentCount,
+              absent: attendance.absentCount,
+            })}
           </span>
-          <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>
-            {t("kpiStudentsNewEnrolled", { count: students.newlyEnrolled })}
+          <span className="ui-stat-hint-sub">
+            {attendance.awaitingCount > 0
+              ? t("kpiAttendanceAwaiting", { count: attendance.awaitingCount })
+              : t("kpiAttendanceUpToDate")}
           </span>
         </div>
       </Link>
 
-      {/* 2. Revenue Card */}
+      {/* 2. Revenue */}
       {canSeeFinancials ? (
-        <Link
-          href="/app/payments"
-          className="ui-stat"
-          data-interactive="true"
-          data-tone={
-            revenue.expectedMinor !== null && revenue.collectedMinor < revenue.expectedMinor
-              ? "warn"
-              : "success"
-          }
-          style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
-        >
+        <Link href="/app/payments" className="ui-stat" data-interactive="true" data-tone={revenueTone}>
           <div className="ui-stat-top">
             <span className="ui-stat-label">{t("kpiRevenueTitle")}</span>
             <span className="ui-stat-icon" aria-hidden="true">
@@ -77,16 +85,24 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
             </span>
           </div>
           <div className="ui-stat-value">
-            {formattedCollected} <span style={{ fontSize: "0.9rem", fontWeight: 500 }}>{revenue.currency}</span>
+            {formattedCollected}{" "}
+            <span className="ui-stat-unit">{revenue.currency}</span>
           </div>
-          <div className="ui-stat-hint" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-            <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>
+          {revenuePercent !== null ? (
+            <div className="ui-stat-meter" aria-hidden="true">
+              <span data-tone={revenueTone} style={{ inlineSize: `${revenuePercent}%` }} />
+            </div>
+          ) : null}
+          <div className="ui-stat-hint">
+            <span>
               {formattedExpected !== null
                 ? t("kpiRevenueExpected", { amount: formattedExpected, currency: revenue.currency })
                 : t("kpiRevenueNoRules")}
+            </span>
+            <span className="ui-stat-hint-sub">
               {revenue.priorPeriodChangePercent !== null
-                ? ` • ${revenue.priorPeriodChangePercent > 0 ? "+" : ""}${revenue.priorPeriodChangePercent}%`
-                : ""}
+                ? `${revenue.priorPeriodChangePercent > 0 ? "+" : ""}${revenue.priorPeriodChangePercent}%`
+                : " "}
             </span>
           </div>
         </Link>
@@ -103,46 +119,28 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
         </div>
       )}
 
-      {/* 3. Attendance Card */}
-      <Link
-        href="/app/sessions"
-        className="ui-stat"
-        data-interactive="true"
-        data-tone={attendance.rate !== null && attendance.rate < 75 ? "danger" : "primary"}
-        style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
-      >
+      {/* 3. Students */}
+      <Link href="/app/students" className="ui-stat" data-interactive="true" data-tone="primary">
         <div className="ui-stat-top">
-          <span className="ui-stat-label">{t("kpiAttendanceTitle")}</span>
+          <span className="ui-stat-label">{t("kpiStudentsTitle")}</span>
           <span className="ui-stat-icon" aria-hidden="true">
-            <Icon name="checkCircle" size={18} />
+            <Icon name="users" size={18} />
           </span>
         </div>
-        <div className="ui-stat-value">
-          {attendance.rate !== null ? `${attendance.rate}%` : "—"}
-        </div>
-        <div className="ui-stat-hint" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+        <div className="ui-stat-value">{students.total}</div>
+        <div className="ui-stat-hint">
           <span>
-            {t("kpiAttendanceCounts", {
-              present: attendance.presentCount,
-              absent: attendance.absentCount,
-            })}
+            {t("kpiStudentsActive", { count: students.active })}
+            {students.inactive > 0 ? ` • ${t("kpiStudentsInactive", { count: students.inactive })}` : ""}
           </span>
-          <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>
-            {attendance.awaitingCount > 0
-              ? t("kpiAttendanceAwaiting", { count: attendance.awaitingCount })
-              : t("kpiAttendanceUpToDate")}
+          <span className="ui-stat-hint-sub">
+            {t("kpiStudentsNewEnrolled", { count: students.newlyEnrolled })}
           </span>
         </div>
       </Link>
 
-      {/* 4. Academic Performance Card */}
-      <Link
-        href="/app/assessments"
-        className="ui-stat"
-        data-interactive="true"
-        data-tone="default"
-        style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
-      >
+      {/* 4. Academic */}
+      <Link href="/app/assessments" className="ui-stat" data-interactive="true">
         <div className="ui-stat-top">
           <span className="ui-stat-label">{t("kpiAcademicTitle")}</span>
           <span className="ui-stat-icon" aria-hidden="true">
@@ -152,13 +150,13 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
         <div className="ui-stat-value">
           {academic.averageGradePercent !== null ? `${academic.averageGradePercent}%` : "—"}
         </div>
-        <div className="ui-stat-hint" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+        <div className="ui-stat-hint">
           <span>
             {academic.homeworkCompletionRate !== null
               ? t("kpiAcademicHomeworkRate", { rate: academic.homeworkCompletionRate })
               : t("kpiAcademicNoAssessments")}
           </span>
-          <span style={{ fontSize: "0.75rem", opacity: 0.85 }}>
+          <span className="ui-stat-hint-sub">
             {academic.priorPeriodChangePercent !== null
               ? t("kpiAcademicTrendChange", {
                   change: `${academic.priorPeriodChangePercent > 0 ? "+" : ""}${academic.priorPeriodChangePercent}%`,

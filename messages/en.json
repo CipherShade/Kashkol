@@ -687,6 +687,7 @@
     "eyebrow": "Overview",
     "title": "Dashboard",
     "heroTitle": "Welcome back, {name}",
+  "heroSummary": "You have {sessions, plural, =0 {no sessions} one {# session} other {# sessions}} scheduled today, and {attention, plural, =0 {no students} one {# student} other {# students}} flagged for follow-up.",
     "subtitle": "This page shows only what exists in your workspace. There are no sample statistics.",
     "workspaceCard": "Workspace",
     "workspaceCardHint": "The identity shown across the workspace.",

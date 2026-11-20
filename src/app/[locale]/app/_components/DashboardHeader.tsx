@@ -1,7 +1,6 @@
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Icon } from "@/components/ui/icon";
-import { Badge } from "@/components/ui/badge";
 import type { DashboardData, DashboardFilter } from "@/modules/dashboard/schemas";
 
 type DashboardHeaderProps = {
@@ -9,6 +8,10 @@ type DashboardHeaderProps = {
   workspace: DashboardData["workspace"];
   activePeriod: DashboardFilter["period"];
   canSeeSettings: boolean;
+  currentDate: string;
+  sessionCount: number;
+  attentionCount: number;
+  locale: string;
 };
 
 export function DashboardHeader({
@@ -16,6 +19,10 @@ export function DashboardHeader({
   workspace,
   activePeriod,
   canSeeSettings,
+  currentDate,
+  sessionCount,
+  attentionCount,
+  locale,
 }: DashboardHeaderProps) {
   const t = useTranslations("Dashboard");
 
@@ -26,61 +33,34 @@ export function DashboardHeader({
     { key: "all", labelKey: "periodAll" },
   ];
 
+  const dateLabel = new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(`${currentDate}T12:00:00`));
+
   return (
-    <section className="app-hero" style={{ marginBottom: "24px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          gap: "16px",
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-            <span className="ui-page-eyebrow">{t("eyebrow")}</span>
-            <Badge tone="primary" icon="shield">
+    <section className="app-hero">
+      <div className="app-hero-layout">
+        <div className="app-hero-copy">
+          <div className="app-hero-topline">
+            <span className="app-hero-meta">{dateLabel}</span>
+            <span className="app-hero-context">
               {workspace.name}
-            </Badge>
+              {workspace.primarySubject ? ` • ${workspace.primarySubject}` : ""}
+            </span>
           </div>
-          <h1
-            style={{
-              fontSize: "1.75rem",
-              fontWeight: 700,
-              color: "var(--ink)",
-              margin: 0,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            {t("heroTitle", { name: userName })}
-          </h1>
-          <p
-            style={{
-              fontSize: "0.875rem",
-              color: "var(--muted)",
-              marginTop: "4px",
-              marginBottom: 0,
-            }}
-          >
-            {workspace.teachingName}
-            {workspace.primarySubject ? ` • ${workspace.primarySubject}` : ""}
+
+          <h1 className="ui-page-title">{t("heroTitle", { name: userName })}</h1>
+
+          <p className="app-hero-subtitle">
+            {t("heroSummary", { sessions: sessionCount, attention: attentionCount })}
           </p>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          {/* Period selector */}
-          <div
-            role="tablist"
-            aria-label={t("filterPeriodAria")}
-            style={{
-              display: "inline-flex",
-              backgroundColor: "var(--surface-sunken, #e5e5df)",
-              borderRadius: "var(--radius-pill, 999px)",
-              padding: "3px",
-              gap: "2px",
-            }}
-          >
+        <div className="app-hero-actions">
+          <div role="tablist" aria-label={t("filterPeriodAria")} className="app-hero-periods">
             {periods.map(({ key, labelKey }) => {
               const isActive = activePeriod === key;
               return (
@@ -89,17 +69,8 @@ export function DashboardHeader({
                   href={`/app?period=${key}`}
                   role="tab"
                   aria-selected={isActive}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "var(--radius-pill, 999px)",
-                    fontSize: "0.8125rem",
-                    fontWeight: 600,
-                    textDecoration: "none",
-                    transition: "all 0.15s ease",
-                    backgroundColor: isActive ? "var(--surface, #ffffff)" : "transparent",
-                    color: isActive ? "var(--ink, #0b0b0d)" : "var(--muted, #6e6e76)",
-                    boxShadow: isActive ? "var(--shadow-sm)" : "none",
-                  }}
+                  className="app-hero-period"
+                  data-active={isActive}
                 >
                   {t(labelKey)}
                 </Link>
@@ -108,12 +79,7 @@ export function DashboardHeader({
           </div>
 
           {canSeeSettings ? (
-            <Link
-              href="/app/settings"
-              className="ui-button"
-              data-variant="secondary"
-              data-size="sm"
-            >
+            <Link href="/app/settings" className="ui-button" data-variant="secondary" data-size="sm">
               <Icon name="gear" size={15} />
               <span>{t("manageSettings")}</span>
             </Link>

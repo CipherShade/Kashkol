@@ -44,51 +44,54 @@ export default async function DashboardPage({
 
   return (
     <div className="app-page">
-      {/* Dashboard Header */}
+      {/* Greeting and period switcher */}
       <DashboardHeader
         userName={user.name}
         workspace={data.workspace}
         activePeriod={filter.period}
         canSeeSettings={data.permissions.canSeeTeam}
+        currentDate={data.todayOperations.currentDateFormatted}
+        sessionCount={data.todayOperations.totalSessionsCount}
+        attentionCount={data.attentionCenter.students.length}
+        locale={locale}
       />
 
-      {/* Section 1: Global Overview */}
+      {/* Truthful headline metrics */}
       <GlobalOverview
         data={data.globalOverview}
         canSeeFinancials={data.permissions.canSeeFinancials}
       />
 
-      {/* Section 2: Today's Operations */}
-      <TodayOperations data={data.todayOperations} locale={locale} />
+      <div className="app-dashboard-grid">
+        <div className="app-dashboard-main">
+          <TodayOperations data={data.todayOperations} locale={locale} />
 
-      {/* Section 3: Attention Center */}
-      <AttentionCenter
-        students={data.attentionCenter.students}
-        alerts={data.attentionCenter.alerts}
-      />
+          <AttentionCenter
+            students={data.attentionCenter.students}
+            alerts={data.attentionCenter.alerts}
+          />
 
-      {/* Section 4: Financial Overview */}
-      <FinancialOverview
-        data={data.financialOverview}
-        currency={data.workspace.currency}
-      />
+          <AcademicOverview data={data.academicOverview} />
 
-      {/* Section 5: Academic Overview */}
-      <AcademicOverview data={data.academicOverview} />
+          {data.permissions.canSeeTeam ? (
+            <TeamActivity data={data.teamActivity} locale={locale} />
+          ) : null}
+        </div>
 
-      {/* Section 6: Pending Work */}
-      <PendingWork data={data.pendingWork} />
+        <div className="app-dashboard-side">
+          <PendingWork data={data.pendingWork} />
 
-      {/* Section 7: Team Activity */}
-      {data.permissions.canSeeTeam ? (
-        <TeamActivity data={data.teamActivity} locale={locale} />
-      ) : null}
+          <FinancialOverview
+            data={data.financialOverview}
+            currency={data.workspace.currency}
+          />
 
-      {/* Section 8: Recent Activity */}
-      <RecentActivity events={data.recentActivity} locale={locale} />
+          <RecentActivity events={data.recentActivity} locale={locale} />
+        </div>
+      </div>
 
       {/* Trust & Audit Note */}
-      <p className="app-inline-note" style={{ marginTop: "16px" }}>
+      <p className="app-inline-note">
         <Icon name="shield" size={15} />
         <span>{t("auditNote")}</span>
       </p>

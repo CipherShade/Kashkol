@@ -6,7 +6,6 @@ import { Link, usePathname } from "@/i18n/navigation";
 import type { VisibleNavGroup } from "@/lib/navigation/nav";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Icon } from "@/components/ui/icon";
-import { Tooltip } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/feedback";
@@ -176,7 +175,6 @@ function NavList({
 }) {
   const pathname = usePathname();
   const t = useTranslations("Shell");
-  const tooltipSide = useLocale() === "ar" ? "left" : "right";
 
   return (
     <>
@@ -215,17 +213,16 @@ function NavList({
             }
 
             return (
-              <Tooltip key={item.key} label={item.label} side={tooltipSide}>
-                <Link
-                  href={item.href}
-                  className="app-nav-item"
-                  data-active={active}
-                  data-planned={item.planned}
-                  aria-current={active ? "page" : undefined}
-                >
-                  {content}
-                </Link>
-              </Tooltip>
+              <Link
+                key={item.key}
+                href={item.href}
+                className="app-nav-item"
+                data-active={active}
+                data-planned={item.planned}
+                aria-current={active ? "page" : undefined}
+              >
+                {content}
+              </Link>
             );
           })}
         </div>
@@ -250,7 +247,6 @@ function SidebarBody({
   const app = useTranslations("App");
   const pathname = usePathname();
   const accountActive = pathname === "/app/account";
-  const tooltipSide = useLocale() === "ar" ? "left" : "right";
 
   const accountLink = (
     <Link
@@ -299,22 +295,8 @@ function SidebarBody({
       </nav>
 
       <div className="app-sidebar-footer">
-        {mobile ? (
-          accountLink
-        ) : (
-          <Tooltip label={t("account")} side={tooltipSide}>
-            {accountLink}
-          </Tooltip>
-        )}
-        {settingsLink ? (
-          mobile ? (
-            settingsLink
-          ) : (
-            <Tooltip label={t("settings")} side={tooltipSide}>
-              {settingsLink}
-            </Tooltip>
-          )
-        ) : null}
+        {accountLink}
+        {settingsLink}
         <p className="app-version" title={user.email}>
           {t("footerNote")}
         </p>

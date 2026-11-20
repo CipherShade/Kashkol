@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-16 · **Status:** Google/Facebook social sign-in with explicit-only account linking, a Connected Accounts screen, and the database constraints behind them (`account` uniqueness on `(providerId, accountId)` and `(userId, providerId)`) are implemented and unit-tested; Google credentials are now configured locally and the OAuth start leg is **live-verified through a Cloudflare quick tunnel** (Google consent page reached, no `redirect_uri_mismatch`), while a completed sign-in with a real Google account is still outstanding · **Phase:** M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-21 · **Status:** Evergreen-and-parchment visual refresh (ADR-0035) complete — tokens, shell, sidebar, dashboard composition, and primitives updated. All gates pass. Two pre-existing integration test failures remain (worker report export, Arabic trigram index). Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -1525,6 +1525,39 @@ network call was introduced.
 - No outbound network call happens inside a database transaction.
 - No third-party credential, session token, or personal datum reaches a log, an analytics event, or
   a client bundle.
+
+---
+
+## Visual Refresh — Evergreen & Parchment (ADR-0035) — 2026-11-21
+
+**Decision:** [ADR-0035](decisions/0035-evergreen-parchment-interface.md) supersedes the visual values of ADR-0023. The interface now uses the evergreen-and-parchment language from the reference design at `stitch_kashkol_workspace_landing_page`.
+
+**Completed**
+
+- `src/styles/tokens.css` — new palette (parchment `#F3F2EB`, evergreen `#153F2A`, gold `#C9A84C`, leaf `#2E7D32`), typography (Outfit display, Hanken Grotesk body, Cairo Arabic), geometry (16 px inner / 24–32 px outer radii, pill buttons/chips), and dark theme.
+- `src/styles/shell.css` — 272 px labelled sidebar with `NAV_GROUPS` suites, flush canvas main column, white sticky topbar with hairline border, two-column dashboard grid.
+- `src/styles/ui.css` — metric tiles (`ui-stat`) with white base and tinted icon/number, 16 px inputs with visible border, 24 px card radii, 32 px section shells.
+- `src/app/[locale]/layout.tsx` — font preconnects updated; viewport theme colors.
+- `src/app/[locale]/app/_components/DashboardHeader.tsx` — greeting panel with date, workspace context, session/attention summary, period pill tabs.
+- `src/app/[locale]/app/_components/GlobalOverview.tsx` — four truthful KPI tiles (attendance, revenue, students, academic) with progress meters and tone variants.
+- `src/app/[locale]/app/page.tsx` — dashboard composition: greeting → four KPIs → 12-column split (main: today, attention, academic, team; side: pending work, financial, recent activity).
+- `src/lib/db/migration-state.ts` — `REQUIRED_MIGRATION_NAME` updated to `20261120224045_visual_refresh_adr35`.
+
+**Gates**
+
+- `npm run lint` ✅
+- `npm run typecheck` ✅
+- `npm test` ✅ (520 unit + 30 UI tests)
+- `npm run test:integration` 153/155 ✅ (2 pre-existing failures: worker report export 500, missing Arabic trigram index — not related to visual changes)
+- `npm run build` ✅
+
+**Explicit omissions from the reference** (per `NF-1`–`NF-13`)
+
+- Cashbox closing UI and "close the till" action — Kashkol has a manual payments ledger, not a live cashbox.
+- "Student AI radar" with fabricated 280-student / 97.2% / 6-intervention figures — all dashboard numbers come from real computed records.
+- WhatsApp "delivered/sent" claims — Kashkol prepares and opens deep links only (`F-P1-10`, ADR-0010).
+- Demo names, phones, and money totals — replaced with real workspace data.
+- Quick-quiz launcher — not in current milestone.
 
 ---
 

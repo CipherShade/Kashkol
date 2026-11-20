@@ -56,6 +56,7 @@ Every ADR uses the same sections:
 | [0032](0032-headless-chromium-pdf-reports.md) | PDF report export through a headless-Chromium adapter | Accepted (approved 2026-11-18) | M2 |
 | [0033](0033-academic-terms-only.md) | Academic-year handling ships terms only | Accepted (approved 2026-11-18) | M3a |
 | [0034](0034-computed-performance-intelligence.md) | Performance intelligence is computed, evidence-backed, and rule-based | Accepted (approved 2026-11-19) | M3b |
+| [0035](0035-evergreen-parchment-interface.md) | Evergreen-and-parchment interface language (supersedes ADR-0023 visual values) | Accepted (approved 2026-11-21) | M0–M3 |
 
 ## Conventions
 

@@ -1,115 +1,113 @@
 /*
- * Kashkol design tokens — PRODUCT_REQUIREMENTS.md §2.1 and ADR-0023.
+ * Kashkol design tokens — PRODUCT_REQUIREMENTS.md §2.1 and ADR-0035.
  *
- * The 2026 visual refresh keeps the token architecture (one token layer, a
- * real light/dark swap, logical properties everywhere) and replaces the
- * palette and geometry with the "Kashkol canvas" language: a near-black
- * canvas, floating rounded panels, a compact icon rail, soft tinted status
- * surfaces, and a single confident blue accent.
+ * The interface is an evergreen-and-parchment workspace: a warm paper canvas,
+ * white cards, a deep forest brand anchor, hairline dividers, and pill-shaped
+ * controls. The token architecture (one token layer, a real light/dark swap,
+ * logical properties everywhere) is unchanged from ADR-0023.
  *
- * No component may hardcode a colour outside this file. The `--color-*`
- * block at the bottom is a compatibility alias layer for screens written
- * against the earlier utility-token names; it always resolves through the
- * live palette, so both themes stay correct.
+ * No component may hardcode a colour outside this file. The alias blocks at
+ * the bottom resolve through the live palette, so screens written against the
+ * older utility names stay correct in both themes.
  */
 
 :root {
   color-scheme: light;
 
   /* Canvas and surfaces -------------------------------------------------- */
-  --bg: #ecece6;
-  --panel: #fbfbf8;
-  --panel-border: #e2e2dc;
+  --bg: #f3f2eb;
+  --panel: #ffffff;
+  --panel-border: #e2e0d8;
   --surface: #ffffff;
-  --surface-2: #f5f5f1;
+  --surface-2: #fafaf7;
   --surface-raised: #ffffff;
-  --surface-sunken: #e5e5df;
-  --ink: #0b0b0d;
-  --muted: #6e6e76;
-  --muted-2: #8b8b93;
-  --border: #e5e5df;
-  --border-strong: #d3d3cb;
+  --surface-sunken: #f0f0ec;
+  --ink: #111813;
+  --muted: #5a655c;
+  --muted-2: #717972;
+  --border: #e2e0d8;
+  --border-strong: #c9cdc4;
 
   /* Primary accent ------------------------------------------------------- */
-  --primary: #4f6bf5;
-  --primary-strong: #3b55d9;
-  --primary-tint: #edf0ff;
+  --primary: #153f2a;
+  --primary-strong: #1c5223;
+  --primary-tint: #eaf1eb;
   --primary-contrast: #ffffff;
 
-  /* Secondary accent ----------------------------------------------------- */
-  --accent: #f0a35e;
-  --accent-strong: #c97c2e;
-  --accent-tint: #fdf0e4;
-  --accent-ink: #8a4e13;
-  --accent-contrast: #191d1b;
+  /* Gold attention accent ------------------------------------------------ */
+  --accent: #c9a84c;
+  --accent-strong: #9e7f2b;
+  --accent-tint: #fef9ec;
+  --accent-ink: #9e7f2b;
+  --accent-contrast: #1a1e1b;
 
   /* Status --------------------------------------------------------------- */
-  --success: #2f9e6b;
-  --success-tint: #e5f6ee;
-  --success-ink: #1f7a50;
-  --danger: #dc5a5a;
-  --danger-tint: #fcebeb;
-  --danger-ink: #b33e3e;
-  --warn: #d4932f;
-  --warn-tint: #fbf2de;
-  --warn-ink: #8a5c12;
+  --success: #2e7d32;
+  --success-tint: #ebf5ee;
+  --success-ink: #1c5223;
+  --danger: #dc2626;
+  --danger-tint: #fef2f2;
+  --danger-ink: #991b1b;
+  --warn: #b45309;
+  --warn-tint: #fffbeb;
+  --warn-ink: #b45309;
 
   /* Data visualisation --------------------------------------------------- */
-  --chart-1: #5b7cfa;
-  --chart-2: #5cc8a1;
-  --chart-3: #f4a261;
-  --chart-4: #f2ce68;
-  --chart-5: #ec8b7e;
-  --chart-6: #8f7bf0;
+  --chart-1: #1f6b3a;
+  --chart-2: #c9a84c;
+  --chart-3: #3e7c9e;
+  --chart-4: #a5653f;
+  --chart-5: #6b5bb5;
+  --chart-6: #2e7d32;
 
   /* Focus and elevation -------------------------------------------------- */
-  --focus: #4f6bf5;
-  --overlay: rgb(10 10 12 / 0.45);
-  --shadow-color: rgb(11 11 13 / 0.06);
-  --shadow-color-strong: rgb(11 11 13 / 0.16);
-  --skeleton: #e8e8e2;
-  --skeleton-highlight: #f3f3ee;
+  --focus: #153f2a;
+  --overlay: rgb(17 24 19 / 0.4);
+  --shadow-color: rgb(21 63 42 / 0.05);
+  --shadow-color-strong: rgb(21 63 42 / 0.12);
+  --skeleton: #e8e7df;
+  --skeleton-highlight: #f4f3ec;
 
-  /* The inverted summary card mirrors the reference composition. In light
-   * mode the first card is ink-dark; in dark mode it is paper-white. */
-  --card-invert-bg: #0d0d0f;
-  --card-invert-ink: #f7f7f5;
-  --card-invert-muted: #a1a1a9;
-  --card-invert-border: #242427;
+  /* Inverted panels mirror the reference's dark summary surface. */
+  --card-invert-bg: #153f2a;
+  --card-invert-ink: #f4fbf2;
+  --card-invert-muted: #a4d1b4;
+  --card-invert-border: #1c5223;
 
   /* Geometry ------------------------------------------------------------- */
-  --radius-sm: 10px;
+  --radius-sm: 12px;
   --radius-md: 16px;
-  --radius-lg: 22px;
-  --radius-xl: 28px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
   --radius-pill: 999px;
 
   --shadow-sm: 0 1px 2px var(--shadow-color);
-  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.65) inset, 0 14px 34px -26px var(--shadow-color-strong);
-  --shadow-md: 0 22px 48px -24px var(--shadow-color-strong);
+  --shadow-card: 0 1px 3px rgb(21 63 42 / 0.04), 0 4px 12px rgb(21 63 42 / 0.02);
+  --shadow-md: 0 4px 16px rgb(21 63 42 / 0.08), 0 12px 32px rgb(21 63 42 / 0.04);
+  --shadow-lg: 0 16px 40px -8px rgb(17 24 19 / 0.12), 0 24px 64px -12px rgb(21 63 42 / 0.08);
 
   /* Layout --------------------------------------------------------------- */
-  --rail-width: 86px;
-  --sidebar-width: 86px;
-  --shell-gap: 16px;
-  --topbar-height: 76px;
-  --content-max: 1360px;
+  --rail-width: 272px;
+  --sidebar-width: 272px;
+  --shell-gap: 0px;
+  --topbar-height: 64px;
+  --content-max: 1440px;
   --tap-target: 44px;
 
   /* Typography ----------------------------------------------------------- */
-  --font-ui: "Manrope", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Manrope", "Segoe UI", system-ui, sans-serif;
-  --font-arabic: "Cairo", "Segoe UI", Tahoma, sans-serif;
-  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --font-ui: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Outfit", "Segoe UI", system-ui, sans-serif;
+  --font-arabic: "Cairo", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   --font-body: var(--font-ui);
 
   /* Person accents ------------------------------------------------------- */
-  --avatar-1: #4f6bf5;
-  --avatar-2: #c97c2e;
-  --avatar-3: #3c82b8;
-  --avatar-4: #7b5cd6;
-  --avatar-5: #cf6a4b;
-  --avatar-6: #2f9e6b;
+  --avatar-1: #1c5223;
+  --avatar-2: #9e7f2b;
+  --avatar-3: #3e7c9e;
+  --avatar-4: #6b5bb5;
+  --avatar-5: #a5653f;
+  --avatar-6: #2e7d32;
 }
 
 :root[lang="ar"] {
@@ -120,64 +118,64 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #08080a;
-  --panel: #0f0f11;
-  --panel-border: #202024;
-  --surface: #131315;
-  --surface-2: #1b1b1e;
-  --surface-raised: #1e1e21;
-  --surface-sunken: #0d0d0f;
-  --ink: #f4f4f6;
-  --muted: #9b9ba4;
-  --muted-2: #73737c;
-  --border: #232326;
-  --border-strong: #303035;
+  --bg: #0a100c;
+  --panel: #0f1611;
+  --panel-border: #212c24;
+  --surface: #131c16;
+  --surface-2: #18231b;
+  --surface-raised: #1c2820;
+  --surface-sunken: #0d140f;
+  --ink: #edf3ee;
+  --muted: #9faea3;
+  --muted-2: #7a8a7e;
+  --border: #25332a;
+  --border-strong: #35473b;
 
-  --primary: #6d8bff;
-  --primary-strong: #8ea6ff;
-  --primary-tint: #1a2141;
-  --primary-contrast: #0a0f24;
+  --primary: #2e7d32;
+  --primary-strong: #8fd6a0;
+  --primary-tint: #16281c;
+  --primary-contrast: #ffffff;
 
-  --accent: #f0ad6c;
-  --accent-strong: #f5c08b;
-  --accent-tint: #2c2218;
-  --accent-ink: #f5c08b;
-  --accent-contrast: #191d1b;
+  --accent: #c9a84c;
+  --accent-strong: #e0c270;
+  --accent-tint: #2a2312;
+  --accent-ink: #e7c97a;
+  --accent-contrast: #141a15;
 
-  --success: #58c79a;
-  --success-tint: #12281f;
-  --success-ink: #6bd7aa;
-  --danger: #f07c7c;
-  --danger-tint: #2c1618;
-  --danger-ink: #f39a9a;
-  --warn: #e7b45c;
-  --warn-tint: #2b2214;
-  --warn-ink: #f0c87d;
+  --success: #4caf50;
+  --success-tint: #12261a;
+  --success-ink: #93d6a1;
+  --danger: #e55353;
+  --danger-tint: #2a1516;
+  --danger-ink: #f0a0a0;
+  --warn: #d9a441;
+  --warn-tint: #2a2113;
+  --warn-ink: #eac57c;
 
-  --chart-1: #6d8bff;
-  --chart-2: #5cd0a4;
-  --chart-3: #f2a65a;
-  --chart-4: #f2ce68;
-  --chart-5: #f08a7a;
-  --chart-6: #9d8bff;
+  --chart-1: #6fbf7b;
+  --chart-2: #c9a84c;
+  --chart-3: #8fb7d6;
+  --chart-4: #d98e6a;
+  --chart-5: #9c8be0;
+  --chart-6: #58b9a5;
 
-  --focus: #8ea6ff;
-  --overlay: rgb(0 0 0 / 0.66);
+  --focus: #8fd6a0;
+  --overlay: rgb(0 0 0 / 0.62);
   --shadow-color: rgb(0 0 0 / 0.4);
   --shadow-color-strong: rgb(0 0 0 / 0.72);
-  --skeleton: #1c1c20;
-  --skeleton-highlight: #27272c;
+  --skeleton: #1c2820;
+  --skeleton-highlight: #24332a;
 
-  --card-invert-bg: #f4f4f1;
-  --card-invert-ink: #0b0b0d;
-  --card-invert-muted: #6c6c74;
+  --card-invert-bg: #edf3ee;
+  --card-invert-ink: #0a100c;
+  --card-invert-muted: #4d5c51;
   --card-invert-border: #ffffff;
 
-  --avatar-1: #6d8bff;
-  --avatar-2: #e0a039;
-  --avatar-3: #4f9bcf;
-  --avatar-4: #9d8bff;
-  --avatar-5: #f08a7a;
+  --avatar-1: #8fd6a0;
+  --avatar-2: #e0c270;
+  --avatar-3: #8fb7d6;
+  --avatar-4: #b3a4f0;
+  --avatar-5: #d98e6a;
   --avatar-6: #58c79a;
 }
 
@@ -190,71 +188,70 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #08080a;
-    --panel: #0f0f11;
-    --panel-border: #202024;
-    --surface: #131315;
-    --surface-2: #1b1b1e;
-    --surface-raised: #1e1e21;
-    --surface-sunken: #0d0d0f;
-    --ink: #f4f4f6;
-    --muted: #9b9ba4;
-    --muted-2: #73737c;
-    --border: #232326;
-    --border-strong: #303035;
+    --bg: #0a100c;
+    --panel: #0f1611;
+    --panel-border: #212c24;
+    --surface: #131c16;
+    --surface-2: #18231b;
+    --surface-raised: #1c2820;
+    --surface-sunken: #0d140f;
+    --ink: #edf3ee;
+    --muted: #9faea3;
+    --muted-2: #7a8a7e;
+    --border: #25332a;
+    --border-strong: #35473b;
 
-    --primary: #6d8bff;
-    --primary-strong: #8ea6ff;
-    --primary-tint: #1a2141;
-    --primary-contrast: #0a0f24;
+    --primary: #2e7d32;
+    --primary-strong: #8fd6a0;
+    --primary-tint: #16281c;
+    --primary-contrast: #ffffff;
 
-    --accent: #f0ad6c;
-    --accent-strong: #f5c08b;
-    --accent-tint: #2c2218;
-    --accent-ink: #f5c08b;
-    --accent-contrast: #191d1b;
+    --accent: #c9a84c;
+    --accent-strong: #e0c270;
+    --accent-tint: #2a2312;
+    --accent-ink: #e7c97a;
+    --accent-contrast: #141a15;
 
-    --success: #58c79a;
-    --success-tint: #12281f;
-    --success-ink: #6bd7aa;
-    --danger: #f07c7c;
-    --danger-tint: #2c1618;
-    --danger-ink: #f39a9a;
-    --warn: #e7b45c;
-    --warn-tint: #2b2214;
-    --warn-ink: #f0c87d;
+    --success: #4caf50;
+    --success-tint: #12261a;
+    --success-ink: #93d6a1;
+    --danger: #e55353;
+    --danger-tint: #2a1516;
+    --danger-ink: #f0a0a0;
+    --warn: #d9a441;
+    --warn-tint: #2a2113;
+    --warn-ink: #eac57c;
 
-    --chart-1: #6d8bff;
-    --chart-2: #5cd0a4;
-    --chart-3: #f2a65a;
-    --chart-4: #f2ce68;
-    --chart-5: #f08a7a;
-    --chart-6: #9d8bff;
+    --chart-1: #6fbf7b;
+    --chart-2: #c9a84c;
+    --chart-3: #8fb7d6;
+    --chart-4: #d98e6a;
+    --chart-5: #9c8be0;
+    --chart-6: #58b9a5;
 
-    --focus: #8ea6ff;
-    --overlay: rgb(0 0 0 / 0.66);
+    --focus: #8fd6a0;
+    --overlay: rgb(0 0 0 / 0.62);
     --shadow-color: rgb(0 0 0 / 0.4);
     --shadow-color-strong: rgb(0 0 0 / 0.72);
-    --skeleton: #1c1c20;
-    --skeleton-highlight: #27272c;
+    --skeleton: #1c2820;
+    --skeleton-highlight: #24332a;
 
-    --card-invert-bg: #f4f4f1;
-    --card-invert-ink: #0b0b0d;
-    --card-invert-muted: #6c6c74;
+    --card-invert-bg: #edf3ee;
+    --card-invert-ink: #0a100c;
+    --card-invert-muted: #4d5c51;
     --card-invert-border: #ffffff;
 
-    --avatar-1: #6d8bff;
-    --avatar-2: #e0a039;
-    --avatar-3: #4f9bcf;
-    --avatar-4: #9d8bff;
-    --avatar-5: #f08a7a;
+    --avatar-1: #8fd6a0;
+    --avatar-2: #e0c270;
+    --avatar-3: #8fb7d6;
+    --avatar-4: #b3a4f0;
+    --avatar-5: #d98e6a;
     --avatar-6: #58c79a;
   }
 }
 
 /*
- * Compatibility aliases for screens that were written against the older
- * `--color-*` utility names. They resolve through the live palette above, so
+ * Compatibility aliases. They resolve through the live palette above, so
  * there is still exactly one source of truth for every colour.
  */
 :root {
@@ -275,4 +272,51 @@
   --color-success: var(--success);
   --color-warning: var(--warn);
   --color-danger: var(--danger);
+
+  /* Names used by the landing and marketing surfaces. */
+  --surface-canvas: var(--bg);
+  --surface-base: var(--panel);
+  --surface-elevated: var(--surface-raised);
+  --surface-muted: var(--surface-2);
+  --surface-hover: var(--surface-2);
+  --border-base: var(--border);
+  --border-subtle: var(--border);
+  --fg-base: var(--ink);
+  --fg-muted: var(--muted);
+  --fg-subtle: var(--muted-2);
+  --fg-accent: var(--primary-strong);
+  --brand-fg: var(--primary-strong);
+  --brand-subtle: var(--primary-tint);
+  --focus-ring: var(--focus);
+  --text-primary: var(--ink);
+  --text-secondary: var(--muted);
+  --text-muted: var(--muted-2);
+  --status-success: var(--success);
+  --status-success-subtle: var(--success-tint);
+  --status-warning: var(--warn);
+  --status-warning-subtle: var(--warn-tint);
+  --status-danger: var(--danger);
+  --status-danger-subtle: var(--danger-tint);
+  --success-fg: var(--success-ink);
+  --success-subtle: var(--success-tint);
+  --danger-fg: var(--danger-ink);
+  --danger-subtle: var(--danger-tint);
+  --danger-border: #fecaca;
+  --warning-fg: var(--warn-ink);
+  --warning-subtle: var(--warn-tint);
+  --warning-border: #fde68a;
+  --primary-foreground: var(--primary-contrast);
+  --destructive: var(--danger);
+}
+
+:root[data-theme="dark"] {
+  --danger-border: #5a2a2a;
+  --warning-border: #5a4a22;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --danger-border: #5a2a2a;
+    --warning-border: #5a4a22;
+  }
 }

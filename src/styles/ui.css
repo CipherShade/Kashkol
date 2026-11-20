@@ -224,17 +224,30 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  padding-block: 1.2rem 0;
-  padding-inline: 1.4rem;
+  border-block-end: 1px solid var(--border);
+  padding-block: 1.05rem 0.9rem;
+  padding-inline: 1.35rem;
 }
 
 .ui-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
   margin: 0;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 800;
+  font-size: 0.95rem;
+  font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.ui-card-title .icon {
+  box-sizing: content-box;
+  border-radius: 0.6rem;
+  background: var(--primary-tint);
+  color: var(--primary-strong);
+  padding: 0.35rem;
 }
 
 :root[lang="ar"] .ui-card-title {
@@ -257,8 +270,8 @@
 }
 
 .ui-card-body {
-  padding-block: 1rem 1.35rem;
-  padding-inline: 1.4rem;
+  padding-block: 1rem 1.25rem;
+  padding-inline: 1.35rem;
 }
 
 .ui-card-footer {
@@ -310,10 +323,10 @@
   margin: 0;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: clamp(1.65rem, 3vw, 2.15rem);
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
+  font-size: clamp(1.55rem, 3vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .ui-page-description {
@@ -410,12 +423,12 @@
 .ui-select {
   inline-size: 100%;
   min-block-size: var(--tap-target);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--ink);
   padding-block: 0.55rem;
-  padding-inline: 0.85rem;
+  padding-inline: 0.9rem;
   font: inherit;
   font-size: 0.88rem;
   transition:
@@ -445,7 +458,7 @@
 .ui-select:focus {
   border-color: var(--primary);
   background: var(--surface);
-  box-shadow: 0 0 0 4px var(--primary-tint);
+  box-shadow: 0 0 0 3px var(--primary-tint);
   outline: none;
 }
 
@@ -1267,14 +1280,14 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  min-block-size: 9.4rem;
+  gap: 0.4rem;
+  min-block-size: 8.75rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  padding-block: 1.2rem 1.15rem;
-  padding-inline: 1.25rem;
+  padding-block: 1.1rem 1.05rem;
+  padding-inline: 1.15rem;
   overflow: hidden;
 }
 
@@ -1290,9 +1303,9 @@
 }
 
 .ui-stat[data-interactive="true"]:hover {
-  border-color: var(--border-strong);
+  border-color: var(--primary-strong);
   box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .ui-stat[data-interactive="true"]:active {
@@ -1309,9 +1322,9 @@
 
 .ui-stat-label {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .ui-stat-icon {
@@ -1321,19 +1334,20 @@
   flex: none;
   inline-size: 2rem;
   block-size: 2rem;
-  border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--muted);
+  border-radius: 0.6rem;
+  background: var(--primary-tint);
+  color: var(--primary-strong);
 }
 
 .ui-stat-value {
   margin-block-start: auto;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: clamp(1.9rem, 4vw, 2.55rem);
-  font-weight: 800;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  font-size: clamp(1.7rem, 3vw, 2rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 :root[lang="ar"] .ui-stat-value {
@@ -1342,9 +1356,51 @@
 }
 
 .ui-stat-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   color: var(--muted);
-  font-size: 0.74rem;
-  line-height: 1.45;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.ui-stat-hint-sub {
+  color: var(--muted-2);
+  font-size: 0.68rem;
+}
+
+.ui-stat-unit {
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.ui-stat-meter {
+  block-size: 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.ui-stat-meter > span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+
+.ui-stat-meter > span[data-tone="success"] {
+  background: var(--success);
+}
+
+.ui-stat-meter > span[data-tone="warn"] {
+  background: var(--warn);
+}
+
+.ui-stat-meter > span[data-tone="danger"] {
+  background: var(--danger);
 }
 
 .ui-stat[data-variant="invert"] {
@@ -1367,25 +1423,16 @@
   color: var(--primary-contrast);
 }
 
-/* Tinted KPI variants. The tone always has a text label beside it, so colour
- * is never the only carrier of meaning. */
-.ui-stat[data-tone="primary"] {
-  border-color: transparent;
-  background: var(--primary-tint);
-}
-
+/* Tone variants keep the white metric tile and tint only the icon and the
+ * number. The tone always has a text label beside it, so colour is never the
+ * only carrier of meaning. */
 .ui-stat[data-tone="primary"] .ui-stat-value {
   color: var(--primary-strong);
 }
 
 .ui-stat[data-tone="primary"] .ui-stat-icon {
-  background: var(--primary);
-  color: var(--primary-contrast);
-}
-
-.ui-stat[data-tone="success"] {
-  border-color: transparent;
-  background: var(--success-tint);
+  background: var(--primary-tint);
+  color: var(--primary-strong);
 }
 
 .ui-stat[data-tone="success"] .ui-stat-value {
@@ -1393,13 +1440,8 @@
 }
 
 .ui-stat[data-tone="success"] .ui-stat-icon {
-  background: var(--success);
-  color: var(--surface);
-}
-
-.ui-stat[data-tone="warn"] {
-  border-color: transparent;
-  background: var(--warn-tint);
+  background: var(--success-tint);
+  color: var(--success-ink);
 }
 
 .ui-stat[data-tone="warn"] .ui-stat-value {
@@ -1407,13 +1449,8 @@
 }
 
 .ui-stat[data-tone="warn"] .ui-stat-icon {
-  background: var(--warn);
-  color: var(--surface);
-}
-
-.ui-stat[data-tone="danger"] {
-  border-color: transparent;
-  background: var(--danger-tint);
+  background: var(--warn-tint);
+  color: var(--warn-ink);
 }
 
 .ui-stat[data-tone="danger"] .ui-stat-value {
@@ -1421,8 +1458,8 @@
 }
 
 .ui-stat[data-tone="danger"] .ui-stat-icon {
-  background: var(--danger);
-  color: var(--surface);
+  background: var(--danger-tint);
+  color: var(--danger-ink);
 }
 
 .ui-stat[data-tone="muted"] {
