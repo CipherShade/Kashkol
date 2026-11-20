@@ -145,6 +145,8 @@ type OnlineExamDetailPayload = {
 type DraftQuestion = {
   type: "mcq_single" | "true_false" | "short_answer" | "essay";
   prompt: string;
+  /** F-P3-10: optional topic label stored with real question evidence. */
+  topic: string;
   points: number;
   mcqOptionA: string;
   mcqOptionB: string;
@@ -192,6 +194,7 @@ export function AssessmentsClient({
     {
       type: "mcq_single",
       prompt: "",
+      topic: "",
       points: 10,
       mcqOptionA: "",
       mcqOptionB: "",
@@ -345,48 +348,55 @@ export function AssessmentsClient({
     const durationRaw = String(data.get("durationMinutes") ?? "").trim();
 
     const formattedQuestions = draftQuestions.map((q) => {
+      const topic = q.topic.trim() || null;
       if (q.type === "mcq_single") {
         return {
-          type: "mcq_single" as const,
+          questionType: "mcq_single" as const,
           prompt: q.prompt.trim(),
+          topic,
           points: Number(q.points),
           options: [
             { id: "a", text: q.mcqOptionA.trim() },
             { id: "b", text: q.mcqOptionB.trim() },
           ],
-          answerKey: { correctOptionId: q.correctOptionId },
+          correctOptionId: q.correctOptionId,
           explanation: q.explanation.trim() || null,
+          autoGradable: true,
         };
       }
       if (q.type === "true_false") {
         return {
-          type: "true_false" as const,
+          questionType: "true_false" as const,
           prompt: q.prompt.trim(),
+          topic,
           points: Number(q.points),
-          answerKey: { correctBoolean: q.trueFalseAnswer },
+          correctBoolean: q.trueFalseAnswer,
           explanation: q.explanation.trim() || null,
+          autoGradable: true,
         };
       }
       if (q.type === "short_answer") {
         return {
-          type: "short_answer" as const,
+          questionType: "short_answer" as const,
           prompt: q.prompt.trim(),
+          topic,
           points: Number(q.points),
-          answerKey: {
-            acceptedAnswers: q.acceptedAnswers
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
-            caseSensitive: false,
-          },
+          acceptedAnswers: q.acceptedAnswers
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          caseSensitive: false,
           explanation: q.explanation.trim() || null,
+          autoGradable: true,
         };
       }
       return {
-        type: "essay" as const,
+        questionType: "essay" as const,
         prompt: q.prompt.trim(),
+        topic,
         points: Number(q.points),
         explanation: q.explanation.trim() || null,
+        autoGradable: false,
       };
     });
 
@@ -905,6 +915,7 @@ export function AssessmentsClient({
                             {
                               type: "mcq_single",
                               prompt: "",
+                              topic: "",
                               points: 10,
                               mcqOptionA: "",
                               mcqOptionB: "",
@@ -988,6 +999,21 @@ export function AssessmentsClient({
                                 );
                               }}
                               required
+                            />
+                          </label>
+                          <label className="grid gap-1 text-sm md:col-span-2">
+                            <span>{te("questionTopicLabel")}</span>
+                            <Input
+                              value={q.topic}
+                              maxLength={120}
+                              onChange={(e) => {
+                                const topic = e.target.value;
+                                setDraftQuestions((prev) =>
+                                  prev.map((item, i) =>
+                                    i === index ? { ...item, topic } : item,
+                                  ),
+                                );
+                              }}
                             />
                           </label>
 

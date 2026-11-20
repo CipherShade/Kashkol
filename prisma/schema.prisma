@@ -200,6 +200,16 @@ enum AssessmentResultStatus {
   @@map("assessment_result_status")
 }
 
+/// F-P3-10: acknowledgement state for a computed risk. Risks themselves are
+/// never stored; only the teacher's response to a specific evidence snapshot
+/// is durable (ADR-0007, ADR-0034).
+enum PerformanceRiskStatus {
+  acknowledged
+  resolved
+
+  @@map("performance_risk_status")
+}
+
 enum FollowUpStatus {
   open
   resolved
@@ -647,6 +657,9 @@ model Workspace {
   sessionAttendees    SessionAttendee[]
   assessments         Assessment[]
   assessmentScores    AssessmentScore[]
+  assessmentTopicResults AssessmentTopicResult[]
+  performanceRiskStates PerformanceRiskState[]
+  performanceReportNotes PerformanceReportNote[]
   payments            Payment[]
   paymentRevisions    PaymentRevision[]
   paymentAdjustments  PaymentAdjustment[]
@@ -699,7 +712,13 @@ model WorkspaceSettings {
   theme              Theme    @default(system)
   timezone           String   @default("Africa/Cairo")
   currency           String   @default("EGP")
-  emailDigestEnabled Boolean  @default(false) @map("email_digest_enabled")
+  emailDigestEnabled Boolean @default(false) @map("email_digest_enabled")
+  /// F-P3-10: workspace-configurable, deterministic risk thresholds (ADR-0034).
+  performanceRiskEnabled             Boolean @default(true) @map("performance_risk_enabled")
+  performanceRiskMinAssessments      Int     @default(3) @map("performance_risk_min_assessments")
+  performanceRiskAverageBelowPercent Int     @default(60) @map("performance_risk_average_below_percent")
+  performanceRiskConsecutiveDeclines Int     @default(2) @map("performance_risk_consecutive_declines")
+  performanceRiskWeakTopicPercent    Int     @default(60) @map("performance_risk_weak_topic_percent")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -879,6 +898,9 @@ model Student {
   files               File[]
   fileAccesses        FileStudentAccess[]
   notes               StudentNote[]
+  assessmentTopicResults AssessmentTopicResult[]
+  performanceRiskStates PerformanceRiskState[]
+  performanceReportNotes PerformanceReportNote[]
   guardians           Guardian[]
   notifications       Notification[]
   messageOutbox       MessageOutbox[]
@@ -1354,8 +1376,9 @@ model Assessment {
 
   workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   group     Group             @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
-  scores    AssessmentScore[]
-  onlineExam OnlineExam?
+  scores       AssessmentScore[]
+  topicResults AssessmentTopicResult[]
+  onlineExam   OnlineExam?
 
   @@unique([workspaceId, id])
   @@index([workspaceId])
@@ -1384,6 +1407,36 @@ model AssessmentScore {
   @@index([workspaceId])
   @@index([studentId])
   @@map("assessment_score")
+}
+
+/// F-P3-10: teacher-entered topic evidence for a paper exam. A row is not a
+/// fabricated question result: it records counts the teacher observed and
+/// entered. Online question-level evidence comes from `online_exam_response`
+/// joined to `online_exam_question.topic` instead.
+model AssessmentTopicResult {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  assessmentId   String   @map("assessment_id") @db.Uuid
+  studentId      String   @map("student_id") @db.Uuid
+  topic          String
+  correctCount   Int      @map("correct_count")
+  incorrectCount Int      @map("incorrect_count")
+  note           String?
+  updatedBy      String   @map("updated_by")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  assessment Assessment @relation(fields: [workspaceId, assessmentId], references: [workspaceId, id], onDelete: Restrict)
+  student    Student    @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([assessmentId, studentId, topic])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@index([assessmentId])
+  @@index([workspaceId, topic])
+  @@map("assessment_topic_result")
 }
 
 // ---------------------------------------------------------------------------
@@ -1527,6 +1580,7 @@ model StudentFollowUp {
   student     Student         @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
   ownerMember WorkspaceMember @relation("FollowUpOwner", fields: [workspaceId, ownerUserId], references: [workspaceId, userId], onDelete: Restrict)
   events      StudentFollowUpEvent[]
+  performanceRiskStates PerformanceRiskState[]
 
   @@unique([workspaceId, id])
   @@index([workspaceId, status, dueAt])
@@ -1552,6 +1606,57 @@ model StudentFollowUpEvent {
   @@index([workspaceId])
   @@map("student_follow_up_event")
 }
+
+/// F-P3-10: the teacher's response to one computed risk evidence snapshot.
+/// `riskKey` binds the acknowledgement to the rule, period, and source rows so
+/// a changed evidence set cannot inherit an old acknowledgement.
+model PerformanceRiskState {
+  id             String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId    String                 @map("workspace_id") @db.Uuid
+  studentId      String                 @map("student_id") @db.Uuid
+  ruleKey        String                 @map("rule_key")
+  riskKey        String                 @map("risk_key")
+  status         PerformanceRiskStatus  @default(acknowledged)
+  note           String?
+  followUpId     String?                @map("follow_up_id") @db.Uuid
+  acknowledgedBy String                 @map("acknowledged_by")
+  acknowledgedAt DateTime               @default(now()) @map("acknowledged_at") @db.Timestamptz(6)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student         @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+  followUp  StudentFollowUp? @relation(fields: [workspaceId, followUpId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, riskKey])
+  @@index([workspaceId])
+  @@index([studentId])
+  @@index([workspaceId, status])
+  @@index([followUpId])
+  @@map("performance_risk_state")
+}
+
+/// F-P3-10: a teacher-authored note explicitly marked for a parent report.
+/// `student_note` is never used here because it is teacher-only by design.
+model PerformanceReportNote {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  body        String
+  authorId    String   @map("author_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  student   Student   @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId])
+  @@index([studentId, createdAt])
+  @@map("performance_report_note")
+}
+
 // ---------------------------------------------------------------------------
 // Money
 // ---------------------------------------------------------------------------
@@ -2010,6 +2115,8 @@ model OnlineExamQuestion {
   orderIndex        Int                    @map("order_index")
   questionType      OnlineExamQuestionType @map("question_type")
   prompt            String
+  /// F-P3-10: topic label used only when real question responses are aggregated.
+  topic             String?
   optionsJson       Json                   @default("[]") @map("options_json")
   correctAnswerJson Json?                  @map("correct_answer_json")
   explanation       String?

@@ -291,6 +291,9 @@ export async function deleteStudent(workspaceId: string, studentId: string): Pro
     await tx.attendanceMark.deleteMany({
       where: { workspaceId, studentId, revisions: { none: {} } },
     });
+    await tx.performanceRiskState.deleteMany({ where: { workspaceId, studentId } });
+    await tx.performanceReportNote.deleteMany({ where: { workspaceId, studentId } });
+    await tx.assessmentTopicResult.deleteMany({ where: { workspaceId, studentId } });
     await tx.assessmentScore.deleteMany({ where: { workspaceId, studentId } });
     await tx.sessionAttendee.deleteMany({ where: { workspaceId, studentId } });
     await tx.file.deleteMany({ where: { workspaceId, studentId } });

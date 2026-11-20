@@ -6,4 +6,4 @@
  * `prisma/migrations`, so the readiness endpoint cannot claim "migrations
  * applied" while the schema is behind.
  */
-export const REQUIRED_MIGRATION_NAME = "20261118000000_academic_terms";
+export const REQUIRED_MIGRATION_NAME = "20261119000000_performance_intelligence";

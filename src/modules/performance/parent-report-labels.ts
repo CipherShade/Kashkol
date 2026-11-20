@@ -1,0 +1,53 @@
+import { getTranslations } from "next-intl/server";
+import type { ParentReportLabels } from "./parent-report";
+
+/** Loads export labels from the message catalogue, never from hardcoded text. */
+export async function getParentReportLabels(locale: "ar" | "en"): Promise<ParentReportLabels> {
+  const t = await getTranslations({ locale, namespace: "Performance.parentReport" });
+  return {
+    title: t("title"),
+    overview: t("overview"),
+    history: t("history"),
+    topics: t("topics"),
+    notes: t("notes"),
+    recommendations: t("recommendations"),
+    student: t("student"),
+    teacher: t("teacher"),
+    period: t("period"),
+    generatedAt: t("generatedAt"),
+    average: t("average"),
+    latest: t("latest"),
+    previous: t("previous"),
+    trend: t("trend"),
+    completed: t("completed"),
+    missed: t("missed"),
+    trendInsufficient: t("trendInsufficient"),
+    trendImproving: t("trendImproving"),
+    trendSteady: t("trendSteady"),
+    trendDeclining: t("trendDeclining"),
+    noHistory: t("noHistory"),
+    noTopicEvidence: t("noTopicEvidence"),
+    noNotes: t("noNotes"),
+    noRecommendations: t("noRecommendations"),
+    topicObservation: t("topicObservation"),
+    incorrectRate: t("incorrectRate"),
+    observedCount: t("observedCount"),
+    score: t("score"),
+    status: t("status"),
+    date: t("date"),
+    allPeriod: t("allPeriod"),
+    status_graded: t("status_graded"),
+    status_missing: t("status_missing"),
+    status_excused: t("status_excused"),
+    status_not_taken: t("status_not_taken"),
+    title_low_average: t("title_low_average"),
+    title_declining_trend: t("title_declining_trend"),
+    title_weak_topic: t("title_weak_topic"),
+    description_low_average: t("description_low_average"),
+    description_declining_trend: t("description_declining_trend"),
+    description_weak_topic: t("description_weak_topic"),
+    action_low_average: t("action_low_average"),
+    action_declining_trend: t("action_declining_trend"),
+    action_weak_topic: t("action_weak_topic"),
+  };
+}

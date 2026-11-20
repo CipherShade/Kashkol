@@ -316,6 +316,7 @@ a client-side deep link, not a server integration (`D-16`, `NF-2`).
 | `notifications` | Notification entity, rule engine, in-app delivery, read state | P0 |
 | `audit` | Append-only audit events, redaction, retention | P0 |
 | `platform` | Admin console, break-glass grants, platform-level log | P3 |
+| `performance` | Computed student/class intelligence, evidence-backed topics and risks, transactional bulk grades, and parent report projection (`F-P3-10`, `F27`) | P3 |
 
 ### 6.4 Module dependency rules
 
@@ -336,6 +337,8 @@ flowchart TD
     reporting["reporting"]
     notifications["notifications"]
     platform["platform"]
+    portals["portals"]
+    performance["performance"]
 
     identity --> tenancy
     identity --> audit
@@ -370,6 +373,11 @@ flowchart TD
     notifications --> tenancy
     platform --> tenancy
     platform --> audit
+    performance --> audit
+    performance --> identity
+    performance --> portals
+    performance --> reports
+    performance --> tenancy
 ```
 
 Arrows point **from consumer to dependency**. Rules:
@@ -383,6 +391,9 @@ Arrows point **from consumer to dependency**. Rules:
 - `reporting` is read-only. It may not write, and it may not call a write service.
 - `messaging` reads from `attendance`, `assessments`, and `homework` to build drafts, and writes only
   message records.
+- `performance` recomputes figures from source rows in its own scoped repository. It calls `identity`
+  and `portals` only to authorise parent actors, uses `reports` adapters for exports, and persists only
+  teacher actions, explicitly shareable notes, and bulk grade rows (`F-P3-10`, `ADR-0034`).
 - No cycles. A cycle is a module-boundary violation and is rejected in review. **[CI]** A dependency
   check over `src/modules/*/service.ts` imports fails the build on a cycle.
 

@@ -534,7 +534,22 @@ does not create another event.
 
 Assessment percentages are `score / max_score * 100`; an average is the arithmetic mean of graded
 percentages. Missing, excused, and not-taken results are excluded, not treated as zero. Group summary
-and per-student trend/history are computed from tenant-scoped source rows.
+and per-student trend/history are computed from tenant-scoped source rows (`F-P3-10`).
+
+#### Performance intelligence tables (`20261119000000_performance_intelligence`)
+
+| Table | Purpose |
+|---|---|
+| `assessment_topic_result` | Teacher-entered correct/incorrect counts for one topic in one paper assessment and student. Columns: `workspace_id`, `assessment_id`, `student_id`, `topic`, `correct_count`, `incorrect_count`, nullable `note`, and `updated_by`. `UNIQUE (assessment_id, student_id, topic)`; counts must be non-negative. This is the only manual topic evidence; an overall grade never implies a topic. Forced RLS and a tenant policy bind every row to `app.workspace_id`. |
+| `performance_risk_state` | Teacher action on one computed, evidence-keyed risk snapshot. Columns: `workspace_id`, `student_id`, `rule_key`, `risk_key`, `status` (`acknowledged` / `resolved`), nullable private `note`, nullable `follow_up_id`, `acknowledged_by`, and `acknowledged_at`. `UNIQUE (workspace_id, risk_key)`. The risk itself is recomputed, not stored. Forced RLS and a tenant policy bind every row to `app.workspace_id`. |
+| `performance_report_note` | A teacher note explicitly marked as shareable with a parent. Columns: `workspace_id`, `student_id`, `body`, `author_id`, and timestamps. `student_note` remains staff-only and is never read by a parent report. Forced RLS and a tenant policy bind every row to `app.workspace_id`. |
+
+`workspace_settings` gains configurable, bounded risk thresholds: `performance_risk_enabled`,
+`performance_risk_min_assessments` (2–20), `performance_risk_average_below_percent` (1–100),
+`performance_risk_consecutive_declines` (1–10), and `performance_risk_weak_topic_percent` (1–100).
+`online_exam_question.topic` is an optional real-question label, never a generated inference. All
+three new tables carry composite tenant foreign keys, `workspace_id` indexes, application-role
+grants, and forced row-level security (`ADR-0034`).
 
 ### 5.5 Student follow-up
 
@@ -757,7 +772,7 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | Table | Purpose |
 |---|---|
 | `video_lesson`, `video_group_access`, `video_student_access` | **Implemented (`F-P3-02`)** — Provider (`cloudflare_stream` / `fake`), `external_asset_id`, title, description, subject/topic, `publication_status` (`draft` / `published` / `archived`), `asset_status` (`pending_upload` / `processing` / `ready` / `failed`), `duration_seconds`, `size_bytes`, `playback_count`, `estimated_bandwidth_bytes`, and composite tenant-scoped group/student access joins under forced RLS |
-| `online_exam`, `online_exam_student_assignment`, `online_exam_question` | **Implemented (`F-P3-01`)** — Online exam & quiz authoring (`draft` → `published` → `closed` → `archived`), availability window (`available_from`, `available_until`, `duration_minutes`), `max_attempts`, `result_visibility` (`after_manual_publish` / `immediate_after_submit` / `after_window_close`), linked `assessment_id` for gradebook synchronization, and structured questions (`mcq_single`, `true_false`, `short_answer`, `essay`) under forced RLS |
+| `online_exam`, `online_exam_student_assignment`, `online_exam_question` | **Implemented (`F-P3-01`, extended by `F-P3-10`)** — Online exam & quiz authoring (`draft` → `published` → `closed` → `archived`), availability window (`available_from`, `available_until`, `duration_minutes`), `max_attempts`, `result_visibility` (`after_manual_publish` / `immediate_after_submit` / `after_window_close`), linked `assessment_id` for gradebook synchronization, and structured questions (`mcq_single`, `true_false`, `short_answer`, `essay`) with an optional real-question `topic` label, under forced RLS |
 | `online_exam_attempt`, `online_exam_response` | **Implemented (`F-P3-01`)** — Authenticated student attempts (`in_progress` → `submitted` → `graded`, or `in_progress` → `expired` when the deadline passes without submission; expired attempts still count toward `max_attempts`), `auto_score`, `manual_score`, `total_score`, per-question answers, deterministic evaluation, and teacher feedback under forced RLS |
 | `break_glass_grant` | Reserved — Ticket reference, reason, actor, expiry (default 1 h) |
 | `platform_admin`, `platform_audit_event` | Reserved — Platform operators and their own log |
@@ -916,6 +931,34 @@ marks. Collected revenue is the sum of session-linked receipts. There is deliber
 outstanding/credit figure: the product does not compute a per-student or per-session balance, and
 no screen displays one (`ADR-0028`).
 
+### 7.6 Student performance intelligence (`F-P3-10`, `ADR-0034`)
+
+Every figure is recomputed at read time from tenant-scoped source rows; no aggregate is stored.
+The canonical rules are implemented in `src/modules/performance/calculations.ts`:
+
+```
+graded_results = scores WHERE status = 'graded' AND score IS NOT NULL
+percent(i)     = score(i) / max_score(i) * 100
+average        = mean(percent) over graded_results
+latest         = percent at the newest assessment date
+previous       = percent at the preceding assessment date
+changes        = percent(i) - percent(i-1), ordered by date
+insufficient   = count(graded_results) < workspace_settings.performance_risk_min_assessments
+```
+
+`missing`, `excused`, and `not_taken` rows are counted separately and never enter a mean as zero.
+A trend is `insufficient_data` below the configured minimum; otherwise it compares the mean of the
+most recent half with the mean of the preceding half and applies the explicit `±5` steady band.
+A risk requires real evidence ids and a deterministic key derived from the student, rule, period,
+evidence ids, threshold, and detection time. A weak topic requires at least three observations from
+`online_exam_response` rows with nullable `isCorrect` resolved, or from explicitly entered
+`assessment_topic_result` counts; an overall grade is never inferentially mapped to a topic.
+Class comparisons require the same graded assessment set for every included student.
+
+Parent reports read only the linked child, only `showGrades` grants, and only assessments with a
+non-null `locked_at`. They include `performance_report_note` and never `student_note`, group data,
+or private follow-up notes (`F27`).
+
 ---
 
 ## 8. Index strategy
@@ -1017,7 +1060,7 @@ exist before any data is written.
 same migration** (`ARCHITECTURE.md` §19 rule 5). Migration 14 exists for tables whose policies
 depend on later tables only as a safety net; it must be empty if rule 5 was followed.
 
-**Implemented migrations (through 2026-11-14).** The repository currently applies the sequence in a
+**Implemented migrations (through 2026-11-19).** The repository currently applies the sequence in a
 consolidated form rather than one directory per row above:
 
 | Migration | Contents |
@@ -1066,8 +1109,9 @@ consolidated form rather than one directory per row above:
 | `20261117010000_homework_submission_file_scope` | Adds `homework_submission` to the `file_scope` enum in its own migration; PostgreSQL forbids using a new enum value in the transaction that adds it (`F-P2-03`) |
 | `20261117020000_homework_submission_files` | Adds `homework_submission_file` with composite tenant primary key, foreign keys, index, forced RLS and tenant policy, and application-role grants; extends `file_scope_check` so a `homework_submission` file has null group and student targets (`F-P2-03`) |
 | `20261118000000_academic_terms` | Adds `academic_term` with `start_date`/`end_date` order check, tenant indexes, forced RLS and tenant policy, and application-role grants (`F-P3-07` AC-1, `ADR-0033`) |
+| `20261119000000_performance_intelligence` | Adds bounded risk thresholds to `workspace_settings`, optional `online_exam_question.topic`, and `assessment_topic_result`, `performance_risk_state`, and `performance_report_note` with composite tenant foreign keys, forced RLS, tenant policies, indexes, and application-role grants (`F-P3-10`, `ADR-0034`) |
 
-The current local development database tracks all forty-four migrations above. `student` and
+The current local development database tracks all migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
 
 ---

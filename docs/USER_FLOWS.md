@@ -1075,6 +1075,54 @@ homework history
 
 ---
 
+## F27 — Review performance intelligence and share a parent report
+
+**Actor:** Teacher with `grades:read`; parent with a link to one student · **Tier:** P3 ·
+**Preconditions:** at least one assessment or online exam exists
+
+1. Teacher opens **Performance**. The overview shows computed counts and averages, the number of
+   source records behind each value, and separate "insufficient data" and "no poor performance"
+   states.
+2. Teacher filters by date, group, subject, and student search. Every chart and table reflects the
+   same filters; a filter with no records shows an empty state rather than zero-valued analytics.
+3. Teacher opens a student. The profile shows latest, previous, average, highest, and lowest
+   normalized percentages; completed and missed counts; a percentage history; and consecutive
+   changes. Trend label, rule, and sample size are shown together.
+4. **Evidence:** topic weaknesses are listed only where a question has a topic label and a real
+   response, or where the teacher entered paper-exam topic counts. An overall score without topic
+   evidence is labelled "no topic evidence".
+5. Teacher acknowledges a risk. The acknowledgement stores the rule id, period, source record ids,
+   detected-at time, and the teacher's note or linked follow-up. A later evidence snapshot requires a
+   new acknowledgement.
+6. **[WRITE]** Audit: `performance.risk_acknowledged`, `performance.topic_results_saved`,
+   `performance.report_note_saved`, and `performance.bulk_grades_saved` with redacted diffs.
+7. Class intelligence shows difficult/strong topics, improving/declining percentages, weakest
+   assessments, and highest incorrect-rate questions only for comparable groups; unavailable
+   comparisons explain the missing shared assessment set or window.
+8. Teacher enters bulk paper-exam grades: chooses a group and an existing assessment or creates one,
+   enters scores in a table, and saves. The server validates all rows in one transaction, preserves
+   untouched scores, prevents duplicate assessments, and reports every saved or skipped row.
+9. Parent opens the report link for their own linked child. The report contains only that child's
+   published grades, real topic evidence, average, trend, shareable notes, and rule-based suggested
+   actions. Arabic renders RTL and English LTR.
+
+**Error / edge cases**
+
+| Case | Behaviour |
+|---|---|
+| Fewer than three graded results | Trend is `insufficient data`; no improving/declining conclusion. |
+| Missing, excused, or not-taken results | Counted separately, excluded from averages, never a failure risk. |
+| An overall grade but no topic result | No topic conclusion is shown. |
+| Duplicate bulk assessment | Save is rejected with the existing assessment id; no row is overwritten. |
+| Partial bulk validation failure | Valid rows save, invalid rows are listed with reasons; no row is silently dropped. |
+| Parent requests another student id | `403` when linked to the workspace but not that child; `404` otherwise. |
+| No PDF renderer configured | PDF export fails closed with a translated error; CSV/XLSX still work. |
+| AI provider proposed | Not called in V1; no UI claims AI analysis. |
+
+**AC:** F-P3-10, F-P1-09, F-P3-01, F-P2-06, F-P1-12, F-P3-07
+
+---
+
 ## Appendix — Flow-level invariants
 
 These hold across every flow and are the most likely things to get wrong.

@@ -140,6 +140,16 @@ export const NAV_GROUPS: NavGroup[] = [
         flow: "F-P1-12",
       },
       {
+        key: "performance",
+        href: "/app/performance",
+        labelKey: "items.performance",
+        icon: "activity",
+        status: "available",
+        milestone: "M3",
+        permission: { resource: "grades", action: "read" },
+        flow: "F-P3-10",
+      },
+      {
         key: "followUps",
         href: "/app/follow-ups",
         labelKey: "items.followUps",

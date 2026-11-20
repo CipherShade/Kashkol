@@ -57,6 +57,7 @@ describe("application navigation", () => {
       "/app/homework",
       "/app/assessments",
       "/app/reports",
+      "/app/performance",
       "/app/follow-ups",
       "/app/files",
       "/app/team",
@@ -155,7 +156,12 @@ describe("application navigation", () => {
         expect(fs.existsSync(path.join(appRoot, href.replace("/app/", ""), "page.tsx"))).toBe(true);
         continue;
       }
-      if (href === "/app/homework" || href === "/app/assessments" || href === "/app/follow-ups") {
+      if (
+        href === "/app/homework" ||
+        href === "/app/assessments" ||
+        href === "/app/follow-ups" ||
+        href === "/app/performance"
+      ) {
         expect(fs.existsSync(path.join(appRoot, href.replace("/app/", ""), "page.tsx"))).toBe(true);
         continue;
       }

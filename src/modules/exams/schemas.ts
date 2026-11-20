@@ -24,6 +24,8 @@ export const examQuestionInputSchema = z
   .object({
     questionType: onlineExamQuestionTypeSchema,
     prompt: z.string().trim().min(1).max(2000),
+    /// F-P3-10: optional topic label used only with real question responses.
+    topic: z.string().trim().min(1).max(120).nullable().optional(),
     points: z.coerce.number().positive().max(500),
     explanation: z.string().trim().max(1000).nullable().optional(),
     options: z.array(questionOptionSchema).max(8).default([]),

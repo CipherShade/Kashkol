@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { signOutAction } from "@/app/actions/auth";
+import { Link } from "@/i18n/navigation";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { PWAInstallBanner } from "@/components/pwa/pwa-install-banner";
 import {
@@ -423,6 +424,15 @@ export function ParentPortalClient({
               </button>
             );
           })}
+          {perms.showGrades ? (
+            <Link
+              className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+              href={`/portal/parent/performance?studentId=${encodeURIComponent(activeChild.student.id)}`}
+            >
+              <Icon name="activity" size={16} />
+              <span>{t("openPerformanceReport")}</span>
+            </Link>
+          ) : null}
         </nav>
 
         {/* Tab 1: Schedule & Schedule Changes */}

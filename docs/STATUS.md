@@ -1485,7 +1485,8 @@ fills in and signs the evidence table. No simulated camera result is claimed.
 | 3.9 | Forms and surveys foundation | `F-P3-09` passes; server-side complete; no visual builder; public response route deferred (08C) | ☑ |
 | 3.10 | Forms HTTP API (`F-P3-09`) | 10 service routes exposed; registry updated; integration verified | ☑ |
 | 3.11 | Forms visual builder (`F-P3-09` extension / M4) | Dashboard, `/forms/new`, and editor (all 11 types, sections/page breaks, conditional logic, preview); explicit save with `updatedAt` concurrency guard; Arabic/English and light/dark; no autosave and no public submission | ☑ |
-| 3.12 | Run the M3 release gate | Every gate item is checked with evidence | ☐ |
+| 3.12 | Student performance intelligence | `F-P3-10` and `F27` pass: computed overview, student profile, evidence-backed topics and risks, class intelligence, bulk grades, and parent report | ☑ |
+| 3.13 | Run the M3 release gate | Every gate item is checked with evidence | ☐ |
 
 **3.7 — Terms-only academic-year handling (`F-P3-07`, ADR-0033).** AC-1 and AC-2 are implemented:
 a forced-RLS `academic_term` table stores workspace-wide and grade-specific term boundaries; grade
@@ -1497,6 +1498,19 @@ exit conditions; rollover/copy of prior-year data is also excluded and has no `F
 criterion. None is shown as an available capability. Item 3.7 therefore stays `☐`. Unit and
 PostgreSQL integration tests passed, the migration was applied with
 `npm run db:deploy`, and the full gate passed on 2026-11-18.
+
+**3.12 — Student performance intelligence (`F-P3-10`, `F27`, ADR-0034).** All figures are recomputed
+at read time from tenant-scoped assessment, response, attendance, and follow-up rows. Topic weaknesses
+come only from resolved question-level records or explicitly entered paper-exam counts; an overall
+grade never implies a topic. Risks are deterministic, evidence-keyed, configurable per workspace, and
+only teacher actions are persisted. Bulk grade entry writes one scoped transaction with per-row
+results. Parent reports require a linked child with `showGrades` and expose only published grades and
+explicitly shareable notes. The PDF adapter fails closed. All performance routes are declared in the
+route registry. Unit, UI, and PostgreSQL integration tests cover calculations, insufficient data,
+missing results, topics, risks, bulk grades, duplicates, tenant isolation, permissions, parent
+privacy, exports, and PDF fail-closed behavior. Migration `20261119000000_performance_intelligence`
+was applied and the full gate passed on 2026-11-19. No charting library, external AI client, key, or
+network call was introduced.
 
 ---
 

@@ -1419,6 +1419,60 @@ scope; a later flow adds it on top of these endpoints and data.
 
 ---
 
+### F-P3-10 — Student performance intelligence
+
+**User story:** As a teacher, I want truthful, evidence-backed intelligence about student
+performance, so that I can identify who needs help, why, and what I should do next.
+
+**Dependencies:** `F-P1-09` (assessments), `F-P3-01` (online exam question responses),
+`F-P2-06` (follow-up), `F-P1-12` and `F-P3-07` (reports), ADR-0007, ADR-0032, ADR-0034.
+
+**Acceptance criteria**
+
+1. The Performance Overview shows computed graded-result counts, normalized averages, assessment
+   volume, trends, and at-risk counts from tenant source rows only. It filters by date range, group,
+   subject, and student search; every metric states the count of records used.
+2. `missing`, `excused`, `not_taken`, and absent assessment rows are never counted as zero and never
+   produce a risk by themselves. Insufficient data is a distinct state with an explicit minimum
+   sample size.
+3. A student profile shows latest, previous, average, highest, and lowest normalized percentages,
+   completed/missed counts, percentage history, and consecutive changes. Trend classification uses
+   at least three graded results and publishes the arithmetic rule and sample size; one or two
+   results are classified as insufficient data.
+4. Topic weakness detection is derived only from real question-level records: `online_exam_response`
+   joined to a topic-labelled `online_exam_question`, or topic counts the teacher explicitly entered
+   for a paper exam. An overall manual grade alone never produces a topic conclusion.
+5. A teacher may optionally record correct/incorrect topic counts for a paper exam. The UI labels
+   these as teacher-entered observations and never calls them answer-level records.
+6. Risks are rule-based, configurable per workspace, deterministic, and evidence-backed. Every risk
+   exposes its rule id, threshold, detected-at time, evidence source ids, a plain-language suggested
+   action, and the calculation that produced it. No risk names a cause, diagnosis, or intent that the
+   records cannot establish.
+7. A teacher can acknowledge a specific evidence snapshot and attach a follow-up note or create a
+   linked follow-up. Acknowledgement state is keyed to the rule, period, and source record ids; a
+   newer evidence set does not inherit it.
+8. Class intelligence computes difficult and strong topics, improving and declining percentages,
+   the weakest assessments, and the highest incorrect-rate questions from real records. Groups with
+   different assessments, curricula, or time windows are not compared; the UI states why a
+   comparison is unavailable.
+9. Bulk grade entry creates or updates one group assessment in a single tenant transaction. It
+   validates group membership, score bounds, and assessment identity; prevents duplicate
+   `(group, title, date)` assessments; preserves scores that are not in the submitted payload; and
+   returns an explicit saved/skipped result for every row without reporting an unsaved row as saved.
+10. A parent report is generated only for a student linked to the authenticated parent. It includes
+    a real date period, grade history, average, trend, topic evidence, shareable notes, and
+    rule-based recommendations. It never includes another student, a group aggregate, a private
+    teacher note, or a payment record.
+11. Parent reports render in Arabic RTL and English LTR, support CSV/XLSX and PDF through the
+    configured PDF adapter, and fail closed with a translated error when no renderer is configured.
+12. Version 1 makes no external AI call. Any later AI feature may explain already-computed evidence
+    only; it must not invent, change, or classify results.
+13. All reads and writes use tenant-scoped transactions, server-side Zod validation, and
+    `grades:read`/`grades:write` or `students:read` authorization. Every mutation writes an audit
+    event in the same transaction, with note bodies redacted from audit diffs.
+
+---
+
 
 ## 9. Privacy-sensitive data register
 

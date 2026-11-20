@@ -55,6 +55,7 @@ Every ADR uses the same sections:
 | [0031](0031-session-active-workspace-pointer.md) | Active workspace as a session-activity pointer | Accepted (approved 2026-11-17) | M2 |
 | [0032](0032-headless-chromium-pdf-reports.md) | PDF report export through a headless-Chromium adapter | Accepted (approved 2026-11-18) | M2 |
 | [0033](0033-academic-terms-only.md) | Academic-year handling ships terms only | Accepted (approved 2026-11-18) | M3a |
+| [0034](0034-computed-performance-intelligence.md) | Performance intelligence is computed, evidence-backed, and rule-based | Accepted (approved 2026-11-19) | M3b |
 
 ## Conventions
 
@@ -106,3 +107,4 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0028 | `F-P2-04`, `D-14`, `R-02`, `NF-1`, `NF-2`, `ADR-0025` |
 | 0029 | `D-03`, `F-P1-04`, `F-P1-05`, `F-P1-06`, `F-P1-07`, `F-P2-05`, `R-01`, `R-02`, `NF-1`, `NF-5`, `A-22` |
 | 0030 | `F-P0-02`, `NF-1`, `NF-8`, `NF-11`, `NF-12`, `ADR-0003`, `ADR-0006` |
+| 0034 | `F-P3-10`, `F27`, `R-02`, `NF-1`, `NF-6`, `NF-10`, `NF-12`, `ADR-0007`, `ADR-0032` |
