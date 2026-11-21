@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-21 · **Status:** Evergreen-and-parchment visual refresh (ADR-0035) complete — tokens, shell, sidebar, dashboard composition, and primitives updated. All gates pass. Two pre-existing integration test failures remain (worker report export, Arabic trigram index). Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-21 · **Status:** Evergreen-and-parchment visual refresh (ADR-0035) complete — tokens, shell, sidebar, dashboard composition, and primitives updated. All gates pass, including the full integration suite (155/155). A follow-up migration repair restored the report-export queue, the Arabic trigram indexes, and the file-scope indexes that an auto-generated diff had dropped. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -1541,14 +1541,37 @@ network call was introduced.
 - `src/app/[locale]/app/_components/DashboardHeader.tsx` — greeting panel with date, workspace context, session/attention summary, period pill tabs.
 - `src/app/[locale]/app/_components/GlobalOverview.tsx` — four truthful KPI tiles (attendance, revenue, students, academic) with progress meters and tone variants.
 - `src/app/[locale]/app/page.tsx` — dashboard composition: greeting → four KPIs → 12-column split (main: today, attention, academic, team; side: pending work, financial, recent activity).
-- `src/lib/db/migration-state.ts` — `REQUIRED_MIGRATION_NAME` updated to `20261120224045_visual_refresh_adr35`.
+- `src/lib/db/migration-state.ts` — `REQUIRED_MIGRATION_NAME` updated to `20261121092000_report_queue_status_check`.
+
+**Migration repair (2026-11-21)**
+
+The auto-generated `20261120224045_visual_refresh_adr35` migration reconciled schema drift
+destructively: it dropped the `report_export_queue` worker table, the `file_scope_*` indexes, and the
+Arabic trigram GIN indexes because they were not declared in `prisma/schema.prisma`. The objects are
+now modelled in the schema so Prisma manages them, and three follow-up migrations restore the lost
+state:
+
+- `20261120233942_restore_trigram_search_indexes` — `student`/`subject`/`group` `search_key` and
+  `phonetic_key` GIN indexes, declared with `@@index([…(ops: raw("gin_trgm_ops"))], type: Gin)`.
+- `20261121091904_restore_report_queue_and_file_indexes` — `report_export_queue` (with its composite
+  FK to `report_export`), `file_scope_group_id_idx`, `file_scope_student_id_idx`.
+- `20261121092000_report_queue_status_check` — the `status IN ('queued', 'processing')` CHECK that
+  Prisma does not model.
+
+`report_export_queue` is documented as a non-tenant table in `src/lib/db/tenant-tables.ts`
+(`NON_TENANT_WORKSPACE_TABLES`): it stores only job/workspace ids, status, attempts, and lock
+timestamps, and the worker must claim jobs across every workspace before it knows the tenant. The
+report content stays in the RLS-protected `report_export` table. The project-rules check subtracts
+this documented list from its tenant-table heuristic, so the queue is not forced to carry a fake RLS
+policy.
 
 **Gates**
 
 - `npm run lint` ✅
 - `npm run typecheck` ✅
 - `npm test` ✅ (520 unit + 30 UI tests)
-- `npm run test:integration` 153/155 ✅ (2 pre-existing failures: worker report export 500, missing Arabic trigram index — not related to visual changes)
+- `npm run test:integration` ✅ **155/155 across 24 files** (worker report export and Arabic trigram
+  search now pass; no test was edited, skipped, or weakened)
 - `npm run build` ✅
 
 **Explicit omissions from the reference** (per `NF-1`–`NF-13`)

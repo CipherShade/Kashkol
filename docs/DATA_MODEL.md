@@ -702,6 +702,11 @@ status, storage key, and safe failure code. The queue holds only job/workspace i
 state. The unique `(workspace_id, id)` constraint supports a tenant-composite queue FK. Report data
 is reloaded through the tenant-scoped repository when the worker processes the request.
 
+`report_export_queue` is deliberately **not** tenant-isolated: it carries no tenant content, and the
+worker must claim queued jobs across every workspace before it knows which tenant a job belongs to.
+It is listed in `NON_TENANT_WORKSPACE_TABLES` (`src/lib/db/tenant-tables.ts`) so the project-rules
+check does not force a fake RLS policy onto it. The report row itself remains protected by RLS.
+
 #### `portal_grant` (M2)
 
 `workspace_id`, `portal_user_id` (a `user` row used for portal sessions), `student_id`,

@@ -76,6 +76,24 @@ export const TENANT_TABLES = [
 
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
+/**
+ * Tables that carry a `workspace_id` for referential integrity but are **not**
+ * tenant-isolated reads.
+ *
+ * `report_export_queue` is drained by a worker that must claim queued jobs
+ * across every workspace before it knows which tenant a job belongs to. It
+ * stores only a job id, status, attempt count, and lock timestamps — never
+ * report content, a student name, or a phone number. The report itself stays
+ * in the RLS-protected `report_export` table and is reloaded through a
+ * tenant-scoped repository once the job is claimed (`DATA_MODEL.md` §
+ * `report_export` and `report_export_queue`).
+ *
+ * `scripts/check-project-rules.mjs` subtracts this list from the tenant-table
+ * heuristic, so the table is not required to carry an RLS policy it would have
+ * to fake.
+ */
+export const NON_TENANT_WORKSPACE_TABLES = ["report_export_queue"] as const;
+
 export const TENANT_ROOT_TABLE = "workspace" as const;
 
 export const RLS_TABLES = [TENANT_ROOT_TABLE, ...TENANT_TABLES] as const;

@@ -914,6 +914,8 @@ model Student {
   @@unique([workspaceId, id])
   @@index([workspaceId])
   @@index([workspaceId, archivedAt])
+  @@index([searchKey(ops: raw("gin_trgm_ops"))], type: Gin, name: "student_search_key_trgm_idx")
+  @@index([phoneticKey(ops: raw("gin_trgm_ops"))], type: Gin, name: "student_phonetic_key_trgm_idx")
   @@map("student")
 }
 
@@ -1104,6 +1106,8 @@ model Subject {
   @@unique([workspaceId, id])
   @@index([workspaceId])
   @@index([workspaceId, archivedAt])
+  @@index([searchKey(ops: raw("gin_trgm_ops"))], type: Gin, name: "subject_search_key_trgm_idx")
+  @@index([phoneticKey(ops: raw("gin_trgm_ops"))], type: Gin, name: "subject_phonetic_key_trgm_idx")
   @@map("subject")
 }
 
@@ -1140,6 +1144,8 @@ model Group {
   @@unique([workspaceId, id])
   @@index([workspaceId])
   @@index([workspaceId, archivedAt])
+  @@index([searchKey(ops: raw("gin_trgm_ops"))], type: Gin, name: "group_search_key_trgm_idx")
+  @@index([phoneticKey(ops: raw("gin_trgm_ops"))], type: Gin, name: "group_phonetic_key_trgm_idx")
   @@map("group")
 }
 
@@ -1759,10 +1765,30 @@ model ReportExport {
   completedAt DateTime?          @map("completed_at") @db.Timestamptz(6)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  queueEntry ReportExportQueue?
 
   @@unique([workspaceId, id])
   @@index([workspaceId, createdAt])
   @@map("report_export")
+}
+
+/// Worker drain queue for report exports. Not a tenant table: it has no RLS
+/// policy because only the worker endpoint reads it, always by workspace id
+/// taken from the job row. The composite foreign key makes the queue entry and
+/// the job inseparable, so a deleted export cannot leave a dangling job.
+model ReportExportQueue {
+  jobId       String    @id @map("job_id") @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  status      String    @default("queued")
+  attempts    Int       @default(0)
+  lockedAt    DateTime? @map("locked_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  reportExport ReportExport @relation(fields: [workspaceId, jobId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([workspaceId, jobId])
+  @@index([status, createdAt])
+  @@map("report_export_queue")
 }
 
 model PaymentRevision {
@@ -1824,6 +1850,8 @@ model File {
   @@index([workspaceId, subjectId])
   @@index([workspaceId, scanStatus])
   @@index([workspaceId, archivedAt])
+  @@index([scope, groupId])
+  @@index([scope, studentId])
   @@map("file")
 }
 

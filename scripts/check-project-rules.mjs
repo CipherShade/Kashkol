@@ -192,11 +192,20 @@ function flattenKeys(value, prefix = "", output = []) {
   const registry = new Set(
     [...tenantBlock.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]),
   );
+  // Tables that carry a workspace id for a foreign key but are drained across
+  // workspaces by a worker and hold no tenant content. They are documented in
+  // tenant-tables.ts and are intentionally exempt from the RLS requirement.
+  const nonTenantBlock =
+    registrySource.match(/NON_TENANT_WORKSPACE_TABLES\s*=\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+  const nonTenant = new Set(
+    [...nonTenantBlock.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]),
+  );
 
   const tenantModels = new Set(
     [...models.entries()]
       .filter(([, body]) => /\bworkspaceId\b/.test(body) || /\bworkspace_id\b/.test(body))
-      .map(([table]) => table),
+      .map(([table]) => table)
+      .filter((table) => !nonTenant.has(table)),
   );
 
   for (const table of tenantModels) {
