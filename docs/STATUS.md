@@ -842,16 +842,12 @@ These implement the established session-priced billing rules (`ADR-0025`): direc
     privileges and no seed step, 88 of 123 tests fail. The workflow never runs `npm run db:seed`
     before `npm run test:integration`. Proposal (not applied): add a seed step to `ci.yml` and
     commit the missing-grant migration.
-  - **Screenshots captured and wired:** `public/landing/workspace-ar.png` and `workspace-en.png`
-    (1422×804, valid PNGs) are real captures of the seeded demo workspace sessions screen using the
-    system Chrome over the DevTools protocol via Node's built-in WebSocket — no new dependency was
-    added. Verified by dumping the rendered DOM text: no phone-like strings, no guardian data. The
-    demo data shown is the noisy smoke-test accumulation in the demo workspace; nothing was deleted
-    or re-seeded. `HAS_DEMO_SCREENSHOT = true`; the hero `next/image` is sized 1422×804 and the
-    captioned illustration is no longer shipped.
-  - After wiring the screenshots, `npm run build` passes and the rebuilt standalone server serves
-    `/ar` (200, references `/landing/workspace-ar.png`) and `/en` (200, references
-    `/landing/workspace-en.png`); the screenshot itself returns HTTP 200 (87104 bytes).
+  - **Landing screenshots disabled pending M1 recapture:** the previous `public/landing/workspace-ar.png`
+    and `workspace-en.png` captures showed M2 UI (record payment, follow-up, guardian messaging) and
+    are not truthful for the current M1 landing. `HAS_DEMO_SCREENSHOT` is now `false`, so the hero
+    renders the structural illustration until M1-only screenshots are recaptured and verified.
+  - After disabling stale screenshots, landing now falls back to the structural illustration; M1-only
+    screenshots still need recapture before re-enabling `HAS_DEMO_SCREENSHOT`.
   - **Migration `20261113000001_homework_completion_mark_grants` (approved 2026-11-11).** A
     forward-only migration grants the application role `SELECT, INSERT, UPDATE, DELETE` on
     `homework_completion_mark`; no historical migration was modified. Verified against a fresh,

@@ -6,16 +6,15 @@
   "Landing": {
     "meta": {
       "title": "Kashkol — the workspace for private teachers",
-      "description": "Kashkol is the workspace for private teachers: students and groups, sessions and attendance, homework and assessments, payments and files, with real parent and student portals. Every number is computed from your records."
+      "description": "Kashkol is the workspace for private teachers: students and groups, sessions and attendance, homework and assessments, and files. Every number is computed from your records."
     },
     "brandAria": "Kashkol — home",
     "skipToContent": "Skip to content",
     "menuLabel": "Menu",
     "nav": {
       "label": "Primary",
-      "features": "Features",
-      "how": "How it works",
-      "security": "Security",
+      "benefits": "Benefits",
+      "proof": "Why Kashkol",
       "faq": "FAQ"
     },
     "signIn": "Sign in",
@@ -24,104 +23,60 @@
     "hero": {
       "eyebrow": "For private teachers in Egypt",
       "title": "You teach the lesson. We handle the rest.",
-      "subtitle": "Kashkol keeps your whole practice in one place: students and groups, sessions and attendance, homework and assessments, payments and files, and real portals for parents and students. Every number you see is computed from your records.",
+      "subtitle": "Kashkol keeps your whole practice in one place: students and groups, sessions and attendance, homework and assessments. Every number you see is computed from your records.",
       "primaryCta": "Try Now!",
       "secondaryCta": "Sign in",
       "trust": {
-        "computed": "Numbers computed from records",
-        "portals": "Portals with real authentication",
-        "delivery": "No claimed delivery or read status"
+        "organized": "Everything in one place",
+        "records": "Clear records you can trust",
+        "bilingual": "Arabic and English"
       },
       "previewAria": "Preview of the Kashkol interface",
       "previewAlt": "A screenshot of a demo workspace in Kashkol",
       "caption": "Screenshot from a demo workspace with synthetic data.",
-      "illustrationCaption": "An illustration of the interface — no numbers, no records.",
+      "illustrationCaption": "A clean preview of the Kashkol workspace.",
       "demoBadge": "Demo"
     },
-    "truth": {
-      "eyebrow": "What we never fake",
-      "title": "We say what happens. Nothing else.",
-      "subtitle": "These are not slogans; they are constraints on the product itself.",
+    "benefits": {
+      "eyebrow": "Why teachers choose Kashkol",
+      "title": "Less admin. More teaching.",
+      "subtitle": "Everything you need to run your practice, organized around the work you already do.",
       "items": {
-        "records": "Every number is computed from your records — no decorative statistics.",
-        "delivery": "WhatsApp messages are prepared and opened in WhatsApp — delivery is never claimed.",
-        "portals": "Parent and student portals use real authentication — each sees only its own data.",
-        "payments": "Payments are recorded by the teacher — Kashkol moves no money."
-      }
-    },
-    "problems": {
-      "eyebrow": "From chaos to order",
-      "title": "Every obstacle in running your practice has an answer inside Kashkol.",
-      "subtitle": "Eight daily problems, and eight solutions that work in the product today.",
-      "problemLabel": "The problem",
-      "solutionLabel": "The answer",
-      "items": {
-        "students": {
-          "problem": "Student details are spread across notebooks, files, and spreadsheets.",
-          "solution": "One student directory with search, filters, archive, and CSV/XLSX import and export."
+        "control": {
+          "title": "Run your whole practice in one place",
+          "body": "Students, groups, sessions, homework, assessments, and files stay connected so you’re not chasing information across notebooks and chats."
         },
-        "groups": {
-          "problem": "You run many groups, and organising and following each one eats your time.",
-          "solution": "Groups with a roster capacity, student lists, and transfers with history."
+        "time": {
+          "title": "Get hours back every week",
+          "body": "Plan sessions, take attendance, assign homework, and review work from one clear workflow instead of rebuilding your day from scratch."
         },
-        "schedule": {
-          "problem": "Session times collide, and you only notice after the booking.",
-          "solution": "Session conflicts are detected before saving, with a weekly group schedule."
+        "clarity": {
+          "title": "See what’s happening at a glance",
+          "body": "Your records stay organized and easy to read, so you can make decisions quickly with confidence."
         },
-        "attendance": {
-          "problem": "Tracking who came and who missed is exhausting at scale.",
-          "solution": "Manual or QR attendance, with a correction history that is never erased."
-        },
-        "homework": {
-          "problem": "Who submitted and who did not? The same question every session.",
-          "solution": "Homework, submission records, and completion marks for each student."
-        },
-        "assessments": {
-          "problem": "Building assessments and adding up marks takes entire evenings.",
-          "solution": "Paper assessments and online exams, with a recorded score per student."
-        },
-        "followUp": {
-          "problem": "It is hard to see who needs attention before they fall behind.",
-          "solution": "Follow-ups attached to the student, with rules that flag at-risk attendance."
-        },
-        "assistants": {
-          "problem": "All the administrative work depends on you alone.",
-          "solution": "Add assistants with specific permissions, enforced by the server, not the UI."
+        "confidence": {
+          "title": "Built for real teaching work",
+          "body": "Arabic and English, light and dark, and a workspace designed for private teachers — simple, focused, and ready for daily use."
         }
       }
     },
-    "gap": {
-      "eyebrow": "Also built today",
-      "title": "Four parts complete the picture.",
-      "subtitle": "They did not fit the problems above, but they exist and they work.",
+    "proof": {
+      "eyebrow": "Built on trust",
+      "title": "A product that earns confidence",
+      "subtitle": "Kashkol is designed to be clear, reliable, and respectful of your work and your students' data.",
       "items": {
-        "payments": {
-          "title": "Payments ledger",
-          "body": "Session charges, partial payments, and adjustments, corrected by voiding rather than deleting. Kashkol records what you enter and moves no money."
+        "records": {
+          "title": "Clear, dependable records",
+          "body": "The numbers you see come from the records you keep, so you always know where they came from."
         },
-        "files": {
-          "title": "File library",
-          "body": "Learning material and documents scoped per group or per student, with authorised downloads."
+        "arabic": {
+          "title": "Made for Arabic and English",
+          "body": "Use Kashkol in Arabic or English, with the right direction and a polished experience in both."
         },
-        "portals": {
-          "title": "Parent and student portals",
-          "body": "Real authentication and an explicit link to each student; a guardian sees only their own children."
-        },
-        "reports": {
-          "title": "Reports and exports",
-          "body": "Asynchronous exports with a visible status per request, and reports built from your records."
+        "privacy": {
+          "title": "Your workspace stays yours",
+          "body": "Each workspace is separate, with access handled carefully so your data stays in the right place."
         }
-      }
-    },
-    "security": {
-      "eyebrow": "Security and privacy",
-      "title": "Isolation is not a feature. It is the foundation.",
-      "body": "Workspaces, authentication, and permissions are enforced on the server and tested automatically on every build.",
-      "items": {
-        "isolation": "Every query runs inside one workspace, enforced by the database itself.",
-        "roles": "Roles and permissions are checked on the server for every request.",
-        "audit": "The audit event is written in the same transaction as the change.",
-        "minors": "Children's data is never exposed to another family."
       }
     },
     "how": {
@@ -139,46 +94,38 @@
         },
         "day": {
           "title": "Run your day",
-          "body": "Take attendance, assign homework, record a payment, and share the parent portal."
+          "body": "Take attendance, assign homework, and review submissions."
         }
       }
     },
     "faq": {
-      "eyebrow": "Direct questions",
-      "title": "Questions we answer plainly",
-      "subtitle": "If the answer is no, we say no.",
+      "eyebrow": "Questions",
+      "title": "Everything you need to know",
+      "subtitle": "Clear answers before you get started.",
       "items": {
-        "whatsapp": {
-          "question": "Does Kashkol send WhatsApp messages?",
-          "answer": "No. It prepares the message and opens WhatsApp. Delivery, receipt, and read status are never claimed."
+        "start": {
+          "question": "How fast can I get started?",
+          "answer": "You can create your workspace, add students and groups, and start running your day right away. Start simple and build as you go."
         },
-        "money": {
-          "question": "Does Kashkol move money?",
-          "answer": "No. It records the payments you enter, with adjustments and an audit trail. There is no payment gateway and no settlement."
+        "language": {
+          "question": "Can I use Kashkol in Arabic and English?",
+          "answer": "Yes. Kashkol works in Arabic and English, with the right direction and a great experience in both."
         },
-        "isolation": {
-          "question": "Is my workspace really isolated?",
-          "answer": "Yes. Isolation is enforced in the data layer and tested against PostgreSQL on every build."
+        "records": {
+          "question": "Can I trust the numbers I see?",
+          "answer": "Yes. The dashboard and reports are based on the records you keep in Kashkol, so your information stays clear and consistent."
         },
-        "guardian": {
-          "question": "Can a guardian see another student?",
-          "answer": "No. A guardian is linked to specific children, and the permission is checked on the server."
-        },
-        "english": {
-          "question": "Is there an English interface?",
-          "answer": "Yes. Arabic and English, with the correct direction for each, and dark mode in both."
-        },
-        "video": {
-          "question": "Do video lessons always work?",
-          "answer": "Only when a real video provider is configured. Otherwise the feature shows as unavailable — never a fake player."
+        "support": {
+          "question": "Is Kashkol built for private teachers?",
+          "answer": "Yes. Kashkol is designed around the real daily workflow of private teachers — students, groups, sessions, attendance, homework, and assessments."
         }
       }
     },
     "cta": {
-      "eyebrow": "Start from your real records",
-      "title": "Ready to organise your practice?",
-      "body": "Create your workspace, add your students, and record attendance today.",
-      "note": "Arabic and English · correct direction · light and dark"
+      "eyebrow": "Start simple",
+      "title": "Ready to run your teaching practice with confidence?",
+      "body": "Create your workspace and put your students, sessions, and records in one place today.",
+      "note": "Arabic and English · Light and dark · Built for private teachers"
     },
     "footer": {
       "tagline": "The teacher always sees the truth",

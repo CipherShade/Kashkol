@@ -4,13 +4,11 @@ import { LandingFooter } from "@/components/landing/footer";
 import { LandingHeader } from "@/components/landing/header";
 import { LandingHero } from "@/components/landing/hero";
 import {
+  LandingBenefits,
   LandingCallToAction,
   LandingFaq,
-  LandingGap,
   LandingHow,
-  LandingProblems,
-  LandingSecurity,
-  LandingTruth,
+  LandingProof,
 } from "@/components/landing/sections";
 import { buildLandingMetadata, landingSiteUrl } from "@/lib/landing/seo";
 import type { PreferredTheme } from "@/lib/theme";
@@ -74,11 +72,9 @@ export default async function LandingPage({ params }: LandingPageProps) {
 
       <main id="main">
         <LandingHero signedIn={signedIn} locale={appLocale} />
-        <LandingTruth />
-        <LandingProblems />
-        <LandingGap />
+        <LandingBenefits />
+        <LandingProof />
         <LandingHow />
-        <LandingSecurity />
         <LandingFaq />
         <LandingCallToAction signedIn={signedIn} />
       </main>

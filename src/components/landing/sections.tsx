@@ -1,99 +1,51 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Icon } from "@/components/ui/icon";
-import {
-  FAQ_ITEMS,
-  GAP_ITEMS,
-  PROBLEM_ROWS,
-  SECURITY_ITEMS,
-  STEPS,
-  TRUTH_ITEMS,
-} from "@/lib/landing/content";
+import { BENEFIT_ITEMS, FAQ_ITEMS, PROOF_ITEMS, STEPS } from "@/lib/landing/content";
 
-export async function LandingTruth() {
-  const t = await getTranslations("Landing.truth");
+export async function LandingBenefits() {
+  const t = await getTranslations("Landing.benefits");
 
   return (
-    <section className="landing-truth" aria-labelledby="truth-title">
+    <section className="landing-section" id="benefits" aria-labelledby="benefits-title">
       <div className="landing-container">
         <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="truth-title" className="landing-h2">
-          {t("title")}
-        </h2>
-        <p className="landing-sub">{t("subtitle")}</p>
-
-        <ul className="landing-truth__grid">
-          {TRUTH_ITEMS.map(({ key, icon }) => (
-            <li key={key} className="landing-truth__item">
-              <span className="landing-icon" aria-hidden="true">
-                <Icon name={icon} size={20} />
-              </span>
-              <p>{t(`items.${key}`)}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-/**
- * Eight problems, each paired with a solution that exists in this repository.
- * The list is deliberately not a feature grid: a teacher reads the pain first
- * and the answer second.
- */
-export async function LandingProblems() {
-  const t = await getTranslations("Landing.problems");
-
-  return (
-    <section className="landing-section" id="features" aria-labelledby="problems-title">
-      <div className="landing-container">
-        <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="problems-title" className="landing-h2">
-          {t("title")}
-        </h2>
-        <p className="landing-sub">{t("subtitle")}</p>
-
-        <ul className="landing-problems__grid">
-          {PROBLEM_ROWS.map(({ key, icon }) => (
-            <li key={key} className="landing-problem">
-              <div className="landing-problem__block">
-                <span className="landing-problem__label">
-                  <Icon name="alert" size={13} />
-                  {t("problemLabel")}
-                </span>
-                <p className="landing-problem__problem">{t(`items.${key}.problem`)}</p>
-              </div>
-              <div className="landing-problem__block landing-problem__block--solution">
-                <span className="landing-problem__label landing-problem__label--solution">
-                  <Icon name={icon} size={14} />
-                  {t("solutionLabel")}
-                </span>
-                <p className="landing-problem__solution">{t(`items.${key}.solution`)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-export async function LandingGap() {
-  const t = await getTranslations("Landing.gap");
-
-  return (
-    <section className="landing-gap" aria-labelledby="gap-title">
-      <div className="landing-container">
-        <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="gap-title" className="landing-h2">
+        <h2 id="benefits-title" className="landing-h2">
           {t("title")}
         </h2>
         <p className="landing-sub">{t("subtitle")}</p>
 
         <ul className="landing-gap__grid">
-          {GAP_ITEMS.map(({ key, icon }) => (
+          {BENEFIT_ITEMS.map(({ key, icon }) => (
             <li key={key} className="landing-gap__item">
+              <span className="landing-icon" aria-hidden="true">
+                <Icon name={icon} size={20} />
+              </span>
+              <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
+              <p>{t(`items.${key}.body`)}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+export async function LandingProof() {
+  const t = await getTranslations("Landing.proof");
+
+  return (
+    <section className="landing-truth" id="proof" aria-labelledby="proof-title">
+      <div className="landing-container">
+        <p className="landing-eyebrow">{t("eyebrow")}</p>
+        <h2 id="proof-title" className="landing-h2">
+          {t("title")}
+        </h2>
+        <p className="landing-sub">{t("subtitle")}</p>
+
+        <ul className="landing-truth__grid">
+          {PROOF_ITEMS.map(({ key, icon }) => (
+            <li key={key} className="landing-truth__item">
               <span className="landing-icon" aria-hidden="true">
                 <Icon name={icon} size={20} />
               </span>
@@ -111,7 +63,7 @@ export async function LandingHow() {
   const t = await getTranslations("Landing.how");
 
   return (
-    <section className="landing-section" id="how" aria-labelledby="how-title">
+    <section className="landing-section" aria-labelledby="how-title">
       <div className="landing-container">
         <p className="landing-eyebrow">{t("eyebrow")}</p>
         <h2 id="how-title" className="landing-h2">
@@ -133,36 +85,6 @@ export async function LandingHow() {
             </li>
           ))}
         </ol>
-      </div>
-    </section>
-  );
-}
-
-export async function LandingSecurity() {
-  const t = await getTranslations("Landing.security");
-
-  return (
-    <section className="landing-section" id="security" aria-labelledby="security-title">
-      <div className="landing-container">
-        <div className="landing-security">
-          <div className="landing-security__intro">
-            <p className="landing-eyebrow">{t("eyebrow")}</p>
-            <h2 id="security-title" className="landing-h2">
-              {t("title")}
-            </h2>
-            <p className="landing-sub">{t("body")}</p>
-          </div>
-          <ul className="landing-security__list">
-            {SECURITY_ITEMS.map(({ key, icon }) => (
-              <li key={key} className="landing-security__item">
-                <span className="landing-icon" aria-hidden="true">
-                  <Icon name={icon} size={19} />
-                </span>
-                <p>{t(`items.${key}`)}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </section>
   );

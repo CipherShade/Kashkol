@@ -6,14 +6,12 @@ import {
   buildRobots,
   buildSitemap,
 } from "@/lib/landing/seo";
-import { PROBLEM_ROWS, TRUTH_ITEMS, GAP_ITEMS, SECURITY_ITEMS, STEPS, FAQ_ITEMS } from "@/lib/landing/content";
+import { BENEFIT_ITEMS, PROOF_ITEMS, STEPS, FAQ_ITEMS } from "@/lib/landing/content";
 
 type LandingCatalogue = {
   Landing: {
-    truth: { items: Record<string, string> };
-    problems: { items: Record<string, { problem: string; solution: string }> };
-    gap: { items: Record<string, { title: string; body: string }> };
-    security: { items: Record<string, string> };
+    benefits: { items: Record<string, { title: string; body: string }> };
+    proof: { items: Record<string, { title: string; body: string }> };
     how: { items: Record<string, { title: string; body: string }> };
     faq: { items: Record<string, { question: string; answer: string }> };
   };
@@ -21,22 +19,14 @@ type LandingCatalogue = {
 const ar = arJson as unknown as LandingCatalogue;
 const en = enJson as unknown as LandingCatalogue;
 
-type StringMap = Record<string, string>;
-type ProblemMap = Record<string, { problem: string; solution: string }>;
-type TitleBodyMap = Record<string, { title: string; body: string }>;
-
-const truthItems = ar.Landing.truth.items as StringMap;
-const enTruthItems = en.Landing.truth.items as StringMap;
-const arProblems = ar.Landing.problems.items as ProblemMap;
-const enProblems = en.Landing.problems.items as ProblemMap;
-const arGap = ar.Landing.gap.items as TitleBodyMap;
-const enGap = en.Landing.gap.items as TitleBodyMap;
-const arSecurity = ar.Landing.security.items as StringMap;
-const enSecurity = en.Landing.security.items as StringMap;
-const arSteps = ar.Landing.how.items as TitleBodyMap;
-const enSteps = en.Landing.how.items as TitleBodyMap;
-const arFaq = ar.Landing.faq.items as Record<string, { question: string; answer: string }>;
-const enFaq = en.Landing.faq.items as Record<string, { question: string; answer: string }>;
+const arBenefits = ar.Landing.benefits.items;
+const enBenefits = en.Landing.benefits.items;
+const arProof = ar.Landing.proof.items;
+const enProof = en.Landing.proof.items;
+const arSteps = ar.Landing.how.items;
+const enSteps = en.Landing.how.items;
+const arFaq = ar.Landing.faq.items;
+const enFaq = en.Landing.faq.items;
 
 describe("landing page contracts", () => {
   it("ships the Landing namespace in both message catalogues with parity", () => {
@@ -48,36 +38,32 @@ describe("landing page contracts", () => {
     expect(arKeys.sort()).toEqual(enKeys.sort());
   });
 
-  it("contains all required problem and truth keys in catalogues", () => {
-    for (const { key } of TRUTH_ITEMS) {
-      expect(truthItems[key]).toBeTypeOf("string");
-      expect(enTruthItems[key]).toBeTypeOf("string");
+  it("contains all required landing keys in catalogues", () => {
+    for (const { key } of BENEFIT_ITEMS) {
+      expect(arBenefits[key].title).toBeTypeOf("string");
+      expect(arBenefits[key].body).toBeTypeOf("string");
+      expect(enBenefits[key].title).toBeTypeOf("string");
+      expect(enBenefits[key].body).toBeTypeOf("string");
     }
 
-    for (const { key } of PROBLEM_ROWS) {
-      expect(arProblems[key].problem).toBeTypeOf("string");
-      expect(arProblems[key].solution).toBeTypeOf("string");
-      expect(enProblems[key].problem).toBeTypeOf("string");
-      expect(enProblems[key].solution).toBeTypeOf("string");
-    }
-
-    for (const { key } of GAP_ITEMS) {
-      expect(arGap[key].title).toBeTypeOf("string");
-      expect(enGap[key].title).toBeTypeOf("string");
-    }
-
-    for (const { key } of SECURITY_ITEMS) {
-      expect(arSecurity[key]).toBeTypeOf("string");
-      expect(enSecurity[key]).toBeTypeOf("string");
+    for (const { key } of PROOF_ITEMS) {
+      expect(arProof[key].title).toBeTypeOf("string");
+      expect(arProof[key].body).toBeTypeOf("string");
+      expect(enProof[key].title).toBeTypeOf("string");
+      expect(enProof[key].body).toBeTypeOf("string");
     }
 
     for (const { key } of STEPS) {
       expect(arSteps[key].title).toBeTypeOf("string");
+      expect(arSteps[key].body).toBeTypeOf("string");
       expect(enSteps[key].title).toBeTypeOf("string");
+      expect(enSteps[key].body).toBeTypeOf("string");
     }
 
     for (const item of FAQ_ITEMS) {
       expect(arFaq[item].question).toBeTypeOf("string");
+      expect(arFaq[item].answer).toBeTypeOf("string");
+      expect(enFaq[item].question).toBeTypeOf("string");
       expect(enFaq[item].answer).toBeTypeOf("string");
     }
   });
