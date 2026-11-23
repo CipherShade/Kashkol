@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  classifyLedgerRow,
   migrationTable,
   parseResolutionArgs,
 } from "../../scripts/migrate-deploy.mjs";
@@ -39,5 +40,52 @@ describe("migrate-deploy resolution arguments", () => {
     expect(migrationTable("20261025110000_session_revision")).toBe(
       "session_revision"
     );
+  });
+});
+
+describe("Prisma 7 migration ledger classification", () => {
+  it("treats a finished row as applied", () => {
+    expect(
+      classifyLedgerRow({
+        migration_name: "20261025110000_session_revision",
+        finished_at: new Date("2026-11-23T00:00:00.000Z"),
+        rolled_back_at: null,
+      })
+    ).toEqual({
+      name: "20261025110000_session_revision",
+      applied: true,
+      rolledBack: false,
+      unfinished: false,
+    });
+  });
+
+  it("treats an unfinished row without a rollback as unresolved", () => {
+    expect(
+      classifyLedgerRow({
+        migration_name: "20261025110000_session_revision",
+        finished_at: null,
+        rolled_back_at: null,
+      })
+    ).toEqual({
+      name: "20261025110000_session_revision",
+      applied: false,
+      rolledBack: false,
+      unfinished: true,
+    });
+  });
+
+  it("treats a rolled-back row as unresolved", () => {
+    expect(
+      classifyLedgerRow({
+        migration_name: "20261025110000_session_revision",
+        finished_at: null,
+        rolled_back_at: new Date("2026-11-23T00:00:00.000Z"),
+      })
+    ).toEqual({
+      name: "20261025110000_session_revision",
+      applied: false,
+      rolledBack: true,
+      unfinished: false,
+    });
   });
 });

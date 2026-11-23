@@ -48,19 +48,26 @@ function run(command) {
   execSync(command, { stdio: "inherit" });
 }
 
+/** Classify a Prisma 7 ledger row. There is no `success` column. */
+export function classifyLedgerRow(row) {
+  const rolledBack = Boolean(row.rolled_back_at);
+  const finished = Boolean(row.finished_at);
+  return {
+    name: row.migration_name,
+    applied: finished && !rolledBack,
+    rolledBack,
+    unfinished: !finished && !rolledBack,
+  };
+}
+
 async function readLedger(client) {
   const { rows } = await client.query(
-    `SELECT migration_name, finished_at, rolled_back_at, success
+    `SELECT migration_name, finished_at, rolled_back_at
        FROM _prisma_migrations
       ORDER BY migration_name`
   );
 
-  return rows.map((row) => ({
-    name: row.migration_name,
-    applied: Boolean(row.finished_at) && row.success !== false && !row.rolled_back_at,
-    rolledBack: Boolean(row.rolled_back_at),
-    success: row.success !== false,
-  }));
+  return rows.map(classifyLedgerRow);
 }
 
 async function main() {
@@ -101,9 +108,7 @@ async function main() {
 
     console.log("Unresolved migrations in _prisma_migrations:");
     for (const row of unresolved) {
-      console.log(
-        `  - ${row.name} (rolledBack=${row.rolledBack}, success=${row.success})`
-      );
+      console.log(`  - ${row.name} (rolledBack=${row.rolledBack})`);
     }
 
     const chosen = new Map([
