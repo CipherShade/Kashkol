@@ -1363,8 +1363,8 @@ deploys fail closed instead of repeating a stale resolution.
 `{"status":"ok","service":"kashkol",...}`.
 
 **Gate result (2026-11-23).** `npm run lint`, `npm run typecheck`, `npm test` (78 unit files /
-529 tests + 3 UI files / 30 tests), and `npm run build` all passed. `npm run test:integration` was
-not run in this pass; no tenant query changed.
+529 tests + 3 UI files / 30 tests), `npm run test:integration` (24 files / 155 tests against the
+pinned embedded PostgreSQL), and `npm run build` all passed.
 
 **Not claimed.** No staging deploy was run, so item `0.20` remains `◐`. The live `session_revision`
 table was not structurally compared column-by-column with the migration; the recovery relied on the
