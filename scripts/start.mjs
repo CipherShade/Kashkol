@@ -47,7 +47,7 @@ const child = spawn(process.execPath, [server], {
   env: {
     ...process.env,
     NODE_ENV: "production",
-    HOSTNAME: process.env.HOSTNAME ?? "0.0.0.0",
+    HOSTNAME: "0.0.0.0",
     PORT: process.env.PORT ?? "3000",
   },
 });
