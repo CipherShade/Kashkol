@@ -40,4 +40,9 @@ CREATE POLICY "attendance_token_tenant_isolation" ON "attendance_token"
     WITH CHECK ("workspace_id" = current_workspace_id());
 
 -- Grant permissions
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "attendance_token" TO kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "attendance_token" TO kashkol_app;
+  END IF;
+END $$;

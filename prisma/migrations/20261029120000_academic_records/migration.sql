@@ -237,6 +237,11 @@ CREATE POLICY "student_follow_up_event_tenant_isolation" ON "student_follow_up_e
   USING ("workspace_id" = current_workspace_id())
   WITH CHECK ("workspace_id" = current_workspace_id());
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-  "homework", "homework_submission", "homework_resource", "student_follow_up", "student_follow_up_event"
-TO kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+      "homework", "homework_submission", "homework_resource", "student_follow_up", "student_follow_up_event"
+    TO kashkol_app;
+  END IF;
+END $$;

@@ -29,5 +29,10 @@ CREATE POLICY "session_revision_tenant_isolation" ON "session_revision"
   WITH CHECK (workspace_id = current_setting('app.workspace_id', true)::uuid);
 
 -- Append-only: grant INSERT and SELECT only (no UPDATE/DELETE)
-GRANT SELECT, INSERT ON TABLE "session_revision" TO kashkol_app;
-REVOKE UPDATE, DELETE ON TABLE "session_revision" FROM kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT ON TABLE "session_revision" TO kashkol_app;
+    REVOKE UPDATE, DELETE ON TABLE "session_revision" FROM kashkol_app;
+  END IF;
+END $$;

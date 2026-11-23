@@ -87,4 +87,9 @@ CREATE POLICY "session_attendee_tenant_isolation" ON "session_attendee"
   USING ("workspace_id" = current_setting('app.workspace_id', true)::uuid)
   WITH CHECK ("workspace_id" = current_setting('app.workspace_id', true)::uuid);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "session_attendee" TO kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "session_attendee" TO kashkol_app;
+  END IF;
+END $$;

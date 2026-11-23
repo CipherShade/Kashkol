@@ -9,4 +9,9 @@
 -- This migration grants the application role the same privileges it holds on
 -- every other tenant table (ADR-0006). Historical migrations are not modified.
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "homework_completion_mark" TO kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "homework_completion_mark" TO kashkol_app;
+  END IF;
+END $$;

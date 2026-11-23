@@ -176,4 +176,9 @@ ALTER TABLE "notification_log" ENABLE ROW LEVEL SECURITY; ALTER TABLE "notificat
 CREATE POLICY "notification_log_tenant_isolation" ON "notification_log" USING ("workspace_id" = current_workspace_id()) WITH CHECK ("workspace_id" = current_workspace_id());
 
 -- Grants
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "guardian", "notification", "message_outbox", "notification_settings", "notification_log" TO kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "guardian", "notification", "message_outbox", "notification_settings", "notification_log" TO kashkol_app;
+  END IF;
+END $$;

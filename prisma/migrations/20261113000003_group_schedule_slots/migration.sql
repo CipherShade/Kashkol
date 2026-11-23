@@ -74,4 +74,9 @@ CREATE POLICY "group_schedule_slot_tenant_isolation" ON "group_schedule_slot"
   USING ("workspace_id" = current_setting('app.workspace_id', true)::uuid)
   WITH CHECK ("workspace_id" = current_setting('app.workspace_id', true)::uuid);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "group_schedule_slot" TO kashkol_app;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kashkol_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "group_schedule_slot" TO kashkol_app;
+  END IF;
+END $$;
