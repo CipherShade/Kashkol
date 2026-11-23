@@ -1367,8 +1367,10 @@ not reported. The production pre-deploy command stays `node scripts/migrate-depl
 **Verification.** Railway deployment `b9180d79-6776-4074-983f-968cf7024068` reached `SUCCESS` after
 `All migrations have been successfully applied`. The service is online at
 `https://kashkol.up.railway.app/healthz`, which returned
-`{"status":"ok","service":"kashkol",...}`. The deploy triggered by the rolled-back-row fix is the
-final check that the plain runner now passes on the live ledger.
+`{"status":"ok","service":"kashkol",...}`. Deployment
+`0f0c96ac-013f-4f6a-8aa0-9fdf15d0d5c8` (commit `d274481`) then reached `SUCCESS` with the plain
+pre-deploy command: `No unresolved migrations — proceeding.` followed by
+`No pending migrations to apply.` This confirms the live ledger no longer blocks later deploys.
 
 **Gate result (2026-11-23).** `npm run lint`, `npm run typecheck`, `npm test` (78 unit files /
 530 tests + 3 UI files / 30 tests), `npm run test:integration` (24 files / 155 tests against the
