@@ -6,6 +6,7 @@ import { Link, usePathname } from "@/i18n/navigation";
 import type { VisibleNavGroup } from "@/lib/navigation/nav";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Icon } from "@/components/ui/icon";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/feedback";
@@ -278,7 +279,7 @@ function SidebarBody({
     <>
       <div className="app-sidebar-brand">
         <span className="app-brand-mark">
-          <Icon name="target" size={20} />
+          <BrandMark size={22} />
         </span>
         <span className="app-brand-text">
           <Link href="/app" className="app-brand-name" onClick={onNavigate}>

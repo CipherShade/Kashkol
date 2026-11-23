@@ -5,6 +5,7 @@ import { hasLocale } from "next-intl";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth/auth";
+import { signUpDestination } from "@/lib/auth/signup-destination";
 import { socialProviderConfig } from "@/lib/auth/auth-options";
 import { evaluatePassword, passwordRejectionKey } from "@/lib/auth/password-policy";
 import { getServerEnv, isEmailConfigured } from "@/lib/config/env";
@@ -90,9 +91,9 @@ export async function signUpAction(
   }
 
   const env = getServerEnv();
-  // Sign-up never starts a session. With a transport the address must be
-  // confirmed; without one the person signs in with the password just chosen.
-  let destination = `/${locale}/sign-in?registered=1`;
+  // Sign-up never starts a session. Step two is always the payment page; when a
+  // transport is configured, that page also links to email verification.
+  const destination = signUpDestination(locale, isEmailConfigured(env));
   try {
     await getAuth().api.signUpEmail({
       body: {
@@ -103,9 +104,6 @@ export async function signUpAction(
       },
       headers: await headers(),
     });
-    if (isEmailConfigured(env)) {
-      destination = `/${locale}/verify-email`;
-    }
   } catch (error) {
     return errorState(authFailureKey(error));
   }

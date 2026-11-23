@@ -302,7 +302,11 @@
     "signInTitle": "Sign in",
     "signInSubtitle": "Enter your account details to continue.",
     "signUpTitle": "Create an account",
-    "signUpSubtitle": "Create your account, then create your workspace.",
+    "signUpSubtitle": "Create your account first. You will continue to payment on the next screen.",
+    "step1Of2": "Step 1 of 2 — Account",
+    "step2Of2": "Step 2 of 2 — Payment",
+    "paymentTitle": "Complete your subscription payment",
+    "paymentSubtitle": "Your account is created. Transfer the monthly subscription with InstaPay and keep the receipt for manual confirmation.",
     "name": "Name",
     "email": "Email",
     "password": "Password",
@@ -343,13 +347,13 @@
       "price": "249",
       "currency": "EGP",
       "period": "per month",
-      "step1": "Create your account by entering your details above.",
+      "step1": "Create your account with your name, email, and password.",
       "step2": "Pay 249 EGP via InstaPay using the QR code or the direct payment link.",
-      "step3": "Your subscription and account are activated upon payment confirmation.",
+      "step3": "Keep the transfer receipt. The team confirms it manually before activating the subscription.",
       "instapayId": "youssefahmed.telda@instapay",
       "payButton": "Pay via direct InstaPay link",
       "qrAlt": "InstaPay QR Code — youssefahmed.telda@instapay",
-      "note": "Payment is processed via InstaPay. Account is activated upon receipt confirmation."
+      "note": "Kashkol does not detect transfers or activate accounts automatically. The receipt is confirmed manually."
     }
   },
   "auth": {

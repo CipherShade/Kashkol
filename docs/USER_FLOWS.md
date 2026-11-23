@@ -47,12 +47,17 @@ not navigation sketches.
 | F24 | Take an online exam | Student | P3 |
 | F25 | Attach a recorded lesson (external provider) | Teacher | P3 |
 | F26 | Platform support access (break-glass) | Platform admin | P3 |
+| F27 | Review performance intelligence and share a parent report | Teacher | P3 |
+| F28 | Pay the manual subscription after account creation | New teacher | P0 |
 
 ---
 
 ## F1 — Create an account and a workspace
 
 **Actor:** New teacher · **Tier:** P0 · **Preconditions:** none
+
+**Sequence note:** account creation is step one of sign-up. On success the teacher is redirected to the
+manual payment page (F28) before email verification and workspace creation continue below.
 
 1. Teacher opens the app. The **sign-in** screen is shown with the Arabic/English switch in the corner
    (top-right in LTR, top-left in RTL — matching the prototype's `inset-inline-end` placement).
@@ -1120,6 +1125,34 @@ homework history
 | AI provider proposed | Not called in V1; no UI claims AI analysis. |
 
 **AC:** F-P3-10, F-P1-09, F-P3-01, F-P2-06, F-P1-12, F-P3-07
+
+---
+
+## F28 — Pay the manual subscription after account creation
+
+**Actor:** New teacher · **Tier:** P0 · **Preconditions:** the account form on `/{locale}/sign-up`
+has succeeded (F1 step 3)
+
+1. The server redirects to `/{locale}/subscribe?registered=1`; when outbound email is configured it
+   also sets `verify=1`. These query values only select which notices and links are shown.
+2. The teacher sees **step 2 of 2**: the real monthly-subscription amount, the real InstaPay QR, the
+   InstaPay handle, and the real direct payment link. The link opens InstaPay in a new tab; Kashkol
+   never submits a payment and never claims one was sent.
+3. The teacher transfers the amount in InstaPay and keeps the receipt. The page states that Kashkol
+   does not detect transfers and that the receipt is confirmed manually.
+4. The page links to email verification when it is required, and always links to sign-in. Workspace
+   creation resumes after verification (F1 steps 5–8).
+
+**Error / edge cases**
+
+| Case | Behaviour |
+|---|---|
+| Teacher opens `/subscribe` directly | The payment instructions render; no account or payment state is implied. |
+| Teacher refreshes the page | The same static instructions render; no duplicate payment state is possible. |
+| InstaPay link is unavailable | The teacher still has the QR and the handle; Kashkol does not claim a retry succeeded. |
+| Payment is made but not confirmed | Nothing is activated automatically; the teacher keeps the receipt for manual confirmation. |
+
+**AC:** F-P0-02, NF-5, NF-10
 
 ---
 

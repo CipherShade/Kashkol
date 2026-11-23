@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-21 · **Status:** Evergreen-and-parchment visual refresh (ADR-0035) complete — tokens, shell, sidebar, dashboard composition, and primitives updated. All gates pass, including the full integration suite (155/155). A follow-up migration repair restored the report-export queue, the Arabic trigram indexes, and the file-scope indexes that an auto-generated diff had dropped. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-23 · **Status:** Two-step teacher sign-up and the Arabic ك brand mark are implemented (ADR-0036, ADR-0037). Account creation now redirects to a dedicated manual payment page; the shared monogram, favicon, and PWA icons use the Arabic letter ك. All gates pass, including the full integration suite (155/155). A follow-up migration repair restored the report-export queue, the Arabic trigram indexes, and the file-scope indexes that an auto-generated diff had dropped. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -25,7 +25,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (29 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (31 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -137,7 +137,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Document | Lines | What it contains |
 |---|---|---|
 | `docs/PRODUCT_REQUIREMENTS.md` | 1,211 | Product definition, roles, tenancy, language/RTL/theming rules, design tokens, domain model, 45 requirement flows across P0–P3 with testable acceptance criteria, a 16-entry risk register (`R-01`–`R-16`), privacy register, integration dependencies, 13 hard prohibitions (`NF-1`–`NF-13`), and three appendices: the observed prototype inventory, 23 prototype defects not to carry forward (`DEF-01`–`DEF-23`), and the decision index (`D-01`–`D-18`). |
-| `docs/USER_FLOWS.md` | 794 | 26 end-to-end flows (`F1`–`F26`) with preconditions, step-by-step behaviour, error and edge cases, audit events, and a closing invariants appendix. Every flow names the requirements it satisfies and the prototype defect it resolves. |
+| `docs/USER_FLOWS.md` | 794 | 28 end-to-end flows (`F1`–`F28`) with preconditions, step-by-step behaviour, error and edge cases, audit events, and a closing invariants appendix. Every flow names the requirements it satisfies and the prototype defect it resolves. |
 | `docs/RELEASE_PLAN.md` | 392 | Milestones M0–M3 with work packages, entry/exit criteria, scope-in and scope-out tables, a private-beta design, release gates, release cadence and hotfix policy, external dependencies with consequences, plan-level risks, a definition of done, and full requirement-to-milestone traceability. |
 | `docs/OPEN_QUESTIONS_AND_ASSUMPTIONS.md` | 184 | 17 assumptions (`A-01`–`A-17`) and 19 open questions (`OQ-01`–`OQ-19`), each with options, a conservative default that applies until answered, the impact of a different answer, and a decision deadline; plus the resolution procedure and the external-dependency register. |
 
@@ -1637,3 +1637,19 @@ policy.
 | Know the current state and the next task | `STATUS.md` (this file) |
 | Know the rules for working in this repository | `../AGENTS.md` |
 | Know how to back up, restore, and verify the database | `OPERATIONS_RUNBOOK.md` |
+
+### 2026-11-23 — Two-step sign-up and Arabic ك identity (ADR-0036, ADR-0037)
+
+- `/{locale}/sign-up` now contains only the account form. A successful sign-up redirects through the
+  pure `signUpDestination()` helper to `/{locale}/subscribe?registered=1` (`&verify=1` when outbound
+  email is configured). No session is started by sign-up; verification rules are unchanged.
+- `/{locale}/subscribe` is the second, public step: the real InstaPay QR, handle, and direct link,
+  the two-step progress label, and links to verification (when required) and sign-in. The copy no
+  longer claims automatic activation; the receipt is confirmed manually (`NF-5`).
+- The shared `BrandMark` now renders the Arabic letter ك as a vector path in the existing rounded
+  frame. It paints with `currentColor`, so light and dark variants come from the token layer. The
+  landing header, auth layout, portal sign-in, workspace creation, and app sidebar all use it.
+- `/icon.svg`, `/pwa-192x192.png`, `/pwa-512x512.png`, `/pwa-maskable-512x512.png`, and
+  `/apple-touch-icon.png` were regenerated with the same ك path and the ADR-0035 evergreen palette.
+- `USER_FLOWS.md` gained F28 for the payment step and a sequence note in F1. No schema, migration,
+  route-registry, or permission change was needed.

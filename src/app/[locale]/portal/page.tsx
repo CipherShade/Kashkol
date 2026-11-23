@@ -8,7 +8,7 @@ import { getPortalContext } from "@/modules/identity/session";
 import { PortalSignInForm } from "@/components/portal/portal-signin-form";
 import { LanguageSwitch } from "@/components/ui/language-switch";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
-import { Icon } from "@/components/ui/icon";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { getPreferredTheme } from "@/modules/identity/preferences";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +63,7 @@ export default async function PortalPage({ params, searchParams }: PageProps) {
       <header className="auth-topbar">
         <Link href="/" locale={locale} className="auth-brand">
           <span className="auth-brand-mark">
-            <Icon name="target" size={20} />
+            <BrandMark size={22} />
           </span>
           <span className="auth-brand-text">
             <span className="auth-brand-name">{app("name")}</span>

@@ -1,37 +1,11 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Icon } from "@/components/ui/icon";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { LanguageSwitch } from "@/components/ui/language-switch";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import type { PreferredTheme } from "@/lib/theme";
 import { LANDING_SECTIONS } from "@/lib/landing/content";
-
-function BrandMark() {
-  return (
-    <span className="landing-brand__mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32" role="presentation" focusable="false">
-        <rect
-          x="1"
-          y="1"
-          width="30"
-          height="30"
-          rx="9"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-        />
-        <path
-          d="M9.5 21.5v-11M20.5 10.5 13.5 16l7 5.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
 
 /**
  * The public header. The language and theme switches are the same components
@@ -56,7 +30,9 @@ export async function LandingHeader({
     <header className="landing-header">
       <div className="landing-container landing-header__inner">
         <Link href="/" className="landing-brand" aria-label={t("brandAria")}>
-          <BrandMark />
+          <span className="landing-brand__mark">
+            <BrandMark />
+          </span>
           <span className="landing-brand__name">{app("name")}</span>
         </Link>
 

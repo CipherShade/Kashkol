@@ -3,7 +3,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { LanguageSwitch } from "@/components/ui/language-switch";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
-import { Icon } from "@/components/ui/icon";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { getPreferredTheme } from "@/modules/identity/preferences";
@@ -26,7 +26,7 @@ export default async function AuthLayout({
       <header className="auth-topbar">
         <Link href="/" locale={locale} className="auth-brand">
           <span className="auth-brand-mark">
-            <Icon name="target" size={20} />
+            <BrandMark size={22} />
           </span>
           <span className="auth-brand-text">
             <span className="auth-brand-name">{app("name")}</span>

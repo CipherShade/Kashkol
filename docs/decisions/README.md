@@ -57,6 +57,8 @@ Every ADR uses the same sections:
 | [0033](0033-academic-terms-only.md) | Academic-year handling ships terms only | Accepted (approved 2026-11-18) | M3a |
 | [0034](0034-computed-performance-intelligence.md) | Performance intelligence is computed, evidence-backed, and rule-based | Accepted (approved 2026-11-19) | M3b |
 | [0035](0035-evergreen-parchment-interface.md) | Evergreen-and-parchment interface language (supersedes ADR-0023 visual values) | Accepted (approved 2026-11-21) | M0–M3 |
+| [0036](0036-two-step-signup-payment-page.md) | Two-step teacher sign-up with a separate payment page | Accepted (approved 2026-11-23) | M0 |
+| [0037](0037-arabic-kaf-brand-mark.md) | Arabic ك brand mark and theme-aware icon | Accepted (approved 2026-11-23) | M0 |
 
 ## Conventions
 
@@ -109,3 +111,5 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0029 | `D-03`, `F-P1-04`, `F-P1-05`, `F-P1-06`, `F-P1-07`, `F-P2-05`, `R-01`, `R-02`, `NF-1`, `NF-5`, `A-22` |
 | 0030 | `F-P0-02`, `NF-1`, `NF-8`, `NF-11`, `NF-12`, `ADR-0003`, `ADR-0006` |
 | 0034 | `F-P3-10`, `F27`, `R-02`, `NF-1`, `NF-6`, `NF-10`, `NF-12`, `ADR-0007`, `ADR-0032` |
+| 0036 | `F1`, `F28`, `F-P0-02`, `NF-5`, `NF-10`, `ADR-0003` |
+| 0037 | `F-P0-03`, `F-P0-04`, `NF-10`, `ADR-0035` |

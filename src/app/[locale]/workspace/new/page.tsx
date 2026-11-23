@@ -2,7 +2,7 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound, redirect } from "next/navigation";
 import { CreateWorkspaceForm } from "@/components/workspace/forms";
-import { Icon } from "@/components/ui/icon";
+import { BrandMark } from "@/components/ui/brand-mark";
 import { LanguageSwitch } from "@/components/ui/language-switch";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { routing } from "@/i18n/routing";
@@ -36,7 +36,7 @@ export default async function NewWorkspacePage({ params }: PageProps) {
       <header className="auth-topbar">
         <div className="auth-brand">
           <span className="auth-brand-mark">
-            <Icon name="target" size={20} />
+            <BrandMark size={22} />
           </span>
           <span className="auth-brand-text">
             <span className="auth-brand-name">{app("name")}</span>
