@@ -1002,11 +1002,10 @@ Seven correctness gaps found during code review were fixed across Phase 1 and Ph
 
 ---
 
-**Staging deploy is blocked, not done.** No Railway credentials exist in this environment
-(`RAILWAY_TOKEN`/`RAILWAY_API_TOKEN`/`RAILWAY_SERVICE_TOKEN` unset; `railway whoami` →
-`Unauthorized`), and `.github/workflows/ci.yml` is test-and-build only with no deploy job. Item
-`0.20` in the plan below stays `◐`; a deploy must not be marked done until a health check passes
-on a real staging URL.
+**Staging deploy is not done.** Railway access was subsequently restored through the CLI-backed MCP
+and a production deploy was repaired and verified below, but no staging deploy has been run and
+`.github/workflows/ci.yml` remains test-and-build only with no deploy job. Item `0.20` in the plan
+below stays `◐`; a deploy must not be marked done until a health check passes on a real staging URL.
 
 ### 5.18 Theme-switch hydration loop on the public landing page, fixed on 2026-11-13 — `F-P0-04`
 
@@ -1342,6 +1341,36 @@ The quick-tunnel hostname is ephemeral: a tunnel restart requires registering th
 `…/api/auth/callback/google` URI in the provider console before OAuth works again.
 
 
+### 5.19 Railway production migration recovery, fixed on 2026-11-23 — deploy pipeline
+
+**Symptom.** Seven consecutive Railway deployments failed in the pre-deploy migration command. The
+last failure was `P3018 / 42P07: relation "session_revision" already exists`.
+
+**Root cause.** An earlier deployment failed after creating `session_revision` but before finishing
+the migration ledger row. `scripts/migrate-deploy.mjs` then marked every unfinished row as rolled
+back, so Prisma tried to re-run DDL that was already present. A later correction used a Prisma 6
+`success` column that Prisma 7.10 does not have.
+
+**Fix.** The runner now refuses to guess: unresolved migrations require `--applied <name>` or
+`--rolled-back <name>`; `--applied` is guarded by a `to_regclass` check. It reads the Prisma 7
+ledger columns only (`finished_at`, `rolled_back_at`). The one-off production pre-deploy command
+marked `20261025110000_session_revision` applied, then was reset to the plain runner so future
+deploys fail closed instead of repeating a stale resolution.
+
+**Verification.** Railway deployment `b9180d79-6776-4074-983f-968cf7024068` reached `SUCCESS` after
+`All migrations have been successfully applied`. The service is online at
+`https://kashkol.up.railway.app/healthz`, which returned
+`{"status":"ok","service":"kashkol",...}`.
+
+**Gate result (2026-11-23).** `npm run lint`, `npm run typecheck`, `npm test` (78 unit files /
+529 tests + 3 UI files / 30 tests), and `npm run build` all passed. `npm run test:integration` was
+not run in this pass; no tenant query changed.
+
+**Not claimed.** No staging deploy was run, so item `0.20` remains `◐`. The live `session_revision`
+table was not structurally compared column-by-column with the migration; the recovery relied on the
+matching `to_regclass` relation check and the successful full migration deploy.
+
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work
@@ -1374,7 +1403,7 @@ task.
 | 0.17 | Implement i18n: locale routing, the bilingual catalogue, RTL layout, theming | `F-P0-03` and `F-P0-04` pass; a missing translation fails the build | ◐ routing, RTL shell, tokens, and parity check exist; full catalogue pending |
 | 0.18 | Build the design system primitives on Radix | `F-P0-05` passes; keyboard and screen-reader checks pass on every primitive | ☑ |
 | 0.19 | Implement the privacy groundwork: data minimisation, redaction, retention configuration, the export schema | `F-P0-08` AC-1 (minimisation) and AC-6 (no PII in logs) pass; AC-2 (export) and AC-3 (deletion) are scheduled for M1/M2 | ☐ |
-| 0.20 | Deploy to Railway: web, worker, database, secrets, health checks, staging and preview environments | A staging deploy passes the health check and the production-config guard | ◐ `railway.json` (web) and `railway.worker.json` (worker), `npm run worker` with claim-then-complete drains, a migration gate, and Railway restart policy exist; no staging deploy has been run yet |
+| 0.20 | Deploy to Railway: web, worker, database, secrets, health checks, staging and preview environments | A staging deploy passes the health check and the production-config guard | ◐ `railway.json` (web) and `railway.worker.json` (worker), `npm run worker` with claim-then-complete drains, a migration gate, and Railway restart policy exist; production deploy was repaired and `/healthz` passes, but no staging deploy has been run yet |
 | 0.21 | Run the M0 release gate (§3 of `RELEASE_PLAN.md`) | Every gate item is checked with evidence | ☐ |
 
 ### M1 — Core product (P1)
