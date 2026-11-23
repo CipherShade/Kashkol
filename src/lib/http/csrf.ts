@@ -22,9 +22,19 @@ export function assertTrustedOrigin(headers: Headers, baseUrl: string): void {
     throw new AppError("INTERNAL");
   }
 
-  if (origin !== allowed) {
-    throw new AppError("FORBIDDEN", { messageKey: "errors.originRejected" });
+  if (origin === allowed) return;
+
+  // Allow Cloudflare quick tunnel origins (*.trycloudflare.com)
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol === "https:" && parsed.hostname.endsWith(".trycloudflare.com")) {
+      return;
+    }
+  } catch {
+    // Ignore invalid origin
   }
+
+  throw new AppError("FORBIDDEN", { messageKey: "errors.originRejected" });
 }
 
 /**

@@ -15,19 +15,21 @@ export type LandingEntry = {
 };
 
 /** Same-page anchors. The header and the footer both read this list. */
-export const LANDING_SECTIONS = ["benefits", "proof", "faq"] as const;
+export const LANDING_SECTIONS = ["benefits", "pricing", "proof", "faq"] as const;
 export type LandingSection = (typeof LANDING_SECTIONS)[number];
 
 export const NAV_ITEMS: readonly { key: LandingSection }[] = LANDING_SECTIONS.map((key) => ({
   key,
 }));
 
-/** Benefit-led outcomes backed by real product capabilities. */
+/** Problem → Solution feature cards backed by real product capabilities. */
 export const BENEFIT_ITEMS: readonly LandingEntry[] = [
-  { key: "control", icon: "layers" },
-  { key: "time", icon: "calendar" },
-  { key: "clarity", icon: "bar" },
-  { key: "confidence", icon: "shield" },
+  { key: "attendance", icon: "check" },
+  { key: "parents", icon: "whatsapp" },
+  { key: "homework", icon: "book" },
+  { key: "payments", icon: "bar" },
+  { key: "team", icon: "staff" },
+  { key: "files", icon: "file" },
 ];
 
 /** Social proof uses real product facts, not fabricated testimonials. */

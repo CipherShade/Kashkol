@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { LandingClassroomTicker } from "@/components/landing/classroom-ticker";
 import { LandingFooter } from "@/components/landing/footer";
 import { LandingHeader } from "@/components/landing/header";
 import { LandingHero } from "@/components/landing/hero";
+import { LandingInteractiveCalculator } from "@/components/landing/interactive-calculator";
+import { LandingScrollTop } from "@/components/landing/scroll-top";
 import {
   LandingBenefits,
   LandingCallToAction,
   LandingFaq,
   LandingHow,
+  LandingPricing,
   LandingProof,
 } from "@/components/landing/sections";
 import { buildLandingMetadata, landingSiteUrl } from "@/lib/landing/seo";
@@ -72,14 +76,18 @@ export default async function LandingPage({ params }: LandingPageProps) {
 
       <main id="main">
         <LandingHero signedIn={signedIn} locale={appLocale} />
+        <LandingClassroomTicker />
         <LandingBenefits />
         <LandingProof />
         <LandingHow />
+        <LandingInteractiveCalculator signedIn={signedIn} />
+        <LandingPricing />
         <LandingFaq />
         <LandingCallToAction signedIn={signedIn} />
       </main>
 
       <LandingFooter signedIn={signedIn} />
+      <LandingScrollTop />
     </div>
   );
 }

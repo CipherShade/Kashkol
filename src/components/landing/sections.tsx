@@ -15,14 +15,38 @@ export async function LandingBenefits() {
         </h2>
         <p className="landing-sub">{t("subtitle")}</p>
 
-        <ul className="landing-gap__grid">
+        <ul className="landing-features__grid">
           {BENEFIT_ITEMS.map(({ key, icon }) => (
-            <li key={key} className="landing-gap__item">
-              <span className="landing-icon" aria-hidden="true">
-                <Icon name={icon} size={20} />
-              </span>
-              <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
-              <p>{t(`items.${key}.body`)}</p>
+            <li key={key} className="landing-feature-card">
+              <div className="landing-feature-card__icon-row">
+                <span className="landing-icon" aria-hidden="true">
+                  <Icon name={icon} size={22} />
+                </span>
+                <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
+              </div>
+
+              <div className="landing-feature-card__problem">
+                <span className="landing-feature-card__problem-label" aria-hidden="true">
+                  <Icon name="alert" size={12} />
+                  {t("problemLabel")}
+                </span>
+                <p className="landing-feature-card__problem-text">{t(`items.${key}.problem`)}</p>
+              </div>
+
+              <div className="landing-feature-card__divider" aria-hidden="true">
+                <span className="landing-feature-card__divider-line" />
+                <span className="landing-feature-card__divider-label">{t("solutionLabel")}</span>
+                <span className="landing-feature-card__divider-line" />
+              </div>
+
+              <div className="landing-feature-card__solution">
+                <span className="landing-feature-card__solution-icon" aria-hidden="true">
+                  <Icon name="checkCircle" size={14} />
+                </span>
+                <p className="landing-feature-card__solution-text">{t(`items.${key}.solution`)}</p>
+              </div>
+
+              <p className="landing-feature-card__body">{t(`items.${key}.body`)}</p>
             </li>
           ))}
         </ul>
@@ -145,6 +169,66 @@ export async function LandingCallToAction({ signedIn }: { signedIn: boolean }) {
             )}
           </div>
           <p className="landing-cta__note">{t("cta.note")}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const PRICING_FEATURE_KEYS = [
+  "attendance",
+  "homework",
+  "payments",
+  "portal",
+  "files",
+  "team",
+] as const;
+
+export async function LandingPricing() {
+  const t = await getTranslations("Landing.pricing");
+
+  return (
+    <section className="landing-section landing-section--pricing" id="pricing" aria-labelledby="pricing-title">
+      <div className="landing-container">
+        <p className="landing-eyebrow">{t("eyebrow")}</p>
+        <h2 id="pricing-title" className="landing-h2">
+          {t("title")}
+        </h2>
+        <p className="landing-sub">{t("subtitle")}</p>
+
+        <div className="landing-pricing-card">
+          <div className="landing-pricing-card__header">
+            <span className="landing-pricing-card__badge">{t("planName")}</span>
+            <div className="landing-pricing-card__price-row">
+              <span className="landing-pricing-card__amount">{t("price")}</span>
+              <span className="landing-pricing-card__currency">{t("currency")}</span>
+              <span className="landing-pricing-card__period">/ {t("period")}</span>
+            </div>
+            <p className="landing-pricing-card__sub">{t("subtitle")}</p>
+          </div>
+
+          <ul className="landing-pricing-card__features">
+            {PRICING_FEATURE_KEYS.map((key) => (
+              <li key={key} className="landing-pricing-card__feature">
+                <span className="landing-pricing-card__check" aria-hidden="true">
+                  <Icon name="checkCircle" size={16} />
+                </span>
+                <span>{t(`features.${key}`)}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="landing-pricing-card__footer">
+            <Link
+              href="/sign-up"
+              className="ui-button landing-pricing-card__cta"
+              data-variant="primary"
+            >
+              <Icon name="arrowRight" size={16} aria-hidden="true" />
+              {t("ctaButton")}
+            </Link>
+            <p className="landing-pricing-card__note">{t("note")}</p>
+          </div>
         </div>
       </div>
     </section>

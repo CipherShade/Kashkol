@@ -10,6 +10,11 @@ describe("same-origin guard", () => {
     expect(() => assertTrustedOrigin(headers, BASE)).not.toThrow();
   });
 
+  it("accepts a Cloudflare quick tunnel origin", () => {
+    const headers = new Headers({ origin: "https://my-tunnel.trycloudflare.com" });
+    expect(() => assertTrustedOrigin(headers, BASE)).not.toThrow();
+  });
+
   it("rejects another origin", () => {
     const headers = new Headers({ origin: "https://attacker.test" });
     expect(() => assertTrustedOrigin(headers, BASE)).toThrow(AppError);

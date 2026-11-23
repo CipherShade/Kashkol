@@ -15,11 +15,13 @@
       "label": "Primary",
       "benefits": "Benefits",
       "proof": "Why Kashkol",
-      "faq": "FAQ"
+      "faq": "FAQ",
+      "pricing": "Pricing"
     },
     "signIn": "Sign in",
     "openApp": "Open app",
     "createAccount": "Try Now!",
+    "scrollTop": "Back to top",
     "hero": {
       "eyebrow": "For private teachers in Egypt",
       "title": "You teach the lesson. We handle the rest.",
@@ -34,31 +36,110 @@
       "previewAria": "Preview of the Kashkol interface",
       "previewAlt": "A screenshot of a demo workspace in Kashkol",
       "caption": "Screenshot from a demo workspace with synthetic data.",
-      "illustrationCaption": "A clean preview of the Kashkol workspace.",
-      "demoBadge": "Demo"
+      "illustrationCaption": "A live interactive preview of the Kashkol workspace.",
+      "demoBadge": "Demo",
+      "preview": {
+        "liveBadge": "Live Interactive Demo",
+        "tabAttendance": "Quick Attendance",
+        "tabSessions": "Sessions & Schedule",
+        "tabHomework": "Homework & Grading",
+        "groupTitle": "Senior Secondary Group — Sat 5:00 PM",
+        "attendanceHint": "Click any status to record attendance and update the rate in real time",
+        "student1": "Ahmed Mahmoud",
+        "student2": "Mariam Saeed",
+        "student3": "Omar Khaled",
+        "statusPresent": "Present",
+        "statusAbsent": "Absent",
+        "statusLate": "Late",
+        "statusExcused": "Excused",
+        "rateLabel": "Attendance rate:",
+        "badgeRtl": "100% Native Arabic & RTL",
+        "badgePrivacy": "Strict Tenant Data Isolation",
+        "sessionPhysics": "Physics — El Awail Center",
+        "sessionPhysicsTime": "Today · 4:00 PM",
+        "sessionChem": "Chemistry — Al Tamayoz Hall",
+        "sessionChemTime": "Today · 6:30 PM",
+        "sessionStart": "Start Session Attendance",
+        "hwTitle": "Calculus Homework — p. 45",
+        "hwSubmissions": "18 of 20 students turned in",
+        "hwGradeSample": "Assignment score:",
+        "scoreValue": "9 of 10",
+        "noteScore": "🌟 Monthly Exam: Excellent (29/30)",
+        "noteTime": "⏰ Saturday Session 5:00 PM — Room 1"
+      }
+    },
+    "ticker": {
+      "item1": "Instant attendance via list or QR check-in",
+      "item2": "Clean digital workspace for every group",
+      "item3": "Automatic absence alerts and follow-ups",
+      "item4": "Clear performance reports for parents",
+      "item5": "Homework turn-in and grade tracking",
+      "item6": "Secure, private records without notebooks"
+    },
+    "calculator": {
+      "eyebrow": "Calculate your gain",
+      "title": "How many hours will you save every week?",
+      "subtitle": "Slide the controls to see how notebook chaos and chat chasing turn into a peaceful, organized system.",
+      "studentsLabel": "Total students across groups:",
+      "studentsUnit": "students",
+      "sessionsLabel": "Sessions per week:",
+      "sessionsUnit": "sessions / week",
+      "savedHoursLabel": "Hours saved weekly for actual teaching",
+      "savedHoursUnit": "hrs / week",
+      "checkinSpeedLabel": "Average session check-in time",
+      "checkinSpeedVal": "< 40 seconds",
+      "accuracyLabel": "Record and attendance accuracy",
+      "accuracyVal": "100% computed truth",
+      "breakdownTitle": "Grounded in real teacher routines:",
+      "breakdownSession": "~30 mins saved per session on roll call and fee receipts",
+      "breakdownHomework": "2–4 hrs/wk saved on homework grading and WhatsApp follow-ups",
+      "breakdownReports": "~3 hrs/mo automated for monthly student report cards",
+      "ctaPrompt": "Start now and focus your energy on teaching"
     },
     "benefits": {
-      "eyebrow": "Why teachers choose Kashkol",
-      "title": "Less admin. More teaching.",
-      "subtitle": "Everything you need to run your practice, organized around the work you already do.",
+      "eyebrow": "The daily headaches Kashkol solves",
+      "title": "Free from admin chaos",
+      "subtitle": "Kashkol is built around every problem you face daily — not just another data storage app.",
       "items": {
-        "control": {
-          "title": "Run your whole practice in one place",
-          "body": "Students, groups, sessions, homework, assessments, and files stay connected so you’re not chasing information across notebooks and chats."
+        "attendance": {
+          "title": "Attendance & Roll Call",
+          "body": "Save 30 minutes every class. Mark attendance with a scan, and generate a parent-ready absence report in seconds.",
+          "problem": "15-25 minutes of every class is wasted on paper roll calls and students disputing their attendance records.",
+          "solution": "1-tap digital roster + QR scan 60 students in 60 seconds + instant WhatsApp absence report."
         },
-        "time": {
-          "title": "Get hours back every week",
-          "body": "Plan sessions, take attendance, assign homework, and review work from one clear workflow instead of rebuilding your day from scratch."
+        "parents": {
+          "title": "Parent Portal",
+          "body": "Give every student a secure link showing real-time attendance, homework, and grades. Cut parent messages by 70%.",
+          "problem": "Parents flood your phone with the same questions day and night: Did my son attend? What was his grade?",
+          "solution": "A private parent portal installed as an app on their phone answers every question automatically, 24/7."
         },
-        "clarity": {
-          "title": "See what’s happening at a glance",
-          "body": "Your records stay organized and easy to read, so you can make decisions quickly with confidence."
+        "homework": {
+          "title": "Homework & Academic Performance",
+          "body": "Track who submitted and who did not, record grades, and spot struggling students early — without a single spreadsheet.",
+          "problem": "You only realize a student stopped submitting homework when they fail the monthly exam — too late to intervene.",
+          "solution": "Per-session homework tracking, live performance cards, and early-warning alerts for at-risk students."
         },
-        "confidence": {
-          "title": "Built for real teaching work",
-          "body": "Arabic and English, light and dark, and a workspace designed for private teachers — simple, focused, and ready for daily use."
+        "payments": {
+          "title": "Fees & Payments",
+          "body": "Eliminate payment confusion. See every student balance, calculate session revenue, and track outstanding fees in seconds.",
+          "problem": "Tracking monthly fees, booklet costs, center commissions, and overdue balances in paper notebooks causes financial leakage.",
+          "solution": "An audit-proof cash ledger per student showing who paid, who owes, and the total revenue for every session."
+        },
+        "team": {
+          "title": "Team & Assistants",
+          "body": "Add assistants with safe, limited permissions. Every change is timestamped with their name, keeping your finances private.",
+          "problem": "Giving assistants access to your account exposes your financial data and all group information to everyone.",
+          "solution": "Role-based permissions so assistants can take attendance without seeing financial numbers or other groups."
+        },
+        "files": {
+          "title": "Files & Study Materials",
+          "body": "Upload revision sheets, model answers, and booklets once. Students find everything organized in their portal.",
+          "problem": "PDF model answers get buried in WhatsApp groups and students cannot find last week revision sheets.",
+          "solution": "A session-linked file library that is securely accessible only to students enrolled in that specific group."
         }
-      }
+      },
+      "problemLabel": "The Pain",
+      "solutionLabel": "Kashkol Solves It"
     },
     "proof": {
       "eyebrow": "Built on trust",
@@ -136,6 +217,25 @@
       },
       "status": "System status",
       "rights": "© {year} Kashkol."
+    },
+    "pricing": {
+      "eyebrow": "Kashkol Subscription",
+      "title": "One price. Everything included.",
+      "subtitle": "One clear price, no hidden fees or extra charges. Subscribe and run your classes professionally.",
+      "price": "249",
+      "currency": "EGP",
+      "period": "per month",
+      "planName": "All-in-One Teacher Plan",
+      "features": {
+        "attendance": "Student attendance tracking & instant QR scanner",
+        "homework": "Homework grading, exams & academic progress",
+        "payments": "Clear student fee records & session revenue",
+        "portal": "Dedicated student & parent mobile portal",
+        "files": "Secure study material & PDF library per group",
+        "team": "Safe role-based permissions for assistants"
+      },
+      "ctaButton": "Create account & get started",
+      "note": "Payment and subscription activation details appear when creating your account."
     }
   },
   "Common": {
@@ -236,7 +336,21 @@
     "signInLink": "Go to sign in",
     "socialDivider": "Or continue with",
     "continueWithGoogle": "Continue with Google",
-    "continueWithFacebook": "Continue with Facebook"
+    "continueWithFacebook": "Continue with Facebook",
+    "subscription": {
+      "title": "How to Subscribe & Activate",
+      "planTitle": "Monthly Kashkol Subscription",
+      "price": "249",
+      "currency": "EGP",
+      "period": "per month",
+      "step1": "Create your account by entering your details above.",
+      "step2": "Pay 249 EGP via InstaPay using the QR code or the direct payment link.",
+      "step3": "Your subscription and account are activated upon payment confirmation.",
+      "instapayId": "youssefahmed.telda@instapay",
+      "payButton": "Pay via direct InstaPay link",
+      "qrAlt": "InstaPay QR Code — youssefahmed.telda@instapay",
+      "note": "Payment is processed via InstaPay. Account is activated upon receipt confirmation."
+    }
   },
   "auth": {
     "errors": {
@@ -634,7 +748,7 @@
     "eyebrow": "Overview",
     "title": "Dashboard",
     "heroTitle": "Welcome back, {name}",
-  "heroSummary": "You have {sessions, plural, =0 {no sessions} one {# session} other {# sessions}} scheduled today, and {attention, plural, =0 {no students} one {# student} other {# students}} flagged for follow-up.",
+    "heroSummary": "You have {sessions, plural, =0 {no sessions} one {# session} other {# sessions}} scheduled today, and {attention, plural, =0 {no students} one {# student} other {# students}} flagged for follow-up.",
     "subtitle": "This page shows only what exists in your workspace. There are no sample statistics.",
     "workspaceCard": "Workspace",
     "workspaceCardHint": "The identity shown across the workspace.",

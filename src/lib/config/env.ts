@@ -9,6 +9,11 @@ const serverEnvSchema = z
     DIRECT_DATABASE_URL: z.string().min(1).optional(),
     BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
     BETTER_AUTH_URL: z.string().min(1, "BETTER_AUTH_URL is required"),
+    // Comma-separated list of additional trusted origins for Better Auth and
+    // the application-level CSRF check. In local development this is used to
+    // allow Cloudflare quick-tunnel origins (e.g. https://*.trycloudflare.com).
+    // Must never include untrusted third-party domains in production.
+    BETTER_AUTH_TRUSTED_ORIGINS: z.string().optional(),
     REQUIRE_MIGRATIONS: z
       .enum(["true", "false"])
       .default("true")
@@ -232,6 +237,7 @@ export type ServerEnv = {
   DIRECT_DATABASE_URL?: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
   REQUIRE_MIGRATIONS: boolean;
   EMAIL_TRANSPORT: "console" | "smtp" | "none";
   EMAIL_FROM: string;
