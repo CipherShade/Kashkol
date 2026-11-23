@@ -1377,6 +1377,15 @@
   color: var(--card-invert-muted);
 }
 
+/* The global h1–h4 rule paints headings with --ink; on the inverted band that
+   colour is the same as the background in both themes. Override it here. */
+.landing-truth h1,
+.landing-truth h2,
+.landing-truth h3,
+.landing-truth h4 {
+  color: var(--card-invert-ink);
+}
+
 .landing-truth__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
@@ -1564,7 +1573,7 @@
 }
 
 .landing-step:hover .landing-step__number {
-  color: var(--primary);
+  color: var(--primary-strong);
   transform: scale(1.12);
 }
 
@@ -1572,7 +1581,7 @@
   position: absolute;
   inset-block-start: 0.9rem;
   inset-inline-end: 1rem;
-  color: var(--border-strong);
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: 1.5rem;
   font-weight: 700;
@@ -1720,7 +1729,9 @@
   gap: 1rem;
 }
 
-.landing-calculator__stat-card--hero {
+/* The base .landing-calculator__stat-card rule is declared after this one, so
+   the modifier needs a second class to win the cascade and keep its dark fill. */
+.landing-calculator__stat-card.landing-calculator__stat-card--hero {
   position: relative;
   overflow: hidden;
   display: flex;
@@ -1733,7 +1744,7 @@
   box-shadow: 0 10px 28px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
-.landing-calculator__stat-card--hero::before {
+.landing-calculator__stat-card.landing-calculator__stat-card--hero::before {
   content: "";
   position: absolute;
   inset-block-start: -50%;
@@ -2022,15 +2033,15 @@
   gap: 0.4rem;
   padding-block: 0.9rem;
   padding-inline: 1.25rem;
-  background: color-mix(in srgb, #ef4444 5%, transparent);
-  border-block-end: 1px solid color-mix(in srgb, #ef4444 15%, transparent);
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
+  border-block-end: 1px solid color-mix(in srgb, var(--danger) 15%, transparent);
 }
 
 .landing-feature-card__problem-label {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  color: #dc2626;
+  color: var(--danger-ink);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -2066,7 +2077,7 @@
 
 .landing-feature-card__divider-label {
   flex: none;
-  color: var(--primary);
+  color: var(--primary-strong);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -2146,7 +2157,7 @@
 .landing-pricing-card__badge {
   font-size: 0.78rem;
   font-weight: 700;
-  color: var(--primary);
+  color: var(--primary-strong);
   background: color-mix(in srgb, var(--primary) 10%, transparent);
   padding-block: 0.25rem;
   padding-inline: 0.75rem;

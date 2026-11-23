@@ -1653,3 +1653,25 @@ policy.
   `/apple-touch-icon.png` were regenerated with the same ك path and the ADR-0035 evergreen palette.
 - `USER_FLOWS.md` gained F28 for the payment step and a sequence note in F1. No schema, migration,
   route-registry, or permission change was needed.
+
+### 2026-11-23 — Landing page light/dark contrast repair
+
+A rendered-style audit of `/en` in both themes found text that resolved to the same colour as its
+background, and fixed it:
+
+- The inverted "proof" band paints headings with `--card-invert-ink`; the global `h1`–`h4` rule was
+  overriding that with `--ink`, which equals the band background in both themes. Added an explicit
+  `.landing-truth h1..h4` override.
+- `.landing-calculator__stat-card--hero` declared its dark fill *before* the base
+  `.landing-calculator__stat-card` rule, so the base `background: var(--surface)` won the cascade and
+  left white `--primary-contrast` text on a white card in light mode. The modifier now carries a
+  second class so its fill wins.
+- `.landing-step__number` used the `--border-strong` token as a text colour; it now uses `--muted`,
+  and its hover state uses `--primary-strong`.
+- Hardcoded reds in the feature cards and `--primary` text on dark surfaces were replaced with
+  `--danger` / `--danger-ink` / `--primary-strong`; the light `--accent-ink` was darkened to keep the
+  decorative note above 4.5:1.
+
+`tests/unit/landing-theme.test.ts` locks the token contrast pairs and the cascade rules. A headless
+recheck reported zero low-contrast text nodes and zero backgrounds that fail to change in both
+`light` and `dark`. All gates pass (lint, typecheck, 539 unit + 32 UI tests, 155 integration, build).
