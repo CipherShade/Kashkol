@@ -4,6 +4,7 @@ import {
   classifyLedgerRow,
   migrationTable,
   parseResolutionArgs,
+  unresolvedMigrations,
 } from "../../scripts/migrate-deploy.mjs";
 
 describe("migrate-deploy resolution arguments", () => {
@@ -74,18 +75,43 @@ describe("Prisma 7 migration ledger classification", () => {
     });
   });
 
-  it("treats a rolled-back row as unresolved", () => {
-    expect(
-      classifyLedgerRow({
-        migration_name: "20261025110000_session_revision",
-        finished_at: null,
-        rolled_back_at: new Date("2026-11-23T00:00:00.000Z"),
-      })
-    ).toEqual({
+  it("treats a rolled-back row as resolved, not unresolved", () => {
+    const raw = {
+      migration_name: "20261025110000_session_revision",
+      finished_at: null,
+      rolled_back_at: new Date("2026-11-23T00:00:00.000Z"),
+    };
+
+    expect(classifyLedgerRow(raw)).toEqual({
       name: "20261025110000_session_revision",
       applied: false,
       rolledBack: true,
       unfinished: false,
     });
+    expect(unresolvedMigrations([raw])).toEqual([]);
+  });
+
+  it("returns only unfinished rows for an operator decision", () => {
+    const finished = {
+      migration_name: "20261025110000_session_revision",
+      finished_at: new Date("2026-11-23T00:00:00.000Z"),
+      rolled_back_at: null,
+    };
+    const rolledBack = {
+      migration_name: "20261025110000_session_revision",
+      finished_at: null,
+      rolled_back_at: new Date("2026-11-23T00:00:00.000Z"),
+    };
+    const unfinished = {
+      migration_name: "20261101000000_add_column",
+      finished_at: null,
+      rolled_back_at: null,
+    };
+
+    expect(
+      unresolvedMigrations([finished, rolledBack, unfinished]).map(
+        (row: { name: string }) => row.name
+      )
+    ).toEqual(["20261101000000_add_column"]);
   });
 });

@@ -4,12 +4,14 @@
  *
  * Pre-deploy migration runner for Railway.
  *
- * Prisma refuses to deploy when a migration is recorded as unfinished in
- * _prisma_migrations (P3009). Resolving that row is a data decision, not a
- * cleanup task: a migration may have applied its DDL before failing, in which
- * case it must be marked applied, not rolled back. This script therefore never
- * guesses. It reports unresolved migrations and requires an explicit operator
- * decision via --applied <name> or --rolled-back <name>.
+ * Prisma refuses to deploy when a migration is left unfinished in
+ * _prisma_migrations (P3009). A row with rolled_back_at set has already been
+ * resolved: Prisma will simply apply that migration again. Treating a rolled
+ * back row as unresolved would make every later deploy fail forever.
+ * A row that is neither finished nor rolled back is the only state that needs
+ * an operator decision, because the DDL may have been applied before a crash.
+ * This script therefore never guesses: it requires --applied <name> or
+ * --rolled-back <name> for those rows.
  */
 
 import { execSync } from "node:child_process";
@@ -60,6 +62,14 @@ export function classifyLedgerRow(row) {
   };
 }
 
+/**
+ * Only a row that is neither finished nor rolled back needs a decision.
+ * A rolled-back row is a resolved state: Prisma reapplies that migration.
+ */
+export function unresolvedMigrations(rows) {
+  return rows.map(classifyLedgerRow).filter((row) => row.unfinished);
+}
+
 async function readLedger(client) {
   const { rows } = await client.query(
     `SELECT migration_name, finished_at, rolled_back_at
@@ -67,7 +77,7 @@ async function readLedger(client) {
       ORDER BY migration_name`
   );
 
-  return rows.map(classifyLedgerRow);
+  return rows;
 }
 
 async function main() {
@@ -99,7 +109,7 @@ async function main() {
       throw error;
     }
 
-    const unresolved = ledger.filter((row) => !row.applied);
+    const unresolved = unresolvedMigrations(ledger);
     if (unresolved.length === 0) {
       console.log("No unresolved migrations — proceeding.");
       run("npx prisma migrate deploy");

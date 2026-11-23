@@ -1351,19 +1351,27 @@ the migration ledger row. `scripts/migrate-deploy.mjs` then marked every unfinis
 back, so Prisma tried to re-run DDL that was already present. A later correction used a Prisma 6
 `success` column that Prisma 7.10 does not have.
 
-**Fix.** The runner now refuses to guess: unresolved migrations require `--applied <name>` or
-`--rolled-back <name>`; `--applied` is guarded by a `to_regclass` check. It reads the Prisma 7
-ledger columns only (`finished_at`, `rolled_back_at`). The one-off production pre-deploy command
-marked `20261025110000_session_revision` applied, then was reset to the plain runner so future
-deploys fail closed instead of repeating a stale resolution.
+**Fix.** The runner now refuses to guess: a migration that is neither finished nor rolled back
+requires `--applied <name>` or `--rolled-back <name>`; `--applied` is guarded by a `to_regclass`
+check. It reads the Prisma 7 ledger columns only (`finished_at`, `rolled_back_at`). The one-off
+production pre-deploy command marked `20261025110000_session_revision` applied, then was reset to
+the plain runner so future deploys fail closed instead of repeating a stale resolution.
+
+**Follow-up defect, fixed in the same change.** The two documentation-only pushes after the recovery
+re-triggered deploys and failed with `Unresolved migrations ... (rolledBack=true)`. Prisma treats a
+row with `rolled_back_at` as resolved and reapplies that migration on the next `migrate deploy`; the
+runner was incorrectly treating it as unresolved. `unresolvedMigrations()` now selects only rows
+with neither `finished_at` nor `rolled_back_at`. A regression test asserts that a rolled-back row is
+not reported. The production pre-deploy command stays `node scripts/migrate-deploy.mjs`.
 
 **Verification.** Railway deployment `b9180d79-6776-4074-983f-968cf7024068` reached `SUCCESS` after
 `All migrations have been successfully applied`. The service is online at
 `https://kashkol.up.railway.app/healthz`, which returned
-`{"status":"ok","service":"kashkol",...}`.
+`{"status":"ok","service":"kashkol",...}`. The deploy triggered by the rolled-back-row fix is the
+final check that the plain runner now passes on the live ledger.
 
 **Gate result (2026-11-23).** `npm run lint`, `npm run typecheck`, `npm test` (78 unit files /
-529 tests + 3 UI files / 30 tests), `npm run test:integration` (24 files / 155 tests against the
+530 tests + 3 UI files / 30 tests), `npm run test:integration` (24 files / 155 tests against the
 pinned embedded PostgreSQL), and `npm run build` all passed.
 
 **Not claimed.** No staging deploy was run, so item `0.20` remains `◐`. The live `session_revision`
