@@ -1,0 +1,7 @@
+# nixpacks.toml
+# Prevent Nixpacks from auto-installing chromium & GUI apt packages
+# detected from puppeteer-core.
+
+[phases.setup]
+nixPkgs = ["nodejs_24", "openssl"]
+aptPkgs = []
