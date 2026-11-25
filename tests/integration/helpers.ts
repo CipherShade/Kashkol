@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
+import pg from "pg";
 import { getDb } from "@/lib/db/client";
 import { withScope, withUserScope } from "@/lib/db/scope";
 import type { Permission, PermissionAction, PermissionResource, Scope } from "@/modules/tenancy/types";
@@ -281,11 +282,37 @@ export async function createStudent(
   return id;
 }
 
+/**
+ * Remove one append-only receipt fixture through the direct database role.
+ *
+ * The application role deliberately has no DELETE privilege on `payment` and
+ * the append-only trigger rejects rewrites. Integration fixtures that need to
+ * clean up a session after recording a receipt use this privileged local-only
+ * helper; production code never can.
+ */
+export async function deletePaymentFixture(paymentId: string): Promise<void> {
+  const connectionString = process.env.DIRECT_DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DIRECT_DATABASE_URL is required to reset append-only payment fixtures");
+  }
+  const client = new pg.Client({ connectionString });
+  await client.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query('ALTER TABLE "payment" DISABLE TRIGGER "payment_append_only"');
+    await client.query('DELETE FROM "payment" WHERE "id" = $1', [paymentId]);
+    await client.query('ALTER TABLE "payment" ENABLE TRIGGER "payment_append_only"');
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
 export async function deleteStudent(workspaceId: string, studentId: string): Promise<void> {
   await withScope({ workspaceId }, async (tx) => {
-    // Payments are append-only (prevent_financial_record_rewrite trigger) and
-    // the application role has no DELETE privilege on payment; do not attempt
-    // to delete them in fixtures.
     // The revision chain is append-only for the application role, so test
     // fixtures that create a revision intentionally leave it behind.
     await tx.attendanceMark.deleteMany({
@@ -299,13 +326,13 @@ export async function deleteStudent(workspaceId: string, studentId: string): Pro
     await tx.file.deleteMany({ where: { workspaceId, studentId } });
     await tx.enrollment.deleteMany({ where: { workspaceId, studentId } });
     await tx.portalGrant.deleteMany({ where: { workspaceId, studentId } });
-    // The student may reference append-only payments; if the FK blocks
-    // deletion, the student stays (append-only record semantics) and
-    // cleanup continues for all other fixtures.
+    // Collected receipts now reference the session, never the student. Other
+    // append-only records may still reference the student; if a FK blocks
+    // cleanup, leave that student behind rather than deleting protected data.
     try {
       await tx.student.deleteMany({ where: { workspaceId, id: studentId } });
     } catch {
-      // ignore FK from append-only payment
+      // protected append-only reference remains
     }
   });
 }

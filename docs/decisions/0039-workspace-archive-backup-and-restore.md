@@ -19,10 +19,11 @@ history. The prototype replaced live client state wholesale with no validation a
 as a behavioural reference.
 
 The tenant registry (`ADR-0006`) already defines the complete set of tenant tables, including
-`audit_event`. Several tables are intentionally append-only for financial and attendance evidence
-(`payment`, `payment_revision`, `payment_adjustment`, `fee_rule`, `session_revision`,
-`attendance_revision`, `student_note`, and `audit_event`); the application role has no `DELETE`
-grant on them and triggers reject rewrites of financial rows. Published `assessment` and
+`audit_event`. Several tables are intentionally append-only for collected-receipt and attendance
+evidence (`payment`, `session_revision`, `attendance_revision`, `student_note`, and `audit_event`);
+the application role has no `DELETE` grant on them and triggers reject rewrites of financial rows.
+`payment_revision`, `payment_adjustment`, and `fee_rule` were removed by `ADR-0043`; they are no
+longer retained evidence and cannot appear in a valid archive. Published `assessment` and
 `assessment_score` rows are also locked by a trigger once marks are published. Stored file objects
 live outside the database behind a private storage adapter (`ADR-0009`).
 

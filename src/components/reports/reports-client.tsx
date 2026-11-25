@@ -21,27 +21,8 @@ const columns: Record<ReportType, string[]> = {
   enrollment: ["student", "group", "enrolledOn", "leftOn"],
   academics: ["date", "group", "student", "assessment", "score", "maximum", "status"],
   homework: ["dueDate", "group", "student", "homework", "status", "updatedAt"],
-  payments: [
-    "date",
-    "student",
-    "kind",
-    "amountEgp",
-    "period",
-    "purpose",
-    "method",
-    "referenceNumber",
-    "reason",
-    "balanceImpactEgp",
-    "status",
-  ],
-  sessionRevenue: [
-    "date",
-    "group",
-    "priceEgp",
-    "attended",
-    "expectedEgp",
-    "collectedEgp",
-  ],
+  payments: ["date", "group", "amountEgp", "method"],
+  sessionRevenue: ["date", "group", "priceEgp", "collectedEgp"],
 };
 
 type PeriodChoice = "current" | "custom" | string;

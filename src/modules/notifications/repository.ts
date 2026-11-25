@@ -26,7 +26,6 @@ export type CreateNotificationInput = {
     | "session_unrecorded"
     | "homework_due_soon"
     | "assessment_pending_grades"
-    | "payment_overdue"
     | "backup_ready"
     | "export_ready"
     | "general";

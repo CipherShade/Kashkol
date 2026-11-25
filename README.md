@@ -226,9 +226,11 @@ Two SELECT-only self policies exist for session bootstrap:
   foreign id is `404`.
 
 The core domain tables — `subject`, `group`, `enrollment`, `teaching_session`, `attendance_mark`,
-`attendance_revision`, `assessment`, `assessment_score`, `payment`, `payment_revision`, and `file` —
-carry composite `(workspace_id, id)` foreign keys so a row in workspace A cannot point at a row in
-workspace B. The revision chains and `audit_event` are append-only for the application role.
+`attendance_revision`, `assessment`, `assessment_score`, `payment`, and `file` — carry composite
+`(workspace_id, id)` foreign keys so a row in workspace A cannot point at a row in workspace B. The
+revision chains and `audit_event` are append-only for the application role. `payment` now contains
+only collected session receipts; the old payment revision and fee tables were removed by
+`ADR-0043`.
 
 Arabic search is deliberately conservative: `normalize_arabic(text)` folds diacritics, tatweel,
 Arabic-Indic digits, and alef/ya/ta-marbuta variants; `phonetic_arabic(text)` collapses common

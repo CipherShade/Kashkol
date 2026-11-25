@@ -16,6 +16,8 @@ export type RouteEntry = {
   access: RouteAccess;
   /** True when the handler must run inside a tenant transaction. */
   tenantScoped: boolean;
+  /** True when only the workspace owner may call the route (ADR-0041). */
+  ownerOnly?: boolean;
   description: string;
 };
 
@@ -183,21 +185,8 @@ export const ROUTES: RouteEntry[] = [
     methods: ["GET", "POST"],
     access: "workspace",
     tenantScoped: true,
-    description: "Read session receipts (optional session filter), or append a manual receipt.",
-  },
-  {
-    path: "/api/payments/adjustments",
-    methods: ["POST"],
-    access: "workspace",
-    tenantScoped: true,
-    description: "Append an auditable payment discount, refund, or correction.",
-  },
-  {
-    path: "/api/payments/fees",
-    methods: ["POST"],
-    access: "workspace",
-    tenantScoped: true,
-    description: "Append a monthly group fee convention.",
+    ownerOnly: true,
+    description: "Owner-only: read collected session receipts, or append a receipt. No projections.",
   },
   {
     path: "/api/reports",
@@ -403,13 +392,6 @@ export const ROUTES: RouteEntry[] = [
     description: "Transfer student to another group with historic records preserved.",
   },
   {
-    path: "/api/groups/[groupId]/price",
-    methods: ["PATCH"],
-    access: "workspace",
-    tenantScoped: true,
-    description: "Update the group's default price per student for sessions.",
-  },
-  {
     path: "/api/sessions",
     methods: ["GET", "POST"],
     access: "workspace",
@@ -463,7 +445,8 @@ export const ROUTES: RouteEntry[] = [
     methods: ["GET"],
     access: "workspace",
     tenantScoped: true,
-    description: "Get session revenue calculations: expected (attendees × price) vs collected receipts.",
+    ownerOnly: true,
+    description: "Owner-only: get the collected total of receipts recorded for a session.",
   },
   {
     path: "/api/sessions/[sessionId]/homework/[homeworkId]",

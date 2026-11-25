@@ -15,6 +15,8 @@ export type NavItem = {
   permission?: { resource: PermissionResource; action: PermissionAction };
   /** One or more permissions that can expose a mixed capability screen. */
   anyPermission?: ReadonlyArray<{ resource: PermissionResource; action: PermissionAction }>;
+  /** Owner-only surfaces are never rendered to assistants, whatever they hold. */
+  ownerOnly?: boolean;
   /** The requirement flow the module implements, shown on the planned page. */
   flow?: string;
 };
@@ -135,7 +137,6 @@ export const NAV_GROUPS: NavGroup[] = [
           { resource: "students", action: "read" },
           { resource: "grades", action: "read" },
           { resource: "homework", action: "read" },
-          { resource: "payments", action: "read" },
         ],
         flow: "F-P1-12",
       },
@@ -224,7 +225,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: "creditCard",
         status: "available",
         milestone: "M2",
-        permission: { resource: "payments", action: "read" },
+        ownerOnly: true,
         flow: "F-P2-04",
       },
     ],
@@ -280,6 +281,7 @@ export function visibleNavGroups(
         if (item.permission && !isAllowed(scope, item.permission.resource, item.permission.action)) {
           return false;
         }
+        if (item.ownerOnly && scope.role !== "owner") return false;
         if (
           item.anyPermission &&
           !item.anyPermission.some(({ resource, action }) => isAllowed(scope, resource, action))

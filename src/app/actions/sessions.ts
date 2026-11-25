@@ -8,6 +8,7 @@ import { AppError } from "@/lib/http/errors";
 import { assertTrustedOrigin } from "@/lib/http/csrf";
 import { actionRequestContext } from "@/lib/http/request-context";
 import { requireStaffSession } from "@/modules/identity/session";
+import { egpToMinorUnits } from "@/modules/payments/schemas";
 import {
   cancelSessionSchema,
   createOneOffSessionSchema,
@@ -165,12 +166,18 @@ export async function updateSessionAction(
     const { scope } = await requireStaffSession();
     const ctx = await actionRequestContext();
 
-    const raw = {
+    const raw: Record<string, unknown> = {
       id: text(formData, "id"),
       room: optionalText(formData, "room"),
       location: optionalText(formData, "location"),
       notes: optionalText(formData, "notes"),
     };
+    // Only the owner's form contains this field. An assistant posting it
+    // directly is denied by updateSession even when they hold session rights.
+    const price = formData.get("priceEgp");
+    if (typeof price === "string") {
+      raw.pricePerStudentMinor = price.trim() ? egpToMinorUnits(price.trim()) : null;
+    }
 
     const parsed = updateSessionSchema.safeParse(raw);
     if (!parsed.success) {

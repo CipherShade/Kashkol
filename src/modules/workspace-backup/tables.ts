@@ -2,18 +2,15 @@ import { TENANT_TABLES } from "@/lib/db/tenant-tables";
 
 /**
  * Rows a restore keeps from the *live* workspace instead of applying from the
- * archive (ADR-0039). These tables are still written to the export for
+ * archive (ADR-0039, ADR-0043). These tables are still written to the export for
  * portability, but the application role cannot delete or rewrite them: the
- * audit log, financial evidence, attendance corrections, note history and the
- * job rows that describe the restore itself.
+ * audit log, collected session receipts, attendance corrections, note history
+ * and the job rows that describe the restore itself.
  */
 export const RETAINED_TABLES: ReadonlySet<string> = new Set<string>([
   "audit_event",
   "attendance_revision",
   "payment",
-  "payment_adjustment",
-  "payment_revision",
-  "fee_rule",
   "session_revision",
   "student_note",
   // Published assessment marks are locked by a database trigger; re-inserting

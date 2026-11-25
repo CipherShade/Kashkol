@@ -17,7 +17,7 @@
 | DM-1 | Every tenant-scoped table has a **non-null** `workspace_id`, an index on it, and RLS policies. | `F-P0-01` AC-1 | **[CI]** schema check + migration check |
 | DM-2 | There is **no global student table** and no global group table. | `D-12`, `PRODUCT_REQUIREMENTS.md` §1.4 | **[CI]** the table registry has no unscoped entity tables |
 | DM-3 | No stored aggregate. There is no `attendance_pct`, `quiz_avg`, `homework_completion`, `trend`, or `status` column on `student`. | `D-05`, `D-08`, `NF-1`, `DEF-08`, `DEF-09` | **[CI]** forbidden-column-name check |
-| DM-4 | History is never destroyed. Attendance corrections append a revision; grade and follow-up corrections append audit/history events. Records are archived or cancelled, never deleted. Financial corrections are separate append-only adjustments; recorded payments are not voided or rewritten by the manual ledger. | `D-10`, `NF-13`, flow invariant 5 | No `ON DELETE CASCADE` on business records; only `ON DELETE RESTRICT` or `SET NULL` |
+| DM-4 | History is never destroyed. Attendance corrections append a revision; grade and follow-up corrections append audit/history events. Records are archived or cancelled, never deleted. A recorded receipt is append-only and is never voided, amended, or corrected. The owner-approved `ADR-0043` is the narrow exception: legacy money tables and rows were physically removed because they represented rejected concepts, not protected history. | `D-10`, `NF-13`, flow invariant 5, `ADR-0041`, `ADR-0043` | No `ON DELETE CASCADE` on business records; only `ON DELETE RESTRICT` or `SET NULL` |
 | DM-5 | Every mutating table has `created_at` and `updated_at` in UTC. | Flow invariant 1 | Schema convention |
 | DM-6 | Money is stored as an integer of minor units (`amount_minor`) with an explicit `currency` column. `A-04` sets EGP only; the column exists so the multi-currency ban is explicit rather than implicit. | `A-04`, `F-P2-04` AC-8 | `CHECK (amount_minor > 0)` |
 | DM-7 | A phone number is stored **only** in E.164 form (`+20…`). The national form is never persisted. | `F-P1-10` AC-5, `R-06`, `DEF-01` | Normalisation in `students`/`parents` services; a test asserts the stored value |
@@ -40,7 +40,7 @@
 | Enums | `snake_case` values, e.g. `at_risk`, `not_submitted` |
 | Boolean | `is_` / `has_` / `was_` prefix, never a bare verb |
 | Time | `*_at` for instants (`created_at`, `archived_at`), `*_on` for calendar dates (`paid_on`) |
-| Soft delete | `archived_at`, `deleted_at`, `voided_at`, `revoked_at`, `cancelled_at` — the verb tells the story |
+| Soft delete | `archived_at`, `deleted_at`, `revoked_at`, `cancelled_at` — the verb tells the story |
 | JSON | Only for genuinely open-ended payloads: `diff`, `metadata`, `settings`, `payload`. Never for a field that should be a column. |
 
 ---
@@ -78,11 +78,7 @@ erDiagram
     ASSESSMENT ||--o{ ASSESSMENT_SCORE : grades
     STUDENT ||--o{ ASSESSMENT_SCORE : earns
 
-    STUDENT ||--o{ PAYMENT : pays
-    STUDENT ||--o{ PAYMENT_ADJUSTMENT : adjusted
-    PAYMENT ||--o{ PAYMENT_ADJUSTMENT : corrected
-    STUDENT ||--o{ FEE_RULE : charged_by
-    GROUP ||--o{ FEE_RULE : charged_by
+    TEACHING_SESSION ||--o{ PAYMENT : received_for
 
     STUDENT ||--o{ MESSAGE_DRAFT : about
     GROUP ||--o{ MESSAGE_DRAFT : announces
@@ -236,7 +232,7 @@ or reset link is written to this table or to `audit_event`.
 |---|---|---|
 | `workspace_id` | uuid | FK |
 | `member_id` | uuid | FK → `workspace_member` |
-| `resource` | `permission_resource` enum | `students`, `grades`, `attendance`, `homework`, `files`, `messages`, `payments`, `settings`, `team`, `audit` — `F-P2-01` AC-2 |
+| `resource` | `permission_resource` enum | `students`, `grades`, `groups`, `sessions`, `attendance`, `homework`, `files`, `messages`, `exports`, `integrations`, `settings`, `team`, `audit`, `forms`, `portal_access` — `F-P2-01` AC-2. `payments` is physically removed: money is owner-only (`ADR-0043`) |
 | `action` | `permission_action` enum | `read` / `write` |
 
 `UNIQUE (member_id, resource, action)`. An owner has **no rows** here and instead short-circuits on
@@ -574,45 +570,32 @@ scope, not an implemented capability.
 
 ### 5.6 Money
 
+Money is **owner-only collected session earnings** (`ADR-0041`, `ADR-0043`). The only money table
+is `payment`, a receipt the workspace owner records against a session. Only collected totals are
+displayed; expected revenue, balances, adjustments, refunds, discounts, and fee rules do not exist
+in the product or its physical schema.
+
 #### `payment`
 
 | Column | Type | Notes |
 |---|---|---|
-| `workspace_id`, `student_id` | uuid | Composite tenant-scoped FKs; `student_id` is **nullable** (ADR-0028) |
-| `session_id` | uuid nullable FK to `teaching_session` | A receipt usually references the session it was collected for; the CHECK constraint `payment_session_required_check` requires at least one of `student_id` / `session_id` |
-| `period` | text nullable | e.g. `2026-10` — the period covered |
-| `amount_minor` | int | Positive piastres; input is a decimal string and conversion uses integer math |
-| `currency` | text | Explicit on every amount; EGP only for this stage |
+| `workspace_id` | uuid | Tenant-scoped FK; every read and write runs under forced RLS |
+| `session_id` | uuid FK to `teaching_session` | **Required.** Every row is one collected session receipt (`ADR-0043`) |
+| `amount_minor` | int | Positive piastres; input is a decimal string and conversion uses integer math (`DM-6`) |
+| `currency` | text | Explicit on every amount; EGP only (`A-04`) |
 | `method`, `method_label` | enum, nullable text | `cash` / `transfer` / `other`; custom label required for `other` |
-| `paid_on` | `date` | Date the teacher recorded as paid |
-| `purpose`, `reference_number`, `note` | nullable text | Purpose, optional receipt reference, and optional note |
+| `paid_on` | `date` | Date the owner recorded the money as received |
+| `note` | nullable text | Optional owner note |
 | `idempotency_key` | text, nullable | Unique per workspace; exact retries do not duplicate records |
-| `created_by` | text | Authenticated operator |
-| `voided_at`, `void_reason` | nullable | Legacy fields; the current ledger does not update payments to void them |
+| `created_by` | text | Authenticated workspace owner |
 
-#### `payment_revision`
+Receipts are append-only by trigger. There is no amendment, void, refund, discount, or correction
+record, and no legacy state column behind any of those concepts.
 
-The legacy revision table remains in the core schema but is not used by the manual ledger. Payment
-rows are append-only and cannot be amended or deleted.
-
-#### `fee_rule`
-
-An append-only **group-only** monthly convention: `amount_minor`, `effective_from`, `purpose`, and
-`created_by`. The `student_id` column remains for reading historical rows only; new rules are
-created against a group (`ADR-0028`). No invoice, tax, or accounting records are created.
-
-#### `payment_adjustment`
-
-An append-only record with nullable `student_id`, optional `payment_id`, `kind` (`discount`,
-`refund`, `correction`), positive `amount_minor`, signed `balance_impact`, `paid_on`, required
-`reason`, `idempotency_key`, and `created_by`. A refund tied to a receipt cannot exceed its
-remaining refundable amount. The adjustment and audit event are written in one transaction.
-
-Money is **session-scoped** (`ADR-0028`): expected revenue is computed as session price × the
-number of present/late marks for non-cancelled sessions, and collected revenue as the sum of
-session-linked non-voided receipts (§7.5). There is **no stored balance** and no per-student
-outstanding figure. Monthly/group fee rules do not accrue per-student balances; they remain a
-group-level convention only.
+`payment_revision`, `fee_rule`, and `payment_adjustment` were dropped with their rows by
+`ADR-0043`. `group.default_price_per_student_minor` was dropped too: the only price field is
+`teaching_session.price_per_student_minor`, set and edited on the session itself. The
+`payment_overdue` notification value and stored rule keys were removed in the same migration.
 
 ### 5.7 Messaging
 
@@ -929,28 +912,19 @@ WHERE workspace_id = $1 AND student_id = $2 AND score IS NOT NULL;
 
 Ungraded assessments are excluded, never counted as zero (`F-P1-09` AC-5).
 
-### 7.5 Session revenue
+### 7.5 Collected session earnings
 
 ```sql
-expected_piastre
-= price_per_student_minor
-  × count(attendance_mark) FILTER (WHERE mark IN ('present', 'late'))
-WHERE workspace_id = $1 AND session_id = $2 AND session.status != 'cancelled';
-
 collected_piastre
-= COALESCE(sum(p.amount_minor) FILTER (WHERE p.voided_at IS NULL), 0)
+= COALESCE(sum(p.amount_minor), 0)
 WHERE workspace_id = $1 AND p.session_id = $2;
 ```
 
-The ledger's headline total nets refunds from gross receipts
-(`collected = gross − Σ refund adjustments`); the per-session summary shows gross
-non-voided receipts for that session. Adjustments remain append-only and signed.
-
-Session revenue is **computed**, never stored. Expected revenue is derived from the session's
-`price_per_student_minor` (or the group's `default_price_per_student_minor`) and its present/late
-marks. Collected revenue is the sum of session-linked receipts. There is deliberately **no**
-outstanding/credit figure: the product does not compute a per-student or per-session balance, and
-no screen displays one (`ADR-0028`).
+Every displayed money figure is the sum of real receipt rows for the sessions in scope, computed at
+read time under forced RLS. No aggregate is stored, and no other money figure exists: there is no
+expected revenue, no attendance-based projection, no outstanding, no balance, no credit, no refund
+adjustment, and no gap. The session price is metadata set on the session, not a financial figure
+derived from attendance (`ADR-0041`).
 
 ### 7.6 Student performance intelligence (`F-P3-10`, `ADR-0034`)
 
@@ -999,9 +973,7 @@ or private follow-up notes (`F27`).
 | `homework_resource` | `(workspace_id)` | Tenant-scoped permitted resources |
 | `student_follow_up` | `(workspace_id, status, due_at)` | Open tasks and due-date queue |
 | `student_follow_up_event` | `(follow_up_id, created_at)` | Ordered task history |
-| `payment` | `(workspace_id, session_id)` partial where `session_id IS NOT NULL`, `(student_id, period)` (legacy), `(workspace_id, voided_at)` | Session receipts, legacy rows |
-| `payment_adjustment` | `(workspace_id, paid_on)`, `(workspace_id, student_id, paid_on)` (legacy), unique `(workspace_id, idempotency_key)` | Adjustment history and safe retries |
-| `fee_rule` | `(workspace_id, student_id, effective_from)`, `(workspace_id, group_id, effective_from)` | Effective fee convention lookup |
+| `payment` | `(workspace_id, session_id)`, unique `(workspace_id, idempotency_key)` | Owner-only collected session receipts; every receipt has a session (`ADR-0043`) |
 | `report_export` | `(workspace_id, created_at)` | Tenant-scoped export history |
 | `report_export_queue` | `(status, created_at)` | Bounded worker polling |
 | `workspace_archive_job` | `(workspace_id, status, created_at)` | Tenant-scoped worker drain |
@@ -1132,8 +1104,9 @@ consolidated form rather than one directory per row above:
 | `20261117020000_homework_submission_files` | Adds `homework_submission_file` with composite tenant primary key, foreign keys, index, forced RLS and tenant policy, and application-role grants; extends `file_scope_check` so a `homework_submission` file has null group and student targets (`F-P2-03`) |
 | `20261118000000_academic_terms` | Adds `academic_term` with `start_date`/`end_date` order check, tenant indexes, forced RLS and tenant policy, and application-role grants (`F-P3-07` AC-1, `ADR-0033`) |
 | `20261119000000_performance_intelligence` | Adds bounded risk thresholds to `workspace_settings`, optional `online_exam_question.topic`, and `assessment_topic_result`, `performance_risk_state`, and `performance_report_note` with composite tenant foreign keys, forced RLS, tenant policies, indexes, and application-role grants (`F-P3-10`, `ADR-0034`) |
-| `20261124000000_notification_rule_config` | Adds `workspace_settings.notification_rule_config` (JSONB: five rule switches, cooldown, unreceipted-session threshold, private digest cursor) and the `payment_overdue` value to `notification_type` (`F-P2-07`, `ADR-0038`) |
+| `20261124000000_notification_rule_config` | Adds `workspace_settings.notification_rule_config` (JSONB: five rule switches, cooldown, private digest cursor) and the `payment_overdue` value to `notification_type` (`F-P2-07`, `ADR-0038`). `ADR-0041` superseded the payment rule; `ADR-0043` physically removed the value and keys. |
 | `20261125000000_workspace_archive_jobs` | Adds the tenant-scoped `workspace_archive_job` table with kind/status enums, RLS, grants, and its worker-drain index (`F-P2-11`, `ADR-0039`) |
+| `20261125010000_legacy_money_storage_removal` | Drops `payment_adjustment`, `fee_rule`, `payment_revision`, and their enum; deletes non-session and voided receipts; makes `payment.session_id` non-null; drops legacy payment/group columns and indexes; deletes `payment_overdue` rows and `payments` grants; rewrites the notification/permission enums and the report-export type check (`ADR-0043`) |
 
 The current local development database tracks all migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.

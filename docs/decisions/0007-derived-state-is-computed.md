@@ -20,7 +20,7 @@ Kashkol computes several kinds of derived values:
 
 Each of these could be stored and incrementally updated, or computed on demand from the source rows.
 
-The product's promise is that the teacher always sees the truth (`NF-1`). A cached counter that
+The product's promise is that every figure is computed from real records (`NF-1`). A cached counter that
 drifts is a lie. The data volumes are small: a private teacher has tens to low hundreds of students
 and tens of sessions a month. At this scale, computing is fast.
 

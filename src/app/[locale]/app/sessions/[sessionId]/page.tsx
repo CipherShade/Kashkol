@@ -4,7 +4,6 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireStaffSession } from "@/modules/identity/session";
-import { isAllowed } from "@/modules/tenancy/types";
 import { getSessionRoster } from "@/modules/attendance/service";
 import { SessionAttendanceClient, type AttendanceRosterStudent, type AttendanceSession } from "@/components/sessions/session-attendance-client";
 
@@ -44,7 +43,7 @@ export default async function SessionDetailPage({
   }
 
   const t = await getTranslations("Sessions.attendance");
-  const canSeeFinancials = isAllowed(scope, "payments", "read");
+  const canSeeFinancials = scope.role === "owner";
 
   const session: AttendanceSession = {
     id: data.session.id,
@@ -59,10 +58,7 @@ export default async function SessionDetailPage({
     location: data.session.location,
     isOneOff: data.session.isOneOff,
     seriesId: data.session.seriesId,
-    pricePerStudentMinor:
-      data.session.pricePerStudentMinor ??
-      data.session.group?.defaultPricePerStudentMinor ??
-      null,
+    pricePerStudentMinor: data.session.pricePerStudentMinor ?? null,
   };
 
   const roster: AttendanceRosterStudent[] = data.roster.map((r) => ({

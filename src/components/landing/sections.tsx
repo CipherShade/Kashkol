@@ -178,7 +178,6 @@ export async function LandingCallToAction({ signedIn }: { signedIn: boolean }) {
 const PRICING_FEATURE_KEYS = [
   "attendance",
   "homework",
-  "payments",
   "portal",
   "files",
   "team",

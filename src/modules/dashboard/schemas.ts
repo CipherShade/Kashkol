@@ -59,7 +59,6 @@ export type DashboardAlert = {
 export type FinancialSummary = {
   totalRevenueMinor: number;
   currency: string;
-  expectedRevenueMinor: number | null;
   revenueByGroup: Array<{
     groupId: string;
     groupName: string;
@@ -72,8 +71,7 @@ export type FinancialSummary = {
   }>;
   recentPayments: Array<{
     id: string;
-    studentId: string | null;
-    studentName: string;
+    sessionLabel: string;
     amountMinor: number;
     paidOn: string;
     method: string;
@@ -166,7 +164,6 @@ export type DashboardData = {
     };
     revenue: {
       collectedMinor: number;
-      expectedMinor: number | null;
       currency: string;
       priorPeriodChangePercent: number | null;
     };

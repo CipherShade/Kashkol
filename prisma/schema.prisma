@@ -69,7 +69,6 @@ enum PermissionResource {
   homework
   files
   messages
-  payments
   exports
   integrations
   settings
@@ -235,14 +234,6 @@ enum PaymentMethod {
   @@map("payment_method")
 }
 
-enum PaymentAdjustmentKind {
-  discount
-  refund
-  correction
-
-  @@map("payment_adjustment_kind")
-}
-
 enum ReportExportStatus {
   queued
   processing
@@ -331,7 +322,6 @@ enum NotificationType {
   session_unrecorded
   homework_due_soon
   assessment_pending_grades
-  payment_overdue
   backup_ready
   export_ready
   general
@@ -678,9 +668,6 @@ model Workspace {
   performanceRiskStates PerformanceRiskState[]
   performanceReportNotes PerformanceReportNote[]
   payments            Payment[]
-  paymentRevisions    PaymentRevision[]
-  paymentAdjustments  PaymentAdjustment[]
-  feeRules            FeeRule[]
   reportExports       ReportExport[]
   archiveJobs         WorkspaceArchiveJob[]
   files               File[]
@@ -912,9 +899,6 @@ model Student {
   assessmentScores    AssessmentScore[]
   homeworkSubmissions HomeworkSubmission[]
   followUps           StudentFollowUp[]
-  payments            Payment[]
-  paymentAdjustments  PaymentAdjustment[]
-  feeRules            FeeRule[]
   files               File[]
   fileAccesses        FileStudentAccess[]
   notes               StudentNote[]
@@ -1139,7 +1123,6 @@ model Group {
   grade       String?
   color       String    @default("indigo")
   teacherNote String?   @map("teacher_note")
-  defaultPricePerStudentMinor Int? @map("default_price_per_student_minor")
   searchKey   String?   @map("search_key")
   phoneticKey String?   @map("phonetic_key")
   archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
@@ -1154,7 +1137,6 @@ model Group {
   homeworks        Homework[]
   files            File[]
   fileAccesses     FileGroupAccess[]
-  feeRules         FeeRule[]
   videoLessons     VideoLesson[]
   videoAccesses    VideoGroupAccess[]
   onlineExams      OnlineExam[]
@@ -1690,85 +1672,26 @@ model PerformanceReportNote {
 model Payment {
   id          String        @id @default(uuid(7)) @db.Uuid
   workspaceId String        @map("workspace_id") @db.Uuid
-  studentId   String?       @map("student_id") @db.Uuid
-  sessionId   String?       @map("session_id") @db.Uuid
-  period      String?
+  sessionId   String        @map("session_id") @db.Uuid
   amountMinor Int           @map("amount_minor")
   currency    String        @default("EGP")
   method      PaymentMethod
   methodLabel String?       @map("method_label")
   paidOn      DateTime      @map("paid_on") @db.Date
-  purpose     String?
-  referenceNumber String?   @map("reference_number")
-  idempotencyKey String?    @map("idempotency_key")
   note        String?
-  voidedAt    DateTime?     @map("voided_at") @db.Timestamptz(6)
-  voidReason  String?       @map("void_reason")
+  idempotencyKey String?    @map("idempotency_key")
   createdBy   String        @map("created_by")
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  student   Student?          @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
-  session   TeachingSession?  @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
-  revisions PaymentRevision[]
-  adjustments PaymentAdjustment[]
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  session   TeachingSession  @relation(fields: [workspaceId, sessionId], references: [workspaceId, id], onDelete: Restrict)
 
   @@unique([workspaceId, id])
-  @@unique([workspaceId, id, studentId])
   @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId])
-  @@index([studentId, period])
-  @@index([workspaceId, voidedAt])
   @@index([workspaceId, sessionId])
   @@map("payment")
-}
-
-model PaymentAdjustment {
-  id             String                @id @default(uuid(7)) @db.Uuid
-  workspaceId    String                @map("workspace_id") @db.Uuid
-  studentId      String?               @map("student_id") @db.Uuid
-  paymentId      String?               @map("payment_id") @db.Uuid
-  kind           PaymentAdjustmentKind
-  amountMinor    Int                   @map("amount_minor")
-  balanceImpact  Int                   @map("balance_impact")
-  currency       String                @default("EGP")
-  paidOn         DateTime              @map("paid_on") @db.Date
-  reason         String
-  idempotencyKey String                @map("idempotency_key")
-  createdBy      String                @map("created_by")
-  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  student   Student?  @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
-  payment   Payment?  @relation(fields: [workspaceId, paymentId, studentId], references: [workspaceId, id, studentId], onDelete: Restrict)
-
-  @@unique([workspaceId, id])
-  @@unique([workspaceId, idempotencyKey])
-  @@index([workspaceId, paidOn])
-  @@index([workspaceId, studentId, paidOn])
-  @@map("payment_adjustment")
-}
-
-model FeeRule {
-  id             String   @id @default(uuid(7)) @db.Uuid
-  workspaceId    String   @map("workspace_id") @db.Uuid
-  studentId      String?  @map("student_id") @db.Uuid
-  groupId        String?  @map("group_id") @db.Uuid
-  amountMinor    Int      @map("amount_minor")
-  effectiveFrom  DateTime @map("effective_from") @db.Date
-  purpose        String
-  createdBy      String   @map("created_by")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  student   Student?  @relation(fields: [workspaceId, studentId], references: [workspaceId, id], onDelete: Restrict)
-  group     Group?    @relation(fields: [workspaceId, groupId], references: [workspaceId, id], onDelete: Restrict)
-
-  @@unique([workspaceId, id])
-  @@index([workspaceId, studentId, effectiveFrom])
-  @@index([workspaceId, groupId, effectiveFrom])
-  @@map("fee_rule")
 }
 
 model ReportExport {
@@ -1837,25 +1760,6 @@ model ReportExportQueue {
   @@unique([workspaceId, jobId])
   @@index([status, createdAt])
   @@map("report_export_queue")
-}
-
-model PaymentRevision {
-  id          String   @id @default(uuid(7)) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  paymentId   String   @map("payment_id") @db.Uuid
-  actorId     String   @map("actor_id")
-  before      Json
-  after       Json
-  reason      String?
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
-  payment   Payment   @relation(fields: [workspaceId, paymentId], references: [workspaceId, id], onDelete: Restrict)
-
-  @@unique([workspaceId, id])
-  @@index([workspaceId])
-  @@index([paymentId, createdAt])
-  @@map("payment_revision")
 }
 
 // ---------------------------------------------------------------------------

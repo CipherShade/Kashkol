@@ -1,12 +1,7 @@
 import { z } from "zod";
 
 const uuid = z.string().uuid();
-const month = z
-  .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-  .refine((value) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(value) || Number(value.slice(0, 4)) >= 2000, {
-    message: "feeDateTooOld",
-  });
+
 const egpAmount = z
   .string()
   .trim()
@@ -26,73 +21,22 @@ export const paymentQuerySchema = z.object({
 
 export const recordPaymentSchema = z
   .object({
-    /** Optional: links this payment to a student (nullable in the session-scoped model). */
-    studentId: uuid.optional(),
-    /** Required: session-scoped receipts are always tied to a session. */
+    /** Required: every receipt belongs to a session. */
     sessionId: uuid,
     amount: egpAmount,
-    period: z.string().trim().max(80).optional(),
-    purpose: z.string().trim().max(160).optional(),
     method: z.enum(["cash", "transfer", "other"]),
     methodLabel: z.string().trim().min(1).max(80).optional(),
     paidOn: z.iso.date(),
-    referenceNumber: z.string().trim().max(120).optional(),
     note: z.string().trim().max(1000).optional(),
     idempotencyKey: uuid,
-  })
-  .refine((value) => Boolean(value.period || value.purpose || value.sessionId), {
-    path: ["purpose"],
-    message: "periodOrPurposeRequired",
   })
   .refine((value) => value.method !== "other" || Boolean(value.methodLabel), {
     path: ["methodLabel"],
     message: "customMethodRequired",
   });
 
-export const createAdjustmentSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("discount"),
-    /** Optional: adjustments hang off a session-linked payment. */
-    studentId: uuid.optional(),
-    paymentId: uuid.optional(),
-    amount: egpAmount,
-    paidOn: z.iso.date(),
-    reason: z.string().trim().min(1).max(500),
-    idempotencyKey: uuid,
-  }),
-  z.object({
-    kind: z.literal("refund"),
-    studentId: uuid.optional(),
-    paymentId: uuid,
-    amount: egpAmount,
-    paidOn: z.iso.date(),
-    reason: z.string().trim().min(1).max(500),
-    idempotencyKey: uuid,
-  }),
-  z.object({
-    kind: z.literal("correction"),
-    studentId: uuid.optional(),
-    paymentId: uuid.optional(),
-    amount: egpAmount,
-    direction: z.enum(["increase_due", "decrease_due"]),
-    paidOn: z.iso.date(),
-    reason: z.string().trim().min(1).max(500),
-    idempotencyKey: uuid,
-  }),
-]);
-
-export const createFeeRuleSchema = z.object({
-  /** Fee rules attach to a group only (ADR-0028: per-student fee rules are deprecated). */
-  groupId: uuid,
-  amount: egpAmount,
-  effectiveFrom: month,
-  purpose: z.string().trim().min(1).max(160),
-});
-
 export type PaymentQuery = z.infer<typeof paymentQuerySchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
-export type CreateAdjustmentInput = z.infer<typeof createAdjustmentSchema>;
-export type CreateFeeRuleInput = z.infer<typeof createFeeRuleSchema>;
 
 export function egpToMinorUnits(amount: string): number {
   const [whole, fraction = ""] = amount.split(".");
@@ -102,7 +46,8 @@ export function egpToMinorUnits(amount: string): number {
 }
 
 export function minorUnitsToEgp(amountMinor: number): string {
-  if (!Number.isSafeInteger(amountMinor)) throw new RangeError("Amount must be an integer number of piastres");
+  if (!Number.isSafeInteger(amountMinor))
+    throw new RangeError("Amount must be an integer number of piastres");
   const sign = amountMinor < 0 ? "-" : "";
   const absolute = Math.abs(amountMinor);
   return `${sign}${Math.floor(absolute / 100)}.${String(absolute % 100).padStart(2, "0")}`;

@@ -81,10 +81,12 @@ export default async function DashboardPage({
         <div className="app-dashboard-side">
           <PendingWork data={data.pendingWork} />
 
-          <FinancialOverview
-            data={data.financialOverview}
-            currency={data.workspace.currency}
-          />
+          {data.permissions.canSeeFinancials ? (
+            <FinancialOverview
+              data={data.financialOverview}
+              currency={data.workspace.currency}
+            />
+          ) : null}
 
           <RecentActivity events={data.recentActivity} locale={locale} />
         </div>

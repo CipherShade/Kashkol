@@ -3,7 +3,7 @@ import { newRequestId } from "@/lib/http/request-id";
 import { newUuidV7 } from "@/lib/id";
 import { withScope } from "@/lib/db/scope";
 import { writeAuditEvent } from "@/modules/audit/service";
-import { authorize, type Scope } from "@/modules/tenancy/types";
+import { assertOwner, authorize, type Scope } from "@/modules/tenancy/types";
 import {
   cancelSessionTx,
   cancelSeriesTx,
@@ -61,6 +61,7 @@ export async function createOneOffSession(
   reqCtx?: RequestContext,
 ) {
   authorize(scope, "sessions", "write");
+  if (input.pricePerStudentMinor !== undefined) assertOwner(scope);
   const ctx = context(reqCtx);
 
   const sessionId = newUuidV7();
@@ -124,6 +125,7 @@ export async function updateSession(
   reqCtx?: RequestContext,
 ) {
   authorize(scope, "sessions", "write");
+  if (input.pricePerStudentMinor !== undefined) assertOwner(scope);
   const ctx = context(reqCtx);
 
   const existing = await findSessionById(scope, input.id);

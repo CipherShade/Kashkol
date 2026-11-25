@@ -27,7 +27,6 @@ export const BENEFIT_ITEMS: readonly LandingEntry[] = [
   { key: "attendance", icon: "check" },
   { key: "parents", icon: "whatsapp" },
   { key: "homework", icon: "book" },
-  { key: "payments", icon: "bar" },
   { key: "team", icon: "staff" },
   { key: "files", icon: "file" },
 ];

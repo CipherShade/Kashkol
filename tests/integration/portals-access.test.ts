@@ -19,6 +19,7 @@ import {
   cookieFrom,
   createStudent,
   createTestUser,
+  deletePaymentFixture,
   deleteStudent,
   deleteTestUser,
   DELTA,
@@ -51,6 +52,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
     const cleanFileId = randomUUID();
     const teacherOnlyFileId = randomUUID();
     const pendingScanFileId = randomUUID();
+    const paymentId = randomUUID();
 
     try {
       // Seed academic, attendance, file, payment, and private note records in NILE
@@ -235,17 +237,16 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
           },
         });
 
-        // 6. Payment with internal note
+        // 6. Collected session receipt with an internal note
         await tx.payment.create({
           data: {
+            id: paymentId,
             workspaceId: NILE,
-            studentId: child1Id,
-            period: "2026-10",
+            sessionId,
             amountMinor: 35000,
             currency: "EGP",
             method: "cash",
             paidOn: new Date("2026-10-05"),
-            purpose: "October Tuition",
             note: "CONFIDENTIAL_PAYMENT_NOTE",
             createdBy: NILE_OWNER,
           },
@@ -427,6 +428,7 @@ describe("parent and student portals end-to-end against PostgreSQL RLS", () => {
           where: { id: { in: [publishedAssessmentId, draftAssessmentId] } },
         });
         await tx.attendanceMark.deleteMany({ where: { sessionId } });
+        await deletePaymentFixture(paymentId);
         await tx.teachingSession.deleteMany({ where: { id: sessionId } });
         await tx.enrollment.deleteMany({ where: { groupId } });
         await tx.groupScheduleSlot.deleteMany({ where: { groupId } });

@@ -364,8 +364,8 @@ export async function deleteStudent(
   const existing = await findStudentById(scope, studentId);
   if (!existing) throw new AppError("NOT_FOUND");
 
-  // Check linked records. A student with linked attendance, assessments, or payments
-  // must be archived, not hard-deleted.
+  // Check linked records. A student with linked attendance or assessments must be
+  // archived, not hard-deleted. Collected receipts are session-linked (ADR-0043).
   const linked = await countStudentLinkedRecords(scope, studentId);
   if (linked.totalLinked > 0) {
     throw new AppError("CONFLICT", {

@@ -62,6 +62,9 @@ Every ADR uses the same sections:
 | [0038](0038-workspace-notification-rules.md) | Workspace notification rules and a session-scoped overdue alert | Accepted (2026-11-24) | M2 |
 | [0039](0039-workspace-archive-backup-and-restore.md) | Workspace JSON backup and validated in-app restore | Accepted (2026-11-24) | M2 |
 | [0040](0040-computed-progress-series.md) | Computed per-student progress series | Accepted (2026-11-25) | M2 |
+| [0041](0041-owner-only-collected-session-earnings.md) | Owner-only collected session earnings | Accepted (2026-11-25) | M2 |
+| [0042](0042-private-shell-and-no-truth-slogan.md) | Private readiness page and no truth slogan | Accepted (2026-11-25) | M0–M2 |
+| [0043](0043-remove-legacy-money-storage.md) | Physical removal of legacy workspace money storage | Accepted (approved 2026-11-25) | M2 |
 
 ## Conventions
 
@@ -116,3 +119,6 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0034 | `F-P3-10`, `F27`, `R-02`, `NF-1`, `NF-6`, `NF-10`, `NF-12`, `ADR-0007`, `ADR-0032` |
 | 0036 | `F1`, `F28`, `F-P0-02`, `NF-5`, `NF-10`, `ADR-0003` |
 | 0037 | `F-P0-03`, `F-P0-04`, `NF-10`, `ADR-0035` |
+| 0041 | `F-P2-04`, `D-14`, `OQ-17`, `NF-1`, `ADR-0028`, `ADR-0038` |
+| 0042 | `F-P0-04`, `NF-1`–`NF-13` |
+| 0043 | `F-P2-04`, `F-P2-11`, `D-14`, `NF-1`, `NF-7`, `ADR-0041`, `ADR-0014` |

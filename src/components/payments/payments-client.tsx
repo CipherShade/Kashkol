@@ -7,112 +7,80 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/form";
 import { minorUnitsToEgp } from "@/modules/payments/schemas";
 
-type SessionRevenue = {
+type SessionEarnings = {
   id: string;
   groupId: string | null;
   groupName: string;
   gradeLabel: string | null;
   startsAt: string;
   pricePerStudentMinor: number | null;
-  presentCount: number;
-  expectedRevenueMinor: number | null;
   collectedRevenueMinor: number;
 };
 
-type PaymentRecord = {
+type ReceiptRecord = {
   id: string;
   sessionId: string | null;
   amountMinor: number;
   paidOn: string;
-  purpose: string | null;
   method: string;
   methodLabel: string | null;
-  voidedAt: string | null;
-};
-
-type AdjustmentRecord = {
-  id: string;
-  paymentId: string | null;
-  amountMinor: number;
-  paidOn: string;
-  kind: string;
-  reason: string;
+  note: string | null;
 };
 
 type Dashboard = {
   groups: Array<{ id: string; name: string }>;
-  sessions: SessionRevenue[];
-  payments: PaymentRecord[];
-  adjustments: AdjustmentRecord[];
-  totals: {
-    collectedMinor: number;
-    grossCollectedMinor: number;
-    refundedMinor: number;
-  };
-  pagination: {
-    page: number;
-    pageSize: number;
-    paymentCount: number;
-    adjustmentCount: number;
-  };
+  sessions: SessionEarnings[];
+  payments: ReceiptRecord[];
+  totals: { collectedMinor: number };
+  pagination: { page: number; pageSize: number; paymentCount: number };
 };
 
-export function PaymentsClient({
-  initialData,
-  canWrite,
-  today,
-}: {
-  initialData: Dashboard;
-  canWrite: boolean;
-  today: string;
-}) {
+export function PaymentsClient({ initialData, today }: { initialData: Dashboard; today: string }) {
   const t = useTranslations("Payments");
   const [data, setData] = useState(initialData);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  const [paymentKey, setPaymentKey] = useState(() => crypto.randomUUID());
+  const [receiptKey, setReceiptKey] = useState(() => crypto.randomUUID());
   const [selectedSession, setSelectedSession] = useState("");
 
   async function reload(nextPage = 1, sessionId = selectedSession) {
     const params = new URLSearchParams({ page: String(nextPage), pageSize: "25" });
     if (sessionId) params.set("sessionId", sessionId);
     const response = await fetch(`/api/payments?${params}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("Unable to refresh the payment ledger");
-    const result = await response.json();
+    if (!response.ok) throw new Error("Unable to refresh the receipt ledger");
+    const result = (await response.json()) as Dashboard & {
+      payments: Array<ReceiptRecord & { paidOn: string }>;
+    };
     setData({
       ...result,
-      payments: result.payments.map((row: PaymentRecord) => ({
-        ...row,
-        paidOn: row.paidOn.slice(0, 10),
-      })),
-      adjustments: result.adjustments.map((row: AdjustmentRecord) => ({
-        ...row,
-        paidOn: row.paidOn.slice(0, 10),
-      })),
+      payments: result.payments.map((row) => ({ ...row, paidOn: row.paidOn.slice(0, 10) })),
     });
     setPage(nextPage);
   }
 
-  async function submit(
-    event: React.FormEvent<HTMLFormElement>,
-    endpoint: string,
-    buildBody: (form: FormData) => Record<string, unknown>,
-    rotateIdempotencyKey?: () => void,
-  ) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     setBusy(true);
     setError(false);
     try {
-      const body = buildBody(new FormData(formElement));
-      const response = await fetch(endpoint, {
+      const form = new FormData(formElement);
+      const response = await fetch("/api/payments", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          sessionId: String(form.get("sessionId")),
+          amount: String(form.get("amount")),
+          method: String(form.get("method")),
+          methodLabel: String(form.get("methodLabel") ?? "").trim() || undefined,
+          paidOn: String(form.get("paidOn")),
+          note: String(form.get("note") ?? "").trim() || undefined,
+          idempotencyKey: receiptKey,
+        }),
       });
-      if (!response.ok) throw new Error("Payment operation failed");
-      rotateIdempotencyKey?.();
+      if (!response.ok) throw new Error("Receipt operation failed");
+      setReceiptKey(crypto.randomUUID());
       formElement.reset();
       await reload(1, selectedSession);
     } catch {
@@ -123,7 +91,7 @@ export function PaymentsClient({
   }
 
   const pageCount = Math.max(1, Math.ceil(data.pagination.paymentCount / data.pagination.pageSize));
-  const sessionLabel = (session: SessionRevenue) =>
+  const sessionLabel = (session: SessionEarnings) =>
     session.groupName || session.gradeLabel || t("independentSession");
   const sessionOptions = data.sessions.map((session) => ({
     id: session.id,
@@ -134,15 +102,15 @@ export function PaymentsClient({
     <div className="space-y-6">
       {error ? <p role="alert" className="text-sm text-destructive">{t("requestError")}</p> : null}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <SummaryCard title={t("collected")} value={data.totals.collectedMinor} />
-        <SummaryCard title={t("expected")} value={data.sessions.reduce((sum, s) => sum + (s.expectedRevenueMinor ?? 0), 0)} />
+      <div className="rounded-lg border border-border bg-card p-4">
+        <p className="text-xs uppercase text-muted-foreground">{t("collected")}</p>
+        <p className="mt-1 text-2xl font-semibold">{minorUnitsToEgp(data.totals.collectedMinor)} EGP</p>
       </div>
 
       <Card>
         <CardBody className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-lg font-semibold">{t("sessionRevenueTitle")}</h2>
+            <h2 className="text-lg font-semibold">{t("sessionEarningsTitle")}</h2>
             <label className="grid gap-1 text-sm">
               <span>{t("filterSession")}</span>
               <Select
@@ -168,9 +136,7 @@ export function PaymentsClient({
                 <thead>
                   <tr>
                     <th className="p-2 text-start">{t("session")}</th>
-                    <th className="p-2 text-start">{t("attended")}</th>
                     <th className="p-2 text-start">{t("price")}</th>
-                    <th className="p-2 text-start">{t("expected")}</th>
                     <th className="p-2 text-start">{t("received")}</th>
                   </tr>
                 </thead>
@@ -178,9 +144,7 @@ export function PaymentsClient({
                   {data.sessions.map((session) => (
                     <tr key={session.id} className="border-t border-border">
                       <td className="p-2">{sessionLabel(session)} · {new Date(session.startsAt).toLocaleDateString()}</td>
-                      <td className="p-2">{session.presentCount}</td>
                       <td className="p-2">{session.pricePerStudentMinor != null ? `${minorUnitsToEgp(session.pricePerStudentMinor)} EGP` : "—"}</td>
-                      <td className="p-2">{session.expectedRevenueMinor != null ? `${minorUnitsToEgp(session.expectedRevenueMinor)} EGP` : "—"}</td>
                       <td className="p-2">{minorUnitsToEgp(session.collectedRevenueMinor)} EGP</td>
                     </tr>
                   ))}
@@ -191,58 +155,37 @@ export function PaymentsClient({
         </CardBody>
       </Card>
 
-      {canWrite ? (
-        <Card>
-          <CardBody>
-            <form
-              className="grid gap-3"
-              onSubmit={(event) =>
-                void submit(event, "/api/payments", (form) => ({
-                  sessionId: String(form.get("sessionId")),
-                  amount: String(form.get("amount")),
-                  method: String(form.get("method")),
-                  methodLabel: String(form.get("methodLabel") ?? "").trim() || undefined,
-                  paidOn: String(form.get("paidOn")),
-                  purpose: String(form.get("purpose") ?? "").trim() || undefined,
-                  referenceNumber: String(form.get("referenceNumber") ?? "").trim() || undefined,
-                  note: String(form.get("note") ?? "").trim() || undefined,
-                  idempotencyKey: paymentKey,
-                }),
-                () => setPaymentKey(crypto.randomUUID()),
-              )
-              }
-            >
-              <h2 className="text-lg font-semibold">{t("recordTitle")}</h2>
-              <label className="grid gap-1 text-sm">
-                <span>{t("session")}</span>
-                <Select name="sessionId" required defaultValue="">
-                  <option value="" disabled>{t("chooseSession")}</option>
-                  {sessionOptions.map((session) => (
-                    <option key={session.id} value={session.id}>{session.label}</option>
-                  ))}
-                </Select>
-              </label>
-              <Field label={t("amount")} name="amount" inputMode="decimal" required />
-              <Field label={t("purpose")} name="purpose" />
-              <label className="grid gap-1 text-sm">
-                <span>{t("method")}</span>
-                <Select name="method" defaultValue="cash">
-                  <option value="cash">{t("cash")}</option>
-                  <option value="transfer">{t("transfer")}</option>
-                  <option value="other">{t("other")}</option>
-                </Select>
-              </label>
-              <Field label={t("methodLabel")} name="methodLabel" />
-              <Field label={t("paidOn")} name="paidOn" type="date" defaultValue={today} required />
-              <Field label={t("reference")} name="referenceNumber" />
-              <Field label={t("note")} name="note" type="text" />
-              <Button type="submit" disabled={busy || data.sessions.length === 0}>
-                {busy ? t("saving") : t("recordButton")}
-              </Button>
-            </form>
-          </CardBody>
-        </Card>
-      ) : null}
+      <Card>
+        <CardBody>
+          <form className="grid gap-3" onSubmit={(event) => void submit(event)}>
+            <h2 className="text-lg font-semibold">{t("recordTitle")}</h2>
+            <label className="grid gap-1 text-sm">
+              <span>{t("session")}</span>
+              <Select name="sessionId" required defaultValue="">
+                <option value="" disabled>{t("chooseSession")}</option>
+                {sessionOptions.map((session) => (
+                  <option key={session.id} value={session.id}>{session.label}</option>
+                ))}
+              </Select>
+            </label>
+            <ReceiptField label={t("amount")} name="amount" inputMode="decimal" required />
+            <label className="grid gap-1 text-sm">
+              <span>{t("method")}</span>
+              <Select name="method" defaultValue="cash">
+                <option value="cash">{t("cash")}</option>
+                <option value="transfer">{t("transfer")}</option>
+                <option value="other">{t("other")}</option>
+              </Select>
+            </label>
+            <ReceiptField label={t("methodLabel")} name="methodLabel" />
+            <ReceiptField label={t("paidOn")} name="paidOn" type="date" defaultValue={today} required />
+            <ReceiptField label={t("note")} name="note" type="text" />
+            <Button type="submit" disabled={busy || data.sessions.length === 0}>
+              {busy ? t("saving") : t("recordButton")}
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardBody className="space-y-3">
@@ -291,16 +234,7 @@ export function PaymentsClient({
   );
 }
 
-function SummaryCard({ title, value }: { title: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs uppercase text-muted-foreground">{title}</p>
-      <p className="mt-1 text-2xl font-semibold">{minorUnitsToEgp(value)} EGP</p>
-    </div>
-  );
-}
-
-function Field({
+function ReceiptField({
   label,
   name,
   type = "text",

@@ -6,6 +6,7 @@ import {
   authorize,
   grantablePermissions,
   isAllowed,
+  PERMISSION_RESOURCES,
   permissionKey,
   type Permission,
   type Scope,
@@ -32,9 +33,9 @@ describe("tenancy permissions", () => {
     expect(permissionKey("students", "read")).toBe("students:read");
   });
 
-  it("allows the owner everything", () => {
-    expect(isAllowed(owner, "payments", "write")).toBe(true);
+  it("allows the owner every existing resource", () => {
     expect(isAllowed(owner, "team", "write")).toBe(true);
+    expect(isAllowed(owner, "sessions", "write")).toBe(true);
   });
 
   it("allows only granted assistant permissions", () => {
@@ -46,11 +47,10 @@ describe("tenancy permissions", () => {
   it("never lets an assistant manage the team, even with a grant row", () => {
     const overGranted: Scope = {
       ...assistant,
-      permissions: new Set<Permission>(["team:write", "settings:write", "payments:write"]),
+      permissions: new Set<Permission>(["team:write", "settings:write"]),
     };
     expect(isAllowed(overGranted, "team", "write")).toBe(false);
     expect(isAllowed(overGranted, "settings", "write")).toBe(true);
-    expect(isAllowed(overGranted, "payments", "write")).toBe(true);
   });
 
   it("throws a typed FORBIDDEN error on denial", () => {
@@ -62,7 +62,11 @@ describe("tenancy permissions", () => {
     expect(() => assertOwner(owner)).not.toThrow();
   });
 
-  it("refuses to grant team write or audit write to anyone", () => {
+  it("has no money permission resource to grant", () => {
+    expect(PERMISSION_RESOURCES as readonly string[]).not.toContain("payments");
+    expect(grantablePermissions().some((grant) => (grant.resource as string) === "payments")).toBe(
+      false,
+    );
     expect(() => assertGrantable("team", "write")).toThrow(AppError);
     expect(() => assertGrantable("audit", "write")).toThrow(AppError);
     expect(() => assertGrantable("settings", "write")).not.toThrow();
@@ -86,7 +90,6 @@ describe("tenancy permissions", () => {
       "homework",
       "files",
       "messages",
-      "payments",
       "exports",
       "integrations",
       "settings",
@@ -100,7 +103,6 @@ describe("tenancy permissions", () => {
         expect(isAllowed(fullyGrantedAssistant, resource, action)).toBe(grantable);
       }
     }
-    expect(isAllowed(assistant, "payments", "read")).toBe(false);
     expect(isAllowed(assistant, "team", "write")).toBe(false);
   });
 });

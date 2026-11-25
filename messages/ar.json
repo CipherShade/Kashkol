@@ -1,7 +1,7 @@
 {
   "App": {
     "name": "كشكول",
-    "tagline": "المعلّم يرى الحقيقة دائمًا"
+    "tagline": "مساحة تدريسك الخاصة"
   },
   "Landing": {
     "meta": {
@@ -89,9 +89,9 @@
       "checkinSpeedLabel": "متوسط وقت تحضير الحصة",
       "checkinSpeedVal": "أقل من ٤٠ ثانية",
       "accuracyLabel": "دقة سجلات الطلاب والغياب",
-      "accuracyVal": "١٠٠٪ سجلات حقيقية",
+      "accuracyVal": "محسوب من سجلاتك",
       "breakdownTitle": "محسوبة بناءً على روتين المعلم الفعلي:",
-      "breakdownSession": "توفير ~٣٠ دقيقة بكل حصة (أخذ الغياب وتسجيل المصاريف)",
+      "breakdownSession": "~30 دقيقة لكل حصة في تسجيل الحضور والسجلات",
       "breakdownHomework": "توفير ٢-٤ ساعات أسبوعياً لتصحيح الواجبات ورسائل أولياء الأمور",
       "breakdownReports": "توفير ~٣ ساعات شهرياً لإعداد كروت وتقارير المتابعة تلقائياً",
       "ctaPrompt": "ابدأ الآن واجعل تركيزك كله في الشرح"
@@ -145,13 +145,11 @@
       "note": "عربي وإنجليزي · فاتح وداكن · مصمم للمعلّمين الخصوصيين"
     },
     "footer": {
-      "tagline": "المعلّم يرى الحقيقة دائمًا",
+      "tagline": "مساحة تدريسك الخاصة",
       "groups": {
         "product": "المنتج",
-        "account": "الحساب",
-        "system": "النظام"
+        "account": "الحساب"
       },
-      "status": "حالة النظام",
       "rights": "© {year} كشكول (Kashkol)."
     },
     "benefits": {
@@ -177,17 +175,11 @@
           "problem": "بتعرف إن الطالب بطّل يسلّم واجبات بس لما يفشل في الامتحان الشهري.",
           "solution": "متابعة تسليم الواجبات والدرجات لحظة بلحظة + تنبيهات الطلاب المتعثرين قبل فوات الأوان."
         },
-        "payments": {
-          "title": "المصاريف والمدفوعات",
-          "body": "وداعاً لفوضى النقود. شوف رصيد كل طالب، واحسب إيراد كل حصة، وتتبع الديون في ثوانٍ.",
-          "problem": "تتابع مدفوعات المجموعات، ومصاريف المذكرات، وعمولة السنتر، والمتأخرين في سجل ورقي.",
-          "solution": "كشف مالي واضح لكل طالب — مين دفع، مين عليه رصيد، وإجمالي إيراد كل حصة بدقة."
-        },
         "team": {
           "title": "فريق العمل والمساعدون",
-          "body": "أضف مساعدين بصلاحيات آمنة ومحدودة. كل تعديل يتسجل باسم صاحبه، وملفاتك المالية تفضل سرية تماماً.",
-          "problem": "لازم تعطي المساعد إمكانية وصول لحسابك كله، وأسرارك المالية تبقى مكشوفة.",
-          "solution": "صلاحيات محددة للمساعدين: حضور وواجبات بدون أي وصول للأرقام المالية أو باقي المجموعات."
+          "body": "أضف مساعدين بصلاحيات آمنة ومحدودة. كل تعديل يتسجل باسم صاحبه، وتبقى بيانات مساحة العمل الخاصة محمية.",
+          "problem": "لازم تعطي المساعد إمكانية وصول لحسابك كله، فتتكشف معلومات مساحة العمل الخاصة.",
+          "solution": "صلاحيات محددة للمساعدين: حضور وواجبات بدون الوصول إلى معلومات خاصة بحساب المعلّم أو باقي المجموعات."
         },
         "files": {
           "title": "الملفات والمذكرات الدراسية",
@@ -229,7 +221,6 @@
       "features": {
         "attendance": "تسجيل حضور وغياب الطلاب ومسح QR فوري",
         "homework": "متابعة الواجبات والامتحانات وسجل الدرجات",
-        "payments": "كشف حساب مالي ومتابعة مدفوعات الطلاب",
         "portal": "بوابة خاصة للطلاب وأولياء الأمور على هواتفهم",
         "files": "مكتبة مذكرات وملفات دراسية لكل مجموعة",
         "team": "صلاحيات آمنة ومحددة للمساعدين وفريق العمل"
@@ -626,7 +617,6 @@
       "homework": "الواجبات",
       "files": "المواد التعليمية",
       "messages": "التواصل مع أولياء الأمور",
-      "payments": "البيانات المالية",
       "exports": "التصدير",
       "integrations": "التكاملات وإشعارات أولياء الأمور",
       "settings": "إعدادات مساحة العمل",
@@ -700,7 +690,6 @@
       "session_unrecorded": "حصة غير مسجلة",
       "homework_due_soon": "واجب يقترب موعده",
       "assessment_pending_grades": "رصد درجات معلّق",
-      "payment_overdue": "حصة بلا إيصال",
       "backup_ready": "النسخة الاحتياطية جاهزة",
       "export_ready": "الملف المُصدَّر جاهز",
       "general": "إشعار عام"
@@ -710,7 +699,6 @@
       "sessionUnrecorded": "انتهت حصة {groupName} منذ أكثر من ساعتين دون تسجيل الحضور.",
       "homeworkDueSoon": "الواجب {homeworkTitle} لمجموعة {groupName} ينتهي خلال ٤٨ ساعة.",
       "assessmentPendingGrades": "هناك درجات غير مرصودة لتقييم {assessmentTitle} لمجموعة {groupName}.",
-      "paymentOverdue": "لم يُسجّل إيصال لحصة {groupName} منذ {days} يومًا.",
       "backupReady": "تم تجهيز النسخة الاحتياطية لمساحة العمل بنجاح وجاهزة للتنزيل.",
       "exportReady": "ملف التصدير المطلوب جاهز للتنزيل الآن.",
       "attendancePresent": "تم تسجيل حضور الطالب {studentName} في {groupName}.",
@@ -731,9 +719,7 @@
     "unrecorded": "حصة سابقة دون تسجيل حضور",
     "homeworkDue": "واجب مستحق خلال ٤٨ ساعة",
     "pendingGrades": "تقييم دون رصد درجات",
-    "paymentOverdue": "حصة بلا إيصال بعد عدد الأيام المحدد",
     "cooldownHours": "فترة منع التكرار (ساعات)",
-    "paymentOverdueDays": "تنبيه الحصة بلا إيصال بعد (أيام)",
     "emailDigest": "الاشتراك في ملخص البريد الإلكتروني اليومي",
     "digestHint": "يحتوي الملخص على أنواع التنبيهات وأعدادها فقط، دون نصوص ملاحظات أو أرقام هواتف."
   },
@@ -806,7 +792,7 @@
       "parentUpdates": "التواصل مع أولياء الأمور",
       "team": "الفريق",
       "audit": "سجل النشاط",
-      "payments": "المدفوعات",
+      "payments": "إيصالات الحصص",
       "settings": "الإعدادات",
       "performance": "الأداء"
     }
@@ -878,10 +864,8 @@
     "kpiStudentsActive": "{count} نشط",
     "kpiStudentsInactive": "{count} غير نشط",
     "kpiStudentsNewEnrolled": "+{count} مسجل جديد",
-    "kpiRevenueTitle": "الإيرادات المحصلة",
-    "kpiRevenueExpected": "{amount} {currency} إيراد متوقع",
-    "kpiRevenueNoRules": "لم يُحدد سعر للحصة",
-    "permissionRestricted": "مقيد حسب الصلاحيات",
+    "kpiRevenueTitle": "المتحصّل",
+    "permissionRestricted": "المال خاص بحساب المعلّم فقط",
     "kpiAttendanceTitle": "نسبة الحضور",
     "kpiAttendanceCounts": "{present} حاضر • {absent} غائب",
     "kpiAttendanceAwaiting": "{count} حصص بانتظار رصد الحضور",
@@ -925,17 +909,16 @@
     "viewStudentProfile": "ملف الطالب",
     "viewAction": "عرض",
     "viewAllAction": "عرض الكل",
-    "financialTitle": "الأداء المالي",
-    "financialSubtitle": "إيراد الجلسات الحقيقي: المتوقع من الحضور، والمحصّل من إيصالات الدفع",
-    "financialRestrictedMessage": "ليس لديك صلاحية لعرض السجلات المالية لمساحة العمل.",
-    "openPaymentsLedger": "إيصالات الجلسات",
+    "financialTitle": "أرباح الحصص",
+    "financialSubtitle": "المال المسجّل فعليًا من حساب المعلّم فقط",
+    "financialRestrictedMessage": "سجلات المال متاحة لحساب المعلّم فقط",
+    "openPaymentsLedger": "إيصالات الحصص",
     "financialCollectedLabel": "إجمالي المحصل",
-    "financialExpectedLabel": "الإيراد المتوقع",
     "financialTrendChartTitle": "تطور الإيرادات عبر الوقت",
-    "financialTrendEmpty": "لا توجد مدفوعات مسجلة في الفترات الأخيرة",
-    "financialByGroupChartTitle": "الإيرادات حسب المجموعة",
-    "financialByGroupEmpty": "لا توجد بيانات إيرادات للمجموعات",
-    "financialRecentPaymentsTitle": "أحدث المدفوعات",
+    "financialTrendEmpty": "لا توجد إيصالات في الفترات الأخيرة",
+    "financialByGroupChartTitle": "المتحصّل حسب المجموعة",
+    "financialByGroupEmpty": "لا توجد بيانات مال متحصّل",
+    "financialRecentPaymentsTitle": "أحدث الإيصالات",
     "academicTitle": "الأداء الأكاديمي",
     "academicSubtitle": "مستوى أداء الطلاب ومقارنة المجموعات ومسار التقييمات",
     "academicOverallAverage": "متوسط {percent}%",
@@ -984,7 +967,8 @@
     "activityTitle": "أحدث النشاطات",
     "activitySubtitle": "سجل زمني تسلسلي للعمليات في مساحة العمل",
     "viewAuditLogAction": "سجل التدقيق الكامل",
-    "activityEmptyMessage": "لا توجد نشاطات حديثة مسجلة في مساحة العمل بعد."
+    "activityEmptyMessage": "لا توجد نشاطات حديثة مسجلة في مساحة العمل بعد.",
+    "kpiRevenueCollectedHint": "الإيصالات المسجّلة فقط"
   },
   "Account": {
     "eyebrow": "الحساب",
@@ -1267,12 +1251,11 @@
     "slotOverlapsSameGroup": "يوجد موعدان متداخلان في نفس المجموعة في نفس اليوم."
   },
   "Payments": {
-    "title": "المدفوعات",
-    "subtitle": "سجلات يدوية بالجنيه المصري فقط. لا تنقل كاشكول الأموال ولا تدّعي تسويتها.",
-    "noPermission": "لا تملك صلاحية الاطلاع على سجلات المدفوعات.",
+    "title": "إيصالات الحصص",
+    "subtitle": "المال المحصّل فعليًا للحصص فقط، داخل حساب المعلّم.",
+    "noPermission": "المال متاح لحساب المعلّم فقط",
     "requestError": "تعذّر إكمال الطلب. راجع البيانات وحاول مرة أخرى.",
-    "collected": "المحصّل بعد استبعاد المبالغ المستردة",
-    "sessionRevenueTitle": "إيراد الجلسة",
+    "collected": "إجمالي المتحصّل",
     "filterSession": "تصفية حسب الجلسة",
     "allSessions": "كل الجلسات",
     "session": "الجلسة",
@@ -1281,33 +1264,29 @@
     "price": "سعر الجلسة",
     "chooseSession": "اختر جلسة",
     "note": "ملاحظة",
-    "expected": "المتوقع",
-    "received": "المحصّل",
-    "recordTitle": "تسجيل دفعة",
+    "received": "المتحصّل",
+    "recordTitle": "تسجيل إيصال",
     "amount": "المبلغ بالجنيه المصري",
-    "purpose": "الغرض",
     "method": "الطريقة",
     "cash": "نقدًا",
     "transfer": "تحويل",
     "other": "طريقة أخرى مخصصة",
     "methodLabel": "اسم الطريقة الأخرى",
     "paidOn": "تاريخ الدفع",
-    "reference": "المرجع / رقم الإيصال",
     "saving": "جارٍ الحفظ…",
-    "recordButton": "تسجيل الدفعة",
-    "historyTitle": "سجل المدفوعات",
-    "emptyHistory": "لا توجد دفعات مسجلة.",
-    "unspecified": "غرض غير محدد",
-    "historyPagination": "صفحات سجل المدفوعات",
+    "recordButton": "تسجيل الإيصال",
+    "historyTitle": "سجل الإيصالات",
+    "emptyHistory": "لا توجد إيصالات حصص مسجلة.",
+    "unspecified": "بدون حصة",
+    "historyPagination": "صفحات سجل الإيصالات",
     "previous": "السابق",
     "pageOf": "الصفحة {page} من {pageCount}",
     "next": "التالي",
     "errors": {
       "totalOutOfRange": "يتجاوز الإجمالي النطاق المدعوم للحساب الدقيق للعملة.",
-      "duplicateMismatch": "استُخدم مفتاح الإرسال هذا مسبقًا لبيانات دفعة مختلفة.",
-      "feeRuleAlreadyExists": "توجد قاعدة رسوم لهذا الهدف والشهر بالفعل.",
-      "sessionPriceMissing": "لا يوجد سعر لهذه الحصة، لذا لا يمكن تسجيل دفعة تلقائيًا."
-    }
+      "duplicateMismatch": "استُخدم مفتاح الإرسال هذا مسبقًا لبيانات دفعة مختلفة."
+    },
+    "sessionEarningsTitle": "المتحصّل لكل حصة"
   },
   "Reports": {
     "title": "التقارير",
@@ -1361,8 +1340,8 @@
       "enrollment": "التسجيل",
       "academics": "النتائج الدراسية",
       "homework": "إنجاز الواجبات",
-      "payments": "سجل المدفوعات",
-      "sessionRevenue": "إيراد الجلسات"
+      "payments": "إيصالات الحصص",
+      "sessionRevenue": "المتحصّل من الحصص"
     },
     "columns": {
       "date": "التاريخ",
@@ -1379,16 +1358,9 @@
       "dueDate": "تاريخ الاستحقاق",
       "homework": "الواجب",
       "updatedAt": "تاريخ التحديث",
-      "kind": "نوع السجل",
-      "amountEgp": "المبلغ (جنيه)",
-      "period": "الفترة",
-      "purpose": "الغرض",
+      "amountEgp": "المحصّل (جنيه)",
       "method": "الطريقة",
-      "referenceNumber": "رقم الإيصال",
-      "reason": "السبب",
       "priceEgp": "سعر الجلسة (جنيه)",
-      "attended": "الحاضرون والمتأخرون",
-      "expectedEgp": "المتوقع (جنيه)",
       "collectedEgp": "المحصّل (جنيه)"
     },
     "errors": {
@@ -1420,8 +1392,7 @@
       "files": "تخزين ملفات خاص مع وصول موقّع وبوابة فحص.",
       "parent-updates": "رسائل أولياء أمور مُعدّة تُفتح في واتساب. لا يدّعي المنتج التسليم.",
       "team": "المساعدون وصلاحياتهم المفروضة من الخادم.",
-      "audit": "سجل النشاط الإضافي فقط للتغييرات الأمنية.",
-      "payments": "دفتر مدفوعات يدوي يسجّل المبالغ المستلمة. لا يُدّعى أي تسوية."
+      "audit": "سجل النشاط الإضافي فقط للتغييرات الأمنية."
     }
   },
   "Files": {
@@ -1989,12 +1960,11 @@
       "search": "تحقق",
       "sessionPrice": "سعر الحصة",
       "priceUnit": "ج.م",
-      "expectedRevenue": "الإيراد المتوقع",
-      "collectedRevenue": "الإيراد المحصل",
+      "collectedRevenue": "المتحصّل",
       "crossSeasonBadge": "حضور من مجموعة أخرى",
-      "revenueUnavailable": "تعذر تحميل ملخص مدفوعات الحصة.",
+      "revenueUnavailable": "تعذّر تحميل المبلغ المتحصّل.",
       "revenueRetry": "إعادة المحاولة",
-      "loadingRevenue": "جارٍ تحميل ملخص مدفوعات الحصة…",
+      "loadingRevenue": "جارٍ تحميل المتحصّل…",
       "startAttendance": "ابدأ الحضور",
       "scanRecording": "جارٍ التسجيل…",
       "homeworkQuestion": "هل حلّ الطالب الواجب ({title})؟",
@@ -2009,8 +1979,11 @@
       "removeStudentSuccess": "تمت إزالة الطالب من كشف الحصة",
       "studentNotOnRoster": "الطالب غير موجود في كشف الحصة",
       "studentHasMarks": "الطالب لديه سجلات حضور ولا يمكن إزالته",
-      "groupSessionRosterFixed": "حصص المجموعات تستخدم كشف الحضور المسجل للمجموعة"
-    }
+      "groupSessionRosterFixed": "حصص المجموعات تستخدم كشف الحضور المسجل للمجموعة",
+      "noSessionPrice": "لا يوجد سعر لهذه الحصة"
+    },
+    "sessionPriceEgp": "سعر الحصة (جنيه)",
+    "sessionPricePlaceholder": "اختياري، يتغيّر لكل حصة"
   },
   "Portal": {
     "pwa": {
@@ -2028,7 +2001,7 @@
     },
     "notifications": {
       "pushSettingsTitle": "الإشعارات الفورية وخصوصية شاشة القفل",
-      "lockScreenPrivacyNote": "افتراضيًا، تعرض الإشعارات الفورية نصًا عامًا فقط ولا تكشف الدرجات أو الحضور أو الأرصدة على شاشة القفل.",
+      "lockScreenPrivacyNote": "افتراضيًا، تعرض الإشعارات الفورية نصًا عامًا فقط ولا تكشف الدرجات أو الحضور أو المبالغ المالية على شاشة القفل.",
       "enablePushAction": "تفعيل الإشعارات الفورية",
       "disablePushAction": "إيقاف الإشعارات الفورية",
       "iosHomeScreenRequirement": "على أجهزة iPhone وiPad، يتطلب نظام iOS إضافة كشكول إلى الشاشة الرئيسية أولًا قبل تفعيل الإشعارات الفورية. يظل مركز الإشعارات الداخلي يعمل بكفاءة.",

@@ -1,12 +1,13 @@
 import { z } from "zod";
 
 /**
- * F-P2-07: the five rule-generated notification kinds and their cooldown.
+ * F-P2-07: the four rule-generated notification kinds and their cooldown.
  *
  * The JSON shape is persisted on `workspace_settings.notification_rule_config`.
  * A missing or malformed row falls back to these defaults rather than disabling
  * the feature silently. The opt-in digest flag lives in the existing
- * `workspace_settings.email_digest_enabled` column.
+ * `workspace_settings.email_digest_enabled` column. The physical schema has no
+ * money rules or money notification types (`ADR-0043`).
  */
 export const notificationRuleConfigSchema = z
   .object({
@@ -14,9 +15,7 @@ export const notificationRuleConfigSchema = z
     unrecordedSessionEnabled: z.boolean().default(true),
     homeworkDueSoonEnabled: z.boolean().default(true),
     assessmentPendingGradesEnabled: z.boolean().default(true),
-    paymentOverdueEnabled: z.boolean().default(true),
     cooldownHours: z.coerce.number().int().min(1).max(168).default(24),
-    paymentOverdueDays: z.coerce.number().int().min(1).max(365).default(30),
   })
   .strict();
 

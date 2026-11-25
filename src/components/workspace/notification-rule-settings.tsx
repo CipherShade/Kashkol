@@ -11,9 +11,7 @@ type Rules = {
   unrecordedSessionEnabled: boolean;
   homeworkDueSoonEnabled: boolean;
   assessmentPendingGradesEnabled: boolean;
-  paymentOverdueEnabled: boolean;
   cooldownHours: number;
-  paymentOverdueDays: number;
 };
 
 type Settings = { rules: Rules; emailDigestEnabled: boolean };
@@ -23,9 +21,7 @@ const DEFAULT_RULES: Rules = {
   unrecordedSessionEnabled: true,
   homeworkDueSoonEnabled: true,
   assessmentPendingGradesEnabled: true,
-  paymentOverdueEnabled: true,
   cooldownHours: 24,
-  paymentOverdueDays: 30,
 };
 
 /** F-P2-07: workspace rule switches and the explicit email-digest opt-in. */
@@ -94,7 +90,6 @@ export function NotificationRuleSettingsForm({ canWrite }: { canWrite: boolean }
     | "unrecordedSessionEnabled"
     | "homeworkDueSoonEnabled"
     | "assessmentPendingGradesEnabled"
-    | "paymentOverdueEnabled"
   >) =>
     setRules((current) => ({ ...current, [key]: !current[key] }));
 
@@ -109,7 +104,6 @@ export function NotificationRuleSettingsForm({ canWrite }: { canWrite: boolean }
     { key: "unrecordedSessionEnabled", label: t("unrecorded") },
     { key: "homeworkDueSoonEnabled", label: t("homeworkDue") },
     { key: "assessmentPendingGradesEnabled", label: t("pendingGrades") },
-    { key: "paymentOverdueEnabled", label: t("paymentOverdue") },
   ];
 
   return (
@@ -142,21 +136,6 @@ export function NotificationRuleSettingsForm({ canWrite }: { canWrite: boolean }
             setRules((current) => ({
               ...current,
               cooldownHours: Number(event.currentTarget.value),
-            }))
-          }
-        />
-        <Field
-          type="number"
-          name="paymentOverdueDays"
-          label={t("paymentOverdueDays")}
-          min={1}
-          max={365}
-          value={String(rules.paymentOverdueDays)}
-          disabled={!canWrite || busy}
-          onChange={(event) =>
-            setRules((current) => ({
-              ...current,
-              paymentOverdueDays: Number(event.currentTarget.value),
             }))
           }
         />

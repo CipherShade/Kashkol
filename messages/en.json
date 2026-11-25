@@ -1,7 +1,7 @@
 {
   "App": {
     "name": "Kashkol",
-    "tagline": "The teacher always sees the truth"
+    "tagline": "Your private teaching workspace"
   },
   "Landing": {
     "meta": {
@@ -89,9 +89,9 @@
       "checkinSpeedLabel": "Average session check-in time",
       "checkinSpeedVal": "< 40 seconds",
       "accuracyLabel": "Record and attendance accuracy",
-      "accuracyVal": "100% computed truth",
+      "accuracyVal": "Calculated from your records",
       "breakdownTitle": "Grounded in real teacher routines:",
-      "breakdownSession": "~30 mins saved per session on roll call and fee receipts",
+      "breakdownSession": "~30 mins saved per session on roll call and records",
       "breakdownHomework": "2–4 hrs/wk saved on homework grading and WhatsApp follow-ups",
       "breakdownReports": "~3 hrs/mo automated for monthly student report cards",
       "ctaPrompt": "Start now and focus your energy on teaching"
@@ -119,17 +119,11 @@
           "problem": "You only realize a student stopped submitting homework when they fail the monthly exam — too late to intervene.",
           "solution": "Per-session homework tracking, live performance cards, and early-warning alerts for at-risk students."
         },
-        "payments": {
-          "title": "Fees & Payments",
-          "body": "Eliminate payment confusion. See every student balance, calculate session revenue, and track outstanding fees in seconds.",
-          "problem": "Tracking monthly fees, booklet costs, center commissions, and overdue balances in paper notebooks causes financial leakage.",
-          "solution": "An audit-proof cash ledger per student showing who paid, who owes, and the total revenue for every session."
-        },
         "team": {
           "title": "Team & Assistants",
-          "body": "Add assistants with safe, limited permissions. Every change is timestamped with their name, keeping your finances private.",
-          "problem": "Giving assistants access to your account exposes your financial data and all group information to everyone.",
-          "solution": "Role-based permissions so assistants can take attendance without seeing financial numbers or other groups."
+          "body": "Add assistants with safe, limited permissions. Every change is timestamped with their name, keeping your private workspace data private.",
+          "problem": "Giving assistants access to your account can expose private workspace information to everyone.",
+          "solution": "Role-based permissions so assistants can take attendance without seeing private owner-only information or other groups."
         },
         "files": {
           "title": "Files & Study Materials",
@@ -209,13 +203,11 @@
       "note": "Arabic and English · Light and dark · Built for private teachers"
     },
     "footer": {
-      "tagline": "The teacher always sees the truth",
+      "tagline": "Your private teaching workspace",
       "groups": {
         "product": "Product",
-        "account": "Account",
-        "system": "System"
+        "account": "Account"
       },
-      "status": "System status",
       "rights": "© {year} Kashkol."
     },
     "pricing": {
@@ -229,7 +221,6 @@
       "features": {
         "attendance": "Student attendance tracking & instant QR scanner",
         "homework": "Homework grading, exams & academic progress",
-        "payments": "Clear student fee records & session revenue",
         "portal": "Dedicated student & parent mobile portal",
         "files": "Secure study material & PDF library per group",
         "team": "Safe role-based permissions for assistants"
@@ -626,7 +617,6 @@
       "homework": "Homework",
       "files": "Learning materials",
       "messages": "Parent communication",
-      "payments": "Financial data",
       "exports": "Exports",
       "integrations": "Integrations and parent notifications",
       "settings": "Workspace settings",
@@ -700,7 +690,6 @@
       "session_unrecorded": "Unrecorded session",
       "homework_due_soon": "Homework due soon",
       "assessment_pending_grades": "Pending grades",
-      "payment_overdue": "Unreceipted session",
       "backup_ready": "Backup ready",
       "export_ready": "Export ready",
       "general": "General notification"
@@ -710,7 +699,6 @@
       "sessionUnrecorded": "Session for {groupName} ended more than 2 hours ago with unrecorded attendance.",
       "homeworkDueSoon": "Homework {homeworkTitle} for {groupName} is due within 48 hours.",
       "assessmentPendingGrades": "Grades for {assessmentTitle} in {groupName} are still pending.",
-      "paymentOverdue": "Session for {groupName} still has no recorded receipt after {days} days.",
       "backupReady": "Your workspace backup is ready for download.",
       "exportReady": "Your requested export file is ready for download.",
       "attendancePresent": "Attendance marked Present for {studentName} in {groupName}.",
@@ -731,9 +719,7 @@
     "unrecorded": "Past session with unrecorded attendance",
     "homeworkDue": "Homework due within 48 hours",
     "pendingGrades": "Assessment marks not entered",
-    "paymentOverdue": "Session without a receipt after N days",
     "cooldownHours": "Cooldown (hours)",
-    "paymentOverdueDays": "Unreceipted session alert after (days)",
     "emailDigest": "Opt in to the daily email digest",
     "digestHint": "The digest contains alert types and counts only. No note bodies or phone numbers are included."
   },
@@ -806,7 +792,7 @@
       "parentUpdates": "Parent updates",
       "team": "Team",
       "audit": "Activity log",
-      "payments": "Payments",
+      "payments": "Session receipts",
       "settings": "Settings",
       "performance": "Performance"
     }
@@ -878,10 +864,8 @@
     "kpiStudentsActive": "{count} active",
     "kpiStudentsInactive": "{count} inactive",
     "kpiStudentsNewEnrolled": "+{count} newly enrolled",
-    "kpiRevenueTitle": "Collected Revenue",
-    "kpiRevenueExpected": "{amount} {currency} expected",
-    "kpiRevenueNoRules": "No session price set",
-    "permissionRestricted": "Restricted by permission",
+    "kpiRevenueTitle": "Collected earnings",
+    "permissionRestricted": "Only the workspace owner can view money",
     "kpiAttendanceTitle": "Attendance Rate",
     "kpiAttendanceCounts": "{present} present • {absent} absent",
     "kpiAttendanceAwaiting": "{count} sessions awaiting attendance",
@@ -925,17 +909,16 @@
     "viewStudentProfile": "Student profile",
     "viewAction": "View",
     "viewAllAction": "View all",
-    "financialTitle": "Financial Performance",
-    "financialSubtitle": "Truthful session revenue: expected from attendance, collected from receipts",
-    "financialRestrictedMessage": "You do not have permission to view workspace financial records.",
+    "financialTitle": "Session earnings",
+    "financialSubtitle": "Money actually recorded by the workspace owner",
+    "financialRestrictedMessage": "Only the workspace owner can view money records",
     "openPaymentsLedger": "Session receipts",
     "financialCollectedLabel": "Total Collected",
-    "financialExpectedLabel": "Expected Revenue",
     "financialTrendChartTitle": "Revenue Trend Over Time",
-    "financialTrendEmpty": "No payments recorded in recent periods",
-    "financialByGroupChartTitle": "Revenue by Group",
-    "financialByGroupEmpty": "No group revenue data",
-    "financialRecentPaymentsTitle": "Recent Payments",
+    "financialTrendEmpty": "No receipts recorded in recent periods",
+    "financialByGroupChartTitle": "Collected by group",
+    "financialByGroupEmpty": "No collected money data",
+    "financialRecentPaymentsTitle": "Recent receipts",
     "academicTitle": "Academic Performance",
     "academicSubtitle": "Student performance, group comparisons, and assessment trends",
     "academicOverallAverage": "{percent}% average",
@@ -984,7 +967,8 @@
     "activityTitle": "Recent Activity",
     "activitySubtitle": "Chronological audit log of operations across the workspace",
     "viewAuditLogAction": "Full audit log",
-    "activityEmptyMessage": "No recent workspace activity recorded yet."
+    "activityEmptyMessage": "No recent workspace activity recorded yet.",
+    "kpiRevenueCollectedHint": "Only recorded receipts"
   },
   "Account": {
     "eyebrow": "Account",
@@ -1267,12 +1251,11 @@
     "slotOverlapsSameGroup": "Two slots overlap on the same day within the same group."
   },
   "Payments": {
-    "title": "Payments",
-    "subtitle": "Manual EGP records only. Kashkol does not move or settle money.",
-    "noPermission": "You do not have permission to view payment records.",
+    "title": "Session receipts",
+    "subtitle": "Only money actually collected for sessions. Owner only.",
+    "noPermission": "Only the workspace owner can view money",
     "requestError": "The request could not be completed. Check the entries and try again.",
-    "collected": "Collected (net of refunds)",
-    "sessionRevenueTitle": "Session revenue",
+    "collected": "Total collected",
     "filterSession": "Filter by session",
     "allSessions": "All sessions",
     "session": "Session",
@@ -1281,33 +1264,29 @@
     "price": "Session price",
     "chooseSession": "Choose a session",
     "note": "Note",
-    "expected": "Expected",
     "received": "Collected",
-    "recordTitle": "Record a payment",
+    "recordTitle": "Record receipt",
     "amount": "Amount in EGP",
-    "purpose": "Purpose",
     "method": "Method",
     "cash": "Cash",
     "transfer": "Transfer",
     "other": "Other configured method",
     "methodLabel": "Method name (for other)",
     "paidOn": "Payment date",
-    "reference": "Reference / receipt number",
     "saving": "Saving…",
-    "recordButton": "Record payment",
-    "historyTitle": "Payment history",
-    "emptyHistory": "No payments recorded.",
-    "unspecified": "Unspecified purpose",
-    "historyPagination": "Payment history pages",
+    "recordButton": "Record receipt",
+    "historyTitle": "Receipt history",
+    "emptyHistory": "No session receipts recorded.",
+    "unspecified": "No session",
+    "historyPagination": "Receipt history pages",
     "previous": "Previous",
     "pageOf": "Page {page} of {pageCount}",
     "next": "Next",
     "errors": {
       "totalOutOfRange": "The total exceeds the supported exact currency range.",
-      "duplicateMismatch": "This submission key was already used for different payment data.",
-      "feeRuleAlreadyExists": "A fee convention already exists for that target and effective month.",
-      "sessionPriceMissing": "This session has no price, so a payment cannot be recorded automatically."
-    }
+      "duplicateMismatch": "This submission key was already used for different payment data."
+    },
+    "sessionEarningsTitle": "Collected by session"
   },
   "Reports": {
     "title": "Reports",
@@ -1361,8 +1340,8 @@
       "enrollment": "Enrollment",
       "academics": "Academic results",
       "homework": "Homework completion",
-      "payments": "Payment ledger",
-      "sessionRevenue": "Session revenue"
+      "payments": "Session receipts",
+      "sessionRevenue": "Collected session earnings"
     },
     "columns": {
       "date": "Date",
@@ -1379,16 +1358,9 @@
       "dueDate": "Due date",
       "homework": "Homework",
       "updatedAt": "Updated at",
-      "kind": "Record type",
-      "amountEgp": "Amount (EGP)",
-      "period": "Period",
-      "purpose": "Purpose",
+      "amountEgp": "Collected (EGP)",
       "method": "Method",
-      "referenceNumber": "Receipt number",
-      "reason": "Reason",
       "priceEgp": "Session price (EGP)",
-      "attended": "Present/late",
-      "expectedEgp": "Expected (EGP)",
       "collectedEgp": "Collected (EGP)"
     },
     "errors": {
@@ -1420,8 +1392,7 @@
       "files": "Private file storage with signed access and a scan gate.",
       "parent-updates": "Prepared parent updates that open in WhatsApp. The product never claims delivery.",
       "team": "Assistants and their server-enforced permission grants.",
-      "audit": "The append-only activity log for security-sensitive changes.",
-      "payments": "A manual payments ledger that records money received. No settlement is claimed."
+      "audit": "The append-only activity log for security-sensitive changes."
     }
   },
   "Files": {
@@ -1989,12 +1960,11 @@
       "search": "Verify",
       "sessionPrice": "Session price",
       "priceUnit": "EGP",
-      "expectedRevenue": "Expected revenue",
-      "collectedRevenue": "Collected revenue",
+      "collectedRevenue": "Collected",
       "crossSeasonBadge": "Cross-group",
-      "revenueUnavailable": "Session payment summary could not be loaded.",
+      "revenueUnavailable": "Collected total could not be loaded.",
       "revenueRetry": "Retry",
-      "loadingRevenue": "Loading session payment summary…",
+      "loadingRevenue": "Loading collected total…",
       "startAttendance": "Start attendance",
       "scanRecording": "Recording…",
       "homeworkQuestion": "Did the student do the homework ({title})?",
@@ -2009,8 +1979,11 @@
       "removeStudentSuccess": "Student removed from session roster",
       "studentNotOnRoster": "Student not on session roster",
       "studentHasMarks": "Student has attendance marks and cannot be removed",
-      "groupSessionRosterFixed": "Group sessions use the group's enrollment roster"
-    }
+      "groupSessionRosterFixed": "Group sessions use the group's enrollment roster",
+      "noSessionPrice": "No price set for this session"
+    },
+    "sessionPriceEgp": "Session price (EGP)",
+    "sessionPricePlaceholder": "Optional, variable for this session"
   },
   "Portal": {
     "pwa": {
@@ -2028,7 +2001,7 @@
     },
     "notifications": {
       "pushSettingsTitle": "Push Notifications & Lock-Screen Privacy",
-      "lockScreenPrivacyNote": "By default, push notifications show generic text only and never expose grades, attendance, or balances on a locked screen.",
+      "lockScreenPrivacyNote": "By default, push notifications show generic text only and never expose grades, attendance, or money amounts on a locked screen.",
       "enablePushAction": "Enable Push Notifications",
       "disablePushAction": "Disable Push",
       "iosHomeScreenRequirement": "On iPhone and iPad, Safari requires adding Kashkol to your Home Screen before Web Push notifications can be enabled. Your in-app notification center remains active.",

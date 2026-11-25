@@ -270,7 +270,6 @@ describe("notification architecture - isolation, security and deduplication", ()
       "session_unrecorded",
       "homework_due_soon",
       "assessment_pending_grades",
-      "payment_overdue",
       "backup_ready",
       "export_ready",
       "general",
@@ -288,7 +287,6 @@ describe("notification architecture - isolation, security and deduplication", ()
       "sessionUnrecorded",
       "homeworkDueSoon",
       "assessmentPendingGrades",
-      "paymentOverdue",
       "backupReady",
       "exportReady",
       "attendancePresent",
@@ -301,6 +299,11 @@ describe("notification architecture - isolation, security and deduplication", ()
       expect(ar.Notifications.messages[msg]).toBeDefined();
       expect(en.Notifications.messages[msg]).toBeDefined();
     }
+
+    expect(ar.Notifications.types).not.toHaveProperty("payment_overdue");
+    expect(en.Notifications.types).not.toHaveProperty("payment_overdue");
+    expect(ar.Notifications.messages).not.toHaveProperty("paymentOverdue");
+    expect(en.Notifications.messages).not.toHaveProperty("paymentOverdue");
   });
 
   it("evaluates rules and creates alerts for unrecorded sessions and due homework", async () => {
@@ -410,15 +413,16 @@ describe("notification architecture - isolation, security and deduplication", ()
     expect(dispatchWebPushNotification).not.toHaveBeenCalled();
   });
 
-  it("keeps the overdue receipt alert session-scoped (ADR-0028)", () => {
-    const arPath = path.resolve(process.cwd(), "messages/ar.json");
-    const ar = JSON.parse(fs.readFileSync(arPath, "utf-8"));
+  it("has no money notification capability in either catalogue", () => {
+    const ar = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "messages/ar.json"), "utf-8"));
+    const en = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "messages/en.json"), "utf-8"));
 
-    const notificationTypes = Object.keys(ar.Notifications.types);
-    expect(notificationTypes).toContain("payment_overdue");
-    expect(notificationTypes).not.toContain("balance_due");
-    expect(notificationTypes).not.toContain("debt_reminder");
-    expect(ar.Notifications.messages.paymentOverdue).not.toContain("الطالب");
-    expect(ar.Notifications.messages.paymentOverdue).not.toContain("رصيد");
+    for (const catalogue of [ar, en]) {
+      const notificationTypes = Object.keys(catalogue.Notifications.types);
+      expect(notificationTypes).not.toContain("payment_overdue");
+      expect(notificationTypes).not.toContain("balance_due");
+      expect(notificationTypes).not.toContain("debt_reminder");
+      expect(catalogue.Notifications.messages).not.toHaveProperty("paymentOverdue");
+    }
   });
 });

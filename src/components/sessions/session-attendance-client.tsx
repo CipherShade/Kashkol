@@ -636,22 +636,20 @@ export function SessionAttendanceClient({
                   </Button>
                 </div>
               )}
-              {canSeeFinancials && !revenueLoading && !revenueError && revenue && revenue.pricePerStudentMinor != null && (
+              {canSeeFinancials && !revenueLoading && !revenueError && revenue && (
                 <div className="rounded-lg border bg-muted/40 p-3 space-y-2 text-sm">
-                  <div className="flex flex-wrap items-center gap-2 border-b pb-2 font-medium">
+                  <div className="flex flex-wrap items-center gap-2 font-medium">
                     <span className="flex items-center gap-1.5">
                       <Icon name="creditCard" size={16} />
-                      {t("sessionPrice")}: {(revenue.pricePerStudentMinor / 100).toFixed(2)} {t("priceUnit")}
+                      {session.pricePerStudentMinor != null
+                        ? `${t("sessionPrice")}: ${(session.pricePerStudentMinor / 100).toFixed(2)} ${t("priceUnit")}`
+                        : t("noSessionPrice")}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                    <div className="rounded bg-background p-2 border">
-                      <div className="text-muted-foreground">{t("expectedRevenue")}</div>
-                      <div className="font-semibold text-sm">{((revenue.expectedRevenueMinor ?? 0) / 100).toFixed(2)} {t("priceUnit")}</div>
-                    </div>
-                    <div className="rounded bg-background p-2 border">
-                      <div className="text-muted-foreground">{t("collectedRevenue")}</div>
-                      <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">{(revenue.collectedRevenueMinor / 100).toFixed(2)} {t("priceUnit")}</div>
+                  <div className="rounded bg-background p-2 border text-center text-xs">
+                    <div className="text-muted-foreground">{t("collectedRevenue")}</div>
+                    <div className="font-semibold text-sm text-emerald-600 dark:text-emerald-400">
+                      {(revenue.collectedRevenueMinor / 100).toFixed(2)} {t("priceUnit")}
                     </div>
                   </div>
                 </div>

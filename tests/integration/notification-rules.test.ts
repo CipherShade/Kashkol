@@ -111,35 +111,14 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
       });
     });
 
-    const candidates = await withScope(scope, (tx) =>
-      tx.teachingSession.findMany({
-        where: {
-          workspaceId: FIXTURES,
-          startsAt: { lte: new Date(NOW.getTime() - 30 * 24 * 60 * 60 * 1000) },
-          status: { not: "cancelled" },
-          attendanceMarks: { some: { mark: { in: ["present", "late"] } } },
-          payments: { none: { voidedAt: null } },
-        },
-        select: { id: true, pricePerStudentMinor: true },
-      }),
-    );
-    expect(
-      candidates.some(
-        (row) => row.id === sessions.unreceipted.id && (row.pricePerStudentMinor ?? 0) > 0,
-      ),
-      `candidates: ${JSON.stringify(candidates)}`,
-    ).toBe(true);
-
     const ruleSettings = await withScope(scope, (tx) =>
       findNotificationRuleSettingsTx(tx, FIXTURES),
     );
-    expect(
-      ruleSettings.rules.paymentOverdueEnabled,
-      `stored config: ${JSON.stringify(ruleSettings.rules)}`,
-    ).toBe(true);
+    expect(ruleSettings.rules).not.toHaveProperty("paymentOverdueEnabled");
+    expect(ruleSettings.rules).not.toHaveProperty("paymentOverdueDays");
 
     const first = await evaluateNotificationRules(scope, NOW);
-    expect(first.createdCount).toBeGreaterThanOrEqual(5);
+    expect(first.createdCount).toBeGreaterThanOrEqual(4);
 
     const stored = await withScope(scope, (tx) =>
       tx.notification.findMany({
@@ -152,7 +131,6 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
               "session_unrecorded",
               "homework_due_soon",
               "assessment_pending_grades",
-              "payment_overdue",
             ],
           },
         },
@@ -164,13 +142,13 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
       "session_unrecorded",
       "homework_due_soon",
       "assessment_pending_grades",
-      "payment_overdue",
     ]) {
       expect(
         stored.some((row) => row.type === type),
         `missing ${type}; stored: ${stored.map((row) => row.type).join(",")}`,
       ).toBe(true);
     }
+    expect(stored.some((row) => (row.type as string) === "payment_overdue")).toBe(false);
     expect(
       stored.some((row) => row.entityType === "student" && row.entityId === studentId),
     ).toBe(true);

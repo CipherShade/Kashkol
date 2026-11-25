@@ -38,7 +38,7 @@ downgraded.
 | Role | Scope | Typical access |
 |---|---|---|
 | **Workspace owner / teacher** | One workspace | Everything inside that workspace: students, groups, schedule, attendance, grades, files, payments, settings, team, billing. |
-| **Assistant** | One workspace, granted subset | Scoped by explicit permission grants (e.g. attendance + students, but no payments, no settings). Cannot invite members, cannot delete the workspace, cannot see payment data unless granted. |
+| **Assistant** | One workspace, granted subset | Scoped by explicit permission grants (e.g. attendance + students, but no settings). Cannot invite members, cannot delete the workspace, and **never** sees money — there is no payment grant (`ADR-0041`). |
 | **Parent** | One workspace, one or more linked children | Read-only access only through an explicitly authorized portal route and field projection for their own child. Staff-only grades, feedback, and follow-up notes are excluded unless a specific requirement and allowlisted route authorize them. No access to other students or ability to change teacher data. |
 | **Student** | One workspace, own record | Read-only view of own attendance, results, homework, files. Can mark homework submitted and upload a submission (P2). |
 | **Platform administrator** | Platform-wide | Operational metadata only: workspace status, plan, aggregate counts, support tooling. **No standing access to tenant content.** Break-glass content access is explicit, time-boxed, and audited (`D-13`). |
@@ -155,7 +155,7 @@ Workspace
 | `D-09` | Homework submissions are explicit records with a status, not an array of booleans carried on the homework row. |
 | `D-10` | **Session corrections never destroy history.** Every attendance write creates an immutable revision entry recording actor, timestamp, prior value, and new value. The current value is the head of the revision chain. |
 | `D-11` | "Quiz" in the prototype maps to **paper assessment with manual grade entry** in the brief. Kashkol uses the term *Assessment (paper)* to distinguish it from the P3 online exam. (`A-06`) |
-| `D-14` | Payments are **records of money the teacher received**, entered manually: student, period covered, amount, method, date, note. Kashkol performs no reconciliation and no settlement. **Superseded by `ADR-0028`** (2026-11-13): the record is now a session receipt (session, amount, method, date, note); the per-student ledger is removed. |
+| `D-14` | Money is a **session receipt**: the workspace owner records what they received for a session (session, amount in EGP, method, date, note). Kashkol performs no reconciliation, no settlement, and no projection. **Superseded by `ADR-0028`** (2026-11-13, per-student ledger removed), then by `ADR-0041` and `ADR-0043` (2026-11-25): only collected money is stored or shown, owner-only, session price only, with no fee rules or adjustments in the physical schema. |
 | `D-15` | Files have exactly three visibility scopes: `teacher_only`, `groups`, and `students`. Group/student targets are explicit tenant-scoped associations and may contain multiple targets. Parents/students must also have a live explicit portal grant for the assigned student. |
 | `D-16` | Messages are **prepared drafts** plus an optional record of the teacher opening them. Kashkol never asserts delivery. (`F-P1-10`) |
 
@@ -167,7 +167,7 @@ Workspace
 |---|---|---|
 | **P0 — Foundation** | The non-negotiable substrate: tenancy, auth, i18n/RTL, theming, design system, data model, audit, security. Nothing user-facing ships without it. | M0 |
 | **P1 — First usable release** | The smallest set a real teacher can run their teaching week on: students, groups, schedule, attendance with corrections, homework, paper grades, parent updates, files, a usable dashboard, minimal reports. | M1 (public beta) |
-| **P2 — Expansion** | Multi-user and multi-audience: assistants with real permissions, parent portal, student portal, manual payments, notifications, QR attendance, progress & follow-up, exports, data portability. | M2 |
+| **P2 — Expansion** | Multi-user and multi-audience: assistants with real permissions, parent portal, student portal, owner-only collected session receipts, notifications, QR attendance, progress & follow-up, exports, data portability. | M2 |
 | **P3 — Advanced** | High-cost / external-dependency / later-phase: online exams, recorded video via external provider, admin console, subscription & billing, scale hardening. | M3+ |
 
 **Scope discipline rules**
@@ -355,7 +355,7 @@ assistant makes a mistake I can see exactly what happened.
 3. Covered actions at minimum: student create/update/archive/import; group create/update/archive;
    session create/edit/cancel; attendance save and **every correction**; homework create/update;
    assessment create and **every score change**; file upload/share/delete; message prepare/open;
-   payment create/amend/delete; team invite/permission change/remove; settings change; auth events.
+   payment receipt recorded (no amend or delete); team invite/permission change/remove; settings change; auth events.
 4. The Activity Log screen lists events newest-first with actor, action, target, and relative time, and
    supports filtering by actor and by entity type.
 5. Audit events are visible to the workspace owner and to assistants **only if** they hold the
@@ -380,9 +380,9 @@ able to get it out, so that I can exercise my rights.
    and the schema version of the export.
 3. A workspace owner can request deletion of the workspace and all contained data; the request is
    queued, confirmed, executed, and recorded.
-4. Deletion cascades to all child records (attendance, grades, payments, files, messages, sessions)
-   and to stored file objects; the audit log is retained for a legally-defensible retention period
-   and then purged.
+4. Deletion cascades to all child records (attendance, grades, collected session receipts, files,
+   messages, sessions) and to stored file objects; the audit log is retained for a legally-defensible
+   retention period and then purged.
 5. Every file object has a retention/lifecycle policy; deleting a file removes the storage object
    within a bounded window, verified by a scheduled reconciliation job.
 6. Logs, error reports, and analytics never contain student names, phone numbers, note bodies, or
@@ -705,7 +705,7 @@ know who is keeping up.
    means **not recorded** — the UI shows the answer only after the teacher taps; it never defaults to
    a claimed answer. When the group has no active homework, the whole question is hidden; the
    attendance screen never fabricates a homework context. The chips render only for members with
-   `homework:write` (same server-side gate the payment toggle uses); other members do not see them,
+   `homework:write` (the same server-side permission gate used across the app); other members do not see them,
    and the gate is enforced server-side, not by the client.
 
 ---
@@ -904,9 +904,10 @@ enter grades but not see money, so that I can delegate without giving away the w
 1. The owner invites a member by email; the invitee sets a password and joins **that** workspace only.
 2. Permission grants are explicit and cover at least: `students` (read/write), `grades` (read/write),
    `attendance` (read/write), `homework` (read/write), `files` (read/write), `messages` (read/write),
-   `payments` (read/write), `settings` (read/write), `team` (read), `audit` (read).
-3. **Enforcement is server-side.** An assistant without `payments` receives `403` from the payments
-   API, not merely a hidden menu item. An automated test enumerates every permission × endpoint
+   `settings` (read/write), `team` (read), `audit` (read). There is no `payments` resource to grant;
+   the enum value and grant rows were physically removed (`ADR-0043`).
+3. **Enforcement is server-side.** Every assistant receives `403` from the money API regardless of
+   grants, not merely a hidden menu item. An automated test enumerates every permission × endpoint
    combination and asserts the expected status.
 4. The owner role always has all permissions; permission checkboxes are disabled for owners (as in
    the prototype) and this is enforced server-side too.
@@ -979,57 +980,40 @@ to prepare.
 
 ---
 
-### F-P2-04 — Manual payment tracking
+### F-P2-04 — Collected session earnings (owner only)
 
-> **Status: superseded by `ADR-0028`** (2026-11-13). Manual tracking remains, but it is
-> **session-scoped**: the teacher records one receipt per session, and expected revenue is
-> price × (present + late marks). The per-student model described below (criteria 2, 3, 4, the
-> per-student fee rules in 2, the "paid" toggle in 9, and the balances report in 10) is removed.
-> Criteria 5 (append-only, idempotent), 6 (assistant permission gate), 7 (no settlement claim),
-> 8 (EGP-only), and 11 (no parent access) continue to apply. Criterion 1 is replaced by: a
-> session receipt records session, amount (EGP), method, date, optional reference/note, and the
-> authenticated operator.
+> **Status:** rewritten by `ADR-0041` (2026-11-25), superseding `ADR-0028`'s expected-revenue model.
+> The per-student ledger (`ADR-0028`), expected revenue, fee rules, group prices, adjustments, and
+> assistant payment grants are removed.
 
-**User story:** As a teacher, I want to record what each parent paid and what is still outstanding, so
-that I know who to follow up with.
+**User story:** As the teacher who owns the workspace, I want to record and see only the money I
+actually received for each session, so that Kashkol never claims money was expected, owed, or
+visible to anyone else.
 
-**Dependencies:** F-P1-02, F-P0-01.
+**Dependencies:** F-P1-02, F-P0-01, F-P1-06.
 
 **Acceptance criteria**
-1. A payment record: student, period covered (e.g. `2026-10`), amount, currency (default **EGP**),
-   method (`cash` / `transfer` / `other`, with a label for `other`), date, optional receipt
-   reference, optional note, and the authenticated operator.
-2. The teacher can define a **monthly fee** per student or per group; outstanding balance is then
-   computed in integer piastres as (fee × expected periods) − recorded payments plus adjustments,
-   per student. Amounts are never calculated with floating-point currency arithmetic.
-3. Outstanding students are listed with amount due and days overdue.
-4. The teacher can record a **partial** payment; the remaining balance stays outstanding.
-5. Payments, fee rules, and adjustments are append-only. A discount, refund, or correction is a
-   separate record with a required reason and authenticated operator; a past payment is never
-   silently amended or deleted. Refunds against a receipt cannot exceed its remaining refundable
-   amount. Duplicate submissions are idempotent and conflicting reuse of an idempotency key fails.
-6. The payments screen is **not** visible to assistants without the `payments` permission, and the
-   API enforces this (F-P2-01).
-7. Kashkol never contacts a bank, never reconciles with a gateway, and never claims a payment is
-   "settled" — only that the teacher recorded it.
-8. EGP is the only supported currency for this stage; every amount is explicitly labelled EGP.
-9. Attendance does not reduce monthly fees by itself. Monthly/group fees are period-based and are
-   unaffected by cancelled or make-up sessions; an exception requires a separately reasoned adjustment.
-   **Per-session billing is supported as an explicit, implemented policy** (`ADR-0025`,
-   superseding in part `ADR-0018`): a group with `default_price_per_student_minor > 0` (or a session
-   with `price_per_student_minor` set) accrues expected charges equal to price × (present + late marks)
-   for every non-cancelled session; groups priced at session level do not accrue monthly `fee_rule`
-   rows for their enrolled students; the teacher's per-student "paid" toggle writes or reuses a real
-   session-linked `payment` row in the same transaction (and audits it); voided payments never count as
-   collected revenue. Nothing about this policy weakens the append-only invariant for `fee_rule`,
-   `payment`, or `payment_adjustment`.
-10. The payment ledger report covers collected transactions and adjustments. A separate student
-    balances report computes expected, received, adjustment, and outstanding/credit amounts as of a
-    required date. Both honor group/student filters; the ledger honors its date range and the balance
-    report uses its as-of date. Exports apply the same filters, are authorization-checked, paginated
-    or capped, asynchronous, tenant-scoped, and protected against spreadsheet formula injection.
-11. Parent balance or receipt access is disabled until an explicitly authorized parent projection is
-    implemented; no parent can use a staff payment route.
+1. A receipt records **session** (required), amount (integer EGP piastres), method
+   (`cash` / `transfer` / `other`, with a label for `other`), date, optional note, and the
+   authenticated workspace owner. It records no student, no period, and no balance.
+2. Only the **workspace owner** can create or read receipts. The API returns `403` for assistants
+   and for portal users regardless of grants; there is no `payments` permission resource in the
+   physical schema (`ADR-0043`).
+3. Only **collected** money is shown: a per-session receipt list and a total of recorded receipts.
+   No expected revenue, outstanding, balance, credit, gap, or unreceipted-session alert is computed
+   or displayed anywhere — dashboard, reports, exports, notifications, or portals.
+4. The price belongs to the **session**, is variable, and is entered/edited whenever the session is
+   opened. Group default prices and fee rules do not exist. Price is session metadata; it is never
+   multiplied by attendance to produce a financial figure.
+5. Receipts are append-only and idempotent. A receipt is never amended, voided, refunded,
+   discounted, or corrected; there is no adjustment route or UI.
+6. Kashkol never contacts a bank, never reconciles with a gateway, and never claims a receipt is
+   "settled" — only that the owner recorded it (`NF-5`).
+7. EGP is the only currency; every amount is explicitly labelled EGP (`A-04`).
+8. Every displayed figure is computed from real receipt rows under forced tenant scoping; no
+   aggregate is stored and no figure is fabricated (`NF-1`).
+9. The screen renders in Arabic and English, RTL and LTR, light and dark, with empty, loading,
+   and error states.
 
 ---
 
@@ -1111,8 +1095,8 @@ so that I act before it becomes a problem.
 
 **Acceptance criteria**
 1. Rule-generated notifications include: student crossed the at-risk threshold, group has an
-   unrecorded past session, homework due within 48 hours, assessment marks not entered, and an
-   outstanding payment beyond N days.
+   unrecorded past session, homework due within 48 hours, and assessment marks not entered. Money
+   never produces a notification (`ADR-0041`).
 2. Notification rules are workspace-configurable and produce no duplicate notification for the same
    condition within a cooldown window.
 3. Notifications deep-link to the relevant screen (student profile, session, homework).
@@ -1120,14 +1104,12 @@ so that I act before it becomes a problem.
    bodies or phone numbers beyond what the teacher configured.
 5. No push notifications in P2 (no mobile app).
 
-**Current scope (2026-11-24, `ADR-0038`).** AC-1's "outstanding payment beyond N days" is
-implemented under `ADR-0028` as a **session-scoped unreceipted revenue alert**: a past,
-non-cancelled session with chargeable attendance and a positive price but no non-voided receipt
-after N days. No per-student balance, debt, or phone number is inferred. AC-2 is implemented with
-workspace switches, a cooldown, and a database-enforced dedupe key. AC-3 deep-links to student
-profiles, sessions, homework, and assessments. AC-4 is an explicit opt-in digest with type labels
-and counts only; it is skipped when no email provider is configured. AC-5 remains in force: no
-new staff push channel is added.
+**Current scope (2026-11-24, `ADR-0038`; amended 2026-11-25 by `ADR-0041` and `ADR-0043`).** The
+`payment_overdue` rule and its unreceipted-session alert are removed from the physical schema: no
+notification, digest entry, or deep link mentions money. AC-2 is implemented with workspace switches, a cooldown, and a
+database-enforced dedupe key. AC-3 deep-links to student profiles, sessions, homework, and
+assessments. AC-4 is an explicit opt-in digest with type labels and counts only; it is skipped when
+no email provider is configured. AC-5 remains in force: no new staff push channel is added.
 
 ---
 
@@ -1174,7 +1156,8 @@ analyse or share them.
 
 **Acceptance criteria**
 1. Exportable reports: student roster, attendance records (with corrections applied and the revision
-   chain available as a separate sheet), assessment scores, homework submissions, payments.
+   chain available as a separate sheet), assessment scores, homework submissions, and owner-only
+   collected session receipts.
 2. Formats: CSV (UTF-8 with BOM for Excel), XLSX, and PDF summary. Filenames are localised. PDF requires
    an explicitly configured renderer; when none is configured the PDF export fails visibly and no file
    is written — no counterfeit document is produced (`ADR-0032`).

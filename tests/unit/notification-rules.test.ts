@@ -52,16 +52,9 @@ function mocksForAllRules(config: Record<string, unknown> = {}) {
       session: { startsAt: new Date("2026-11-22T10:00:00.000Z") },
     },
   ]);
-  mockTx.teachingSession.findMany
-    .mockResolvedValueOnce([{ id: "session-1", group: { name: "Physics" }, gradeLabel: null }])
-    .mockResolvedValueOnce([
-      {
-        id: "session-2",
-        group: { name: "Math", defaultPricePerStudentMinor: 100 },
-        gradeLabel: null,
-        pricePerStudentMinor: 100,
-      },
-    ]);
+  mockTx.teachingSession.findMany.mockResolvedValueOnce([
+    { id: "session-1", group: { name: "Physics" }, gradeLabel: null },
+  ]);
   mockTx.homework.findMany.mockResolvedValue([
     { id: "homework-1", title: "Sheet 1", group: { name: "Math" } },
   ]);
@@ -78,12 +71,12 @@ describe("F-P2-07 notification rule expansion", () => {
     mockTx.workspaceMember.findMany.mockResolvedValue([]);
   });
 
-  it("creates one alert for each of the five rule types", async () => {
+  it("creates one alert for each of the four rule types and no money alerts", async () => {
     mocksForAllRules();
 
     const result = await evaluateNotificationRules(scope, now);
 
-    expect(result.createdCount).toBe(5);
+    expect(result.createdCount).toBe(4);
     const types = mockTx.notification.create.mock.calls.map(
       (call: unknown[]) => (call[0] as { data: { type: string } }).data.type,
     );
@@ -92,7 +85,6 @@ describe("F-P2-07 notification rule expansion", () => {
       "session_unrecorded",
       "homework_due_soon",
       "assessment_pending_grades",
-      "payment_overdue",
     ]);
   });
 
@@ -102,7 +94,6 @@ describe("F-P2-07 notification rule expansion", () => {
       unrecordedSessionEnabled: false,
       homeworkDueSoonEnabled: false,
       assessmentPendingGradesEnabled: false,
-      paymentOverdueEnabled: false,
     });
 
     const result = await evaluateNotificationRules(scope, now);
@@ -148,6 +139,16 @@ describe("F-P2-07 notification rule expansion", () => {
       DEFAULT_NOTIFICATION_RULE_CONFIG,
     );
     expect(notificationRuleConfigSchema.safeParse({ unknownKey: true }).success).toBe(false);
+  });
+
+  it("rejects unknown rule keys instead of carrying legacy money settings", () => {
+    expect(
+      notificationRuleConfigSchema.safeParse({ paymentOverdueEnabled: true }).success,
+    ).toBe(false);
+    expect(parseNotificationRuleConfig({ paymentOverdueEnabled: true })).toEqual(
+      DEFAULT_NOTIFICATION_RULE_CONFIG,
+    );
+    expect(parseNotificationRuleConfig({ atRiskEnabled: false }).atRiskEnabled).toBe(false);
   });
 
   it("strips the server-owned digest cursor from API responses", () => {

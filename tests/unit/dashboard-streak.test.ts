@@ -21,7 +21,6 @@ const GROUP = {
   name: "Group One",
   color: "#0a84ff",
   grade: "Grade 9",
-  defaultPricePerStudentMinor: 500_000,
 };
 
 const STUDENT = {
@@ -60,7 +59,6 @@ function makeSession(id: string, startsAt: string, status: "completed" | "cancel
       id: GROUP.id,
       name: GROUP.name,
       color: GROUP.color,
-      defaultPricePerStudentMinor: null,
     },
   };
 }
@@ -114,7 +112,6 @@ function buildRaw(marksOverride?: Array<ReturnType<typeof makeMark>>) {
     },
     allStudents: [STUDENT],
     groups: [GROUP],
-    feeRules: [],
     enrollments: [ENROLLMENT],
     sessions,
     attendanceMarks: marksOverride ?? [makeMark(SESSION_IDS[0]!, "absent", "2026-10-20T10:00:00Z")],
@@ -123,7 +120,6 @@ function buildRaw(marksOverride?: Array<ReturnType<typeof makeMark>>) {
     homeworkList: [],
     homeworkSubmissions: [],
     payments: [],
-    adjustments: [],
     onlineExams: [],
     onlineExamAttempts: [],
     forms: [],
@@ -140,7 +136,7 @@ const ownerScope: Scope = {
   permissions: new Set([
     permissionKey("students", "read"),
     permissionKey("grades", "read"),
-    permissionKey("payments", "read"),
+    permissionKey("sessions", "read"),
     permissionKey("team", "read"),
   ]),
 };
@@ -270,5 +266,52 @@ describe("dashboard attendance streak (selected period, chronological by session
     expect(data.globalOverview.students.atRisk).toBe(0);
     expect(isAbsenceReason(data)).toBe(false);
     expect(streakCount(data)).toBeNull();
+  });
+
+  it("never exposes collected money or payment activity to an assistant", async () => {
+    const assistantScope: Scope = {
+      ...ownerScope,
+      actorUserId: "assistant-1",
+      actorDisplayName: "Assistant One",
+      role: "assistant",
+      permissions: new Set([permissionKey("students", "read")]),
+    };
+    mockedFetch.mockResolvedValueOnce({
+      ...buildRaw([]),
+      payments: [
+        {
+          id: "receipt-1",
+          sessionId: LATEST_SESSION.id,
+          amountMinor: 50_000,
+          currency: "EGP",
+          method: "cash",
+          paidOn: new Date("2026-11-05T10:00:00Z"),
+          createdAt: new Date("2026-11-05T10:00:00Z"),
+          session: { ...LATEST_SESSION, group: GROUP },
+        },
+      ],
+      auditEvents: [
+        {
+          id: "audit-payment",
+          actorUserId: "teacher-1",
+          actorDisplayName: "Teacher One",
+          action: "payment.recorded",
+          entityType: "payment",
+          entityId: "receipt-1",
+          createdAt: new Date("2026-11-05T10:00:00Z"),
+        },
+      ],
+    } as never);
+
+    const data = await getDashboardData(
+      assistantScope,
+      { period: "this_month" },
+      new Date("2026-11-11T08:00:00Z"),
+    );
+
+    expect(data.permissions.canSeeFinancials).toBe(false);
+    expect(data.globalOverview.revenue.collectedMinor).toBe(0);
+    expect(data.financialOverview).toBeNull();
+    expect(data.recentActivity.some((event) => event.entityType === "payment")).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ export type SessionListItem = {
   isOneOff: boolean;
   cancelledAt: Date | null;
   hasAttendance: boolean;
+  pricePerStudentMinor?: number | null;
   room?: string | null;
   location?: string | null;
   notes?: string | null;
@@ -66,6 +67,7 @@ export async function listSessions(scope: Scope, from: Date, to: Date, groupId?:
       isOneOff: s.isOneOff,
       cancelledAt: s.cancelledAt,
       hasAttendance: s.attendanceMarks.length > 0,
+      pricePerStudentMinor: s.pricePerStudentMinor,
       room: s.room,
       location: s.location,
       notes: s.notes,
@@ -138,18 +140,16 @@ export async function createOneOffSessionTx(
     pricePerStudentMinor?: number | null;
   },
 ) {
-  // Group sessions keep the existing behaviour: the group must belong to the
-  // workspace and the session inherits its default price when none is given.
-  let effectivePrice: number | null = data.pricePerStudentMinor ?? null;
+  // A group must belong to the workspace. Price is never inherited: it belongs
+  // to the session and is edited there whenever the session is opened (ADR-0041).
   if (data.groupId) {
     const group = await tx.group.findFirst({
       where: { id: data.groupId, workspaceId: scope.workspaceId, archivedAt: null },
+      select: { id: true },
     });
     if (!group) throw new Error("NOT_FOUND");
-    if (data.pricePerStudentMinor === undefined) {
-      effectivePrice = group.defaultPricePerStudentMinor ?? null;
-    }
   }
+  const effectivePrice: number | null = data.pricePerStudentMinor ?? null;
 
   const session = await tx.teachingSession.create({
     data: {

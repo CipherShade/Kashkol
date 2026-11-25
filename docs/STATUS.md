@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-23 · **Status:** Two-step teacher sign-up and the Arabic ك brand mark are implemented (ADR-0036, ADR-0037). Account creation now redirects to a dedicated manual payment page; the shared monogram, favicon, and PWA icons use the Arabic letter ك. All gates pass, including the full integration suite (155/155). A follow-up migration repair restored the report-export queue, the Arabic trigram indexes, and the file-scope indexes that an auto-generated diff had dropped. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-25 · **Status:** Owner-only collected session earnings, a private status page, and physical removal of legacy workspace money storage are implemented (`ADR-0041`, `ADR-0042`, `ADR-0043`). The removed tagline is gone from both catalogues, the shell, the landing footer, the agent instructions, and the ADRs. Assistants, parents, students, and public visitors have no money surface; expected revenue, adjustments, fee rules, group default prices, voided receipts, money alerts, and money grants no longer exist in the workspace schema. Platform subscription and billing are unchanged. All gates pass: lint, typecheck, 570 unit + 34 UI tests, 167 integration tests, and the production build. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -25,13 +25,13 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (31 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (41 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
 | Authorization foundation | **Implemented** — owner/assistant roles, grants, owner-only operations, portal-link checks, generated-access tests |
-| Core domain schema | **Implemented** — subjects, groups, enrollments, sessions, attendance, homework, assessments, follow-up, payments, files, Arabic search |
-| Business screens | **Implemented** — students, groups, homework, assessments, follow-up, files, account, settings, scoped search, manual payments, and report/export flows are implemented; remaining in-progress work is outside the manual ledger/reporting scope |
+| Core domain schema | **Implemented** — subjects, groups, enrollments, sessions, attendance, homework, assessments, follow-up, owner-only session receipts, files, Arabic search |
+| Business screens | **Implemented** — students, groups, homework, assessments, follow-up, files, account, settings, scoped search, collected session earnings, and report/export flows are implemented; remaining in-progress work is outside the receipts/reporting scope |
 | Outbound email provider | **Implemented, not live-verified** — console transport locally; SMTP transport implemented and unit-tested, but no live provider or deliverability setup has been verified. Production refuses to start without a configured transport |
 | Git history | Six commits on `master` |
 
@@ -40,7 +40,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 - Next.js 16.4.2 App Router, React 19.2, TypeScript 5.9, Tailwind v4, next-intl 4.14.9, Vitest 5.
 - Prisma 7.10.1 with the PostgreSQL driver adapter and an explicit generated-client output.
 - Twenty-four tracked migrations are applied to the local development database, including academic
-  records and the manual payment/report migrations:
+  records and the session receipt/report migrations:
   homework, assessment result details, follow-up records, transactional audit, and forced RLS.
 - `withScope()`/`withUserScope()` transaction helpers and a tenant-table registry checked against the
   schema and SQL.
@@ -57,18 +57,20 @@ health/readiness probes, the route registry, and the project-rule checks.
   single-use acceptance, expiration/resend/revoke handling, per-member permission editing with
   sensitive-access warnings, suspension/reactivation/removal, and server-side authorization. Member
   removal, suspension, and permission changes revoke sessions.
-- Access-controlled audit history for membership and permission operations, financial changes, and
-  attendance corrections; the reader returns a redacted projection without event diffs.
+- Access-controlled audit history for membership and permission operations, collected-earnings
+  changes, and attendance corrections; the reader returns a redacted projection without event diffs
+  and hides legacy payment events from assistants.
 - Portal-link authorization and dedicated Parent & Student Portal areas (`/[locale]/portal/parent`,
   `/[locale]/portal/student`, `/[locale]/portal/link/[token]`):
   - Verified invitation/account linking/revocation (`portal_invitation` hashed tokens, verified-email match, granular per-link permissions, immediate revocation, and audit logging).
-  - Parent portal scoped strictly to explicitly linked children, permitted attendance, published/locked grades (`assessment.lockedAt !== null`), assigned homework, clean shared resources, approved payment/balance ledger data (when `showPayments` is enabled), schedule changes, and private notifications — never exposing other students, other guardians, private teacher notes, or assistant activity.
+  - Parent portal scoped strictly to explicitly linked children, permitted attendance, published/locked grades (`assessment.lockedAt !== null`), assigned homework, clean shared resources, schedule changes, and private notifications — never exposing money, other students, other guardians, private teacher notes, or assistant activity.
   - Student portal scoped strictly to the linked student's own upcoming sessions, permitted attendance, assigned homework (with self-submission status marking and scanned file attachments), published grades, and clean shared learning materials.
   - Installable PWA (`/manifest.webmanifest`, `/manifest.json`, `/sw.js`, icons, iOS Home Screen guidance, offline indicator) and optional VAPID Web Push (`/api/portal/push`) with lock-screen-safe generic payload defaults (`includeSensitiveDetails = false`) and an always-available in-app notification center fallback (`/api/portal/notifications`).
 - Append-only audit writer with field redaction, an atomicity test, and append-only revision chains.
 - Core domain schema: subject, group, enrollment, teaching session, attendance mark and revision,
   assessment and score, homework/submissions/resources, follow-up/tasks/history, append-only
-  payments/adjustments/fee rules, report exports, and files, with composite tenant foreign keys.
+  session receipts, report exports, and files, with composite tenant foreign keys. Legacy adjustment,
+  fee-rule, and revision tables remain physically present for history but are never read or exposed.
 - Arabic search: `normalize_arabic`, `phonetic_arabic`, trigger-maintained search keys, and
   `pg_trgm` GIN indexes.
 - M1 student and group screens: directory, filters, create/edit/archive, duplicate warning, notes,
@@ -166,7 +168,7 @@ Line counts are **non-blank** lines.
 | Database | Prisma schema, one committed migration, forced RLS, audit append-only grant, embedded PostgreSQL 17.9.0-beta.16 |
 | Tenancy | `withScope()`, tenant-table registry, tenancy repository/service, permission evaluation, RLS integration tests |
 | HTTP and auth | Request-id ULID, error envelope, `/healthz`, `/readyz`, Better Auth handler |
-| UI shell | Arabic/English routing, RTL/LTR layout, design tokens, light/dark/system theme script, bilingual status page, `< 480px` mobile single-column CSS grid card stacking, and the `ADR-0023` floating frame: 16 px canvas gutter, 86 px icon rail with tooltips, and a focus-trapped full-label drawer below 980 px |
+| UI shell | Arabic/English routing, RTL/LTR layout, design tokens, light/dark/system theme script, bilingual **owner-only** status page (`ADR-0042`), `< 480px` mobile single-column CSS grid card stacking, and the `ADR-0023` floating frame: 16 px canvas gutter, 86 px icon rail with tooltips, and a focus-trapped full-label drawer below 980 px |
 | Local development | Guarded seed, idempotent seed data, standalone start script, Railway configuration |
 | Quality gates | Unit tests, RLS/readiness integration tests, message parity, route registry, Prisma import boundary, logical-CSS and secret-name checks |
 
@@ -221,7 +223,7 @@ hardcoded student in both portals, and the hardcoded English placeholder.
 |---|---|---|
 | **P0** (M0) | Tenancy, auth, i18n/RTL, theming, design system, data model, audit, privacy groundwork, infrastructure, in-app notifications | Any user-facing data entry beyond the workspace profile |
 | **P1** (M1) | Dashboard, students, import, groups, schedule, sessions, manual attendance, corrections, homework, paper assessments, parent updates, files, basic reports, search, account, quality gate | Second human roles, portals, money, camera/video, outbound integrations other than auth email, exports |
-| **P2** (M2) | Assistants with enforced permissions, parent portal, student portal, manual payments, QR attendance, progress and follow-up, notifications, multi-workspace, exports, import/restore, session corrections | Online exams, video, billing, admin console |
+| **P2** (M2) | Assistants with enforced permissions, parent portal, student portal, owner-only collected session earnings, QR attendance, progress and follow-up, notifications, multi-workspace, exports, import/restore, session corrections | Online exams, video, billing, admin console |
 | **P3** (M3) | Online exams, recorded video via an external provider, admin console, subscription and billing, scale hardening, richer notifications, advanced reporting, duplicate detection | — |
 
 **Never in scope, at any tier:** online live video meetings.
@@ -250,6 +252,10 @@ buttons, seeded demo content in production, and silent data loss.
 ---
 
 ## 5. Verification performed
+
+The tables and subsections below are historical records with the counts from their own dates. The
+current gate and the current finance/status rules are in §5.24. In particular, §5.10, §5.11, and the
+first §5.19 describe financial rules later superseded by `ADR-0041` and `ADR-0043`.
 
 | Check | Result |
 |---|---|
@@ -788,6 +794,9 @@ These implement the established session-priced billing rules (`ADR-0025`): direc
 
 ### 5.16 Public bilingual landing page on 2026-11-11 - user-requested (release-plan conflict recorded)
 
+> `ADR-0042` later made `/{locale}/status` private. The landing remains public; `/healthz` and
+> `/readyz` remain public infrastructure probes.
+
 - `/ar` and `/en` now render a public marketing landing page (Arabic-first, RTL; English second,
   LTR; light and dark) built from the existing token layer (`src/styles/tokens.css`, ADR-0023) and
   logical CSS only (`src/styles/landing.css`). The readiness/status page moved to
@@ -1048,6 +1057,10 @@ showed `suppressHydrationWarning` on `<body>` changed neither the warning count 
 defensive change was made. The warning is caused by the extension, not by the application.
 
 ### 5.19 Session-scoped finance on 2026-11-13 - `ADR-0028`
+
+> **Superseded on 2026-11-25 by `ADR-0041`.** Expected revenue, refunds, adjustments, group default
+> prices, and money alerts are no longer product capability. This section records the historical
+> state only; the current rules are in §5.24 and `ADR-0041`.
 
 The manual ledger is no longer per-student. Teachers see, per session, the amount the session
 should produce (price × present/late marks) and the amount they actually recorded (session-linked,
@@ -1381,6 +1394,117 @@ table was not structurally compared column-by-column with the migration; the rec
 matching `to_regclass` relation check and the successful full migration deploy.
 
 
+### 5.23 Owner-only collected session earnings and private status on 2026-11-25 — `ADR-0041`, `ADR-0042`
+
+> The product rules in this section remain in force. Physical storage was later reduced further by
+> `ADR-0043`; see §5.24 for the current schema and gate evidence.
+
+The finance surface was reduced to the one amount the teacher actually received. It is visible and
+recordable only by the workspace owner. No assistant, parent, student, platform administrator, or
+public visitor receives a money screen, a locked money placeholder, a money notification, or a money
+field in a report or portal payload. Platform subscription and billing (`ADR-0036`) are unchanged.
+
+**Money rules now in force**
+
+- The only financial record is a session-linked receipt with an integer EGP amount, method, date,
+  optional note, and authenticated owner. Every displayed total is the sum of real, non-reversed
+  receipts. There is no expected revenue, outstanding amount, balance, credit, collection rate,
+  projection, or attendance multiplication.
+- The session price lives on `teaching_session.price_per_student_minor`. It is edited from the
+  session screen each time the session is opened and is never inherited from a group. Group reads no
+  longer expose a default price.
+- `payments` is non-grantable in `src/modules/tenancy/types.ts`; owner-only checks run in the
+  payments, session-revenue, and money-report services before any tenant query.
+- Adjustment, fee-rule, and group-price service code and routes were removed. Their physical tables
+  and rows were deleted by `ADR-0043`; see §5.24.
+- The four remaining notification rules are at-risk attendance, unrecorded attendance, homework due
+  soon, and pending assessment grades. The `payment_overdue` enum value, rows, and stored rule keys
+  were deleted by `ADR-0043`; see §5.24.
+- Dashboard KPIs, financial overview, reports, exports, and recent activity hide money from
+  assistants. The audit reader also filters legacy payment events unless the actor is the owner.
+- The local demo seed no longer creates voided receipts, revisions, discounts, refunds, fee rules,
+  or group default prices.
+
+**Shell rules now in force**
+
+- The removed tagline is absent from both catalogues, the app shell, the landing footer, the agent
+  instructions, and the ADRs. `NF-1`–`NF-13` are unchanged; only the claim was removed.
+- `/{locale}/status` is owner-only and returns the same `404` as an unknown page for anonymous,
+  portal, and assistant actors. The landing footer no longer links to it, and it stays out of the
+  sitemap. `/healthz` and `/readyz` remain public infrastructure probes with no tenant data.
+
+**Documents and tests**
+
+- New `ADR-0041` supersedes the expected-revenue, assistant-grant, fee-rule, adjustment, and money
+  alert parts of `ADR-0028` and `ADR-0038`. New `ADR-0042` records the slogan removal and private
+  status page. `PRODUCT_REQUIREMENTS.md`, `USER_FLOWS.md` (`F19`), `DATA_MODEL.md`, `ARCHITECTURE.md`,
+  `RELEASE_PLAN.md`, `OPEN_QUESTIONS_AND_ASSUMPTIONS.md`, both message catalogues, and the decision
+  index were reconciled.
+- Unit, UI, integration, and PostgreSQL tests cover owner-only access, collected-only totals,
+  variable session prices, non-grantability, removed routes, absence of assistant money surfaces,
+  legacy notification filtering, private status, and audit-event filtering. No check, lint rule, or
+  type constraint was weakened.
+
+**Gate results (2026-11-25)**
+
+- `npm run lint`: passed (ESLint + project rules).
+- `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
+- `npm test`: passed (86 unit files / 565 tests + 4 UI files / 34 tests).
+- `npm run test:integration`: passed (29 files / 167 tests against the pinned embedded PostgreSQL).
+- `npm run build`: passed (Next.js 16 production build).
+
+**Not claimed in this pass.** No physical legacy table or historical row was deleted in §5.23;
+that owner-approved deletion is recorded in §5.24. No platform billing or card flow was changed. No
+real device, live email provider, or staging deploy was exercised.
+
+
+### 5.24 Physical removal of legacy workspace money storage on 2026-11-25 — `ADR-0043`
+
+The product owner explicitly approved permanent deletion of the legacy workspace money concepts.
+They were removed from the physical schema, not merely hidden behind product surfaces.
+
+**What was removed**
+
+- The `payment_adjustment`, `fee_rule`, and `payment_revision` tables and all their rows were
+  dropped, together with the `payment_adjustment_kind` enum.
+- `payment` was reduced to collected session receipts: rows without a session or marked void were
+  deleted, `session_id` became non-null, and `student_id`, `period`, `purpose`, `reference_number`,
+  `voided_at`, `void_reason`, and the old constraints and indexes were dropped. The append-only
+  trigger remains.
+- `group.default_price_per_student_minor` was dropped. The only price is
+  `teaching_session.price_per_student_minor`, edited on the session.
+- `payment_overdue` rows were deleted from `notification`, `notification_log`, and `message_outbox`;
+  the enum value and the stored `paymentOverdueEnabled` / `paymentOverdueDays` rule keys were removed.
+- `payments` grant rows were deleted and the value was removed from `permission_resource`. Owner-only
+  money access is enforced with `assertOwner(scope)` before any tenant query.
+- Stale `balances` report-export rows were deleted and the check now allows the four non-money
+  reports plus the owner-only `payments` and `sessionRevenue` receipts reports.
+
+**Boundaries**
+
+- The append-only audit log is retained; payment events remain owner-only and redacted for the owner.
+- Platform subscription and billing (`ADR-0036`) are unchanged.
+- The local seed no longer truncates dropped tables or writes legacy money fields.
+- The tenant-table registry, workspace-backup retained tables, grant script, route registry, message
+  catalogues, specification documents, and tests were reconciled in the same change.
+
+**Migration and verification**
+
+- Migration `20261125010000_legacy_money_storage_removal` was applied to the local pinned
+  PostgreSQL. `REQUIRED_MIGRATION_NAME` and the readiness integration test match it.
+- New unit tests assert the registry, schema, permission, notification, and migration removals.
+  Integration receipts were repointed from students to sessions and clean up through a local
+  privileged fixture helper that respects the append-only trigger.
+- `npm run lint`: passed (ESLint + project rules).
+- `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
+- `npm test`: passed (87 unit files / 570 tests + 4 UI files / 34 tests).
+- `npm run test:integration`: passed (29 files / 167 tests against the pinned embedded PostgreSQL).
+- `npm run build`: passed (Next.js 16 production build).
+
+**Not claimed.** No provider snapshot, staging deploy, or old-archive restore was exercised. The
+deletion is irreversible from the application and requires the normal operator backup before deploy.
+
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work
@@ -1442,35 +1566,36 @@ task.
 | # | Item | Exit condition | State |
 |---|---|---|---|
 | 2.1 | Assistants with server-enforced permissions | `F-P2-01` passes; the generated permission matrix covers every role | ◐ owner administration UI, safe invitations, granular server checks, audit history, direct-request authorization tests, and permission-filtered navigation implemented; generated matrix pending |
-| 2.2 | Parent portal with scoped access | `F-P2-02` passes; a parent can view only explicitly linked children, permitted attendance, locked grades, homework, clean resources, approved payment/balance summaries, schedule changes, and notifications, and cannot reach another child or private notes | ☑ |
+| 2.2 | Parent portal with scoped access | `F-P2-02` passes; a parent can view only explicitly linked children, permitted attendance, locked grades, homework, clean resources, schedule changes, and notifications, with no money surface, and cannot reach another child or private notes | ☑ |
 | 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; invitation tokens are hashed, single-use, email-verified, expiry-checked, and revocable; student portal shows only own upcoming sessions, permitted attendance, homework (with scanned file attachments), locked grades, and shared clean materials | ☑ |
-| 2.4 | Manual payments with a ledger and no settlement claim | `F-P2-04` passes for EGP/monthly fees **and** per-session attendance-based billing (`ADR-0025`); parent payment views remain disabled | ☑ |
+| 2.4 | Owner-only collected session earnings | `F-P2-04` passes for real, session-linked EGP receipts only (`ADR-0041`, `ADR-0043`); no assistant, portal, expected figure, adjustment, fee rule, or group default price exists in the schema | ☑ |
 | 2.5 | QR attendance | `F-P2-05` passes | ◐ student QR identity tab with SVG/PNG/print download on the student profile and a session-page QR scanner panel exist; integration and unit tests exist; camera capture was not exercised on real hardware in this checkout |
 | 2.6 | Academic progress and follow-up | `F-P2-06` passes: computed attendance/assessment/homework series, visible directions and rules, permission-filtered sources, explicit attention rules, audited follow-up tasks, and the empty state are implemented (`ADR-0040`) | ☑ |
 | 2.7 | Notifications expansion | `F-P2-07` passes; the email digest is opt-in and contains no note content | ☑ |
 | 2.8 | Multi-workspace switching | `F-P2-08` passes; the current workspace is explicit in the sidebar | ☑ |
 | 2.9 | Teacher-side preview of the portals | `F-P2-09` passes; the preview is labelled as a preview and is not a portal | ☑ |
-| 2.10 | Reports and export | Filtered tenant-scoped asynchronous CSV, XLSX, and PDF exports for attendance, enrollment, academics, homework, payments, and session revenue pass; PDF fails closed unless a renderer is explicitly configured | ☑ |
+| 2.10 | Reports and export | Filtered tenant-scoped asynchronous CSV, XLSX, and PDF exports for attendance, enrollment, academics, homework, and owner-only collected session earnings pass; `balances` is removed from the physical check and PDF fails closed unless a renderer is explicitly configured | ☑ |
 | 2.11 | Data import/export and backup (server-side) | `F-P2-11` passes; the export includes the audit log and a schema version | ☑ |
 | 2.12 | Session correction workflow | `F-P2-12` passes; a correction requires a reason and is audited | ☑ |
 | 2.13 | Publish the privacy notice (Arabic and English) | Signed off by the legal reviewer (`F-P0-08` AC-7) | ☐ |
 | 2.14 | External penetration test | A third-party report with no open critical or high findings | ☐ |
 | 2.15 | Run the M2 release gate | Every gate item is checked with evidence | ☐ |
 
-**2.7 — Notifications expansion (`F-P2-07`, `ADR-0038`).** Five workspace-configurable rules now
-produce staff alerts from real records: at-risk absence streaks, past sessions with no attendance,
-homework due within 48 hours, assessments with no marks, and unreceipted session revenue after N
-days (`ADR-0028`: session-scoped, never a student debt). Each alert has a stable `conditionKey` in
-metadata and a bucketed dedupe key, so the cooldown is enforced both in the tenant transaction and
-by the database unique constraint. Settings live in
-`workspace_settings.notification_rule_config`; the server-owned digest cursor is stripped from API
-responses, and the UI exposes rule switches, the cooldown, the N-day threshold, and the explicit
-digest opt-in. Deep links open the relevant student, session, homework, or assessment screen. The
-hourly worker evaluates rules and drains digests; the digest contains localized type labels and
-counts only, is skipped when no email transport is configured, and never calls a provider inside a
-tenant transaction. Unit and PostgreSQL tests cover all five rules, disabled switches, cooldown,
-deep-link fields, malformed settings, cursor stripping, redaction, and audited settings changes.
-Full gate passed on 2026-11-24 (555 unit + 34 UI tests, 162 integration tests, lint, typecheck, build).
+**2.7 — Notifications expansion (`F-P2-07`, `ADR-0038`, `ADR-0041`).** Four workspace-configurable
+rules now produce staff alerts from real records: at-risk absence streaks, past sessions with no
+attendance, homework due within 48 hours, and assessments with no marks. Money alerts were removed;
+`ADR-0043` deleted the `payment_overdue` enum value, rows, and stored rule keys from the physical
+schema. Each alert has a stable `conditionKey` in metadata and a bucketed
+dedupe key, so the cooldown is enforced both in the tenant transaction and by the database unique
+constraint. Settings live in `workspace_settings.notification_rule_config`; the server-owned digest
+cursor is stripped from API responses, and the UI exposes the four rule switches, the cooldown, and
+the explicit digest opt-in. Deep links open the relevant student, session, homework, or assessment
+screen. The hourly worker evaluates rules and drains digests; the digest contains localized type
+labels and counts only, is skipped when no email transport is configured, and never calls a provider
+inside a tenant transaction. Unit and PostgreSQL tests cover all four rules, disabled switches,
+cooldown, deep-link fields, malformed and legacy settings, cursor stripping, redaction, and audited
+settings changes. Full gate passed on 2026-11-25 (565 unit + 34 UI tests, 167 integration tests,
+lint, typecheck, build).
 
 **2.11 — Workspace backup and restore (`F-P2-11`, `F22`, `ADR-0039`).** Settings → Data offers an
 owner-only JSON export with an exact schema version (`2026-11-24.1`) and a generated-at timestamp.
@@ -1679,7 +1804,7 @@ policy.
 
 **Explicit omissions from the reference** (per `NF-1`–`NF-13`)
 
-- Cashbox closing UI and "close the till" action — Kashkol has a manual payments ledger, not a live cashbox.
+- Cashbox closing UI and "close the till" action — Kashkol has a collected receipts ledger, not a live cashbox.
 - "Student AI radar" with fabricated 280-student / 97.2% / 6-intervention figures — all dashboard numbers come from real computed records.
 - WhatsApp "delivered/sent" claims — Kashkol prepares and opens deep links only (`F-P1-10`, ADR-0010).
 - Demo names, phones, and money totals — replaced with real workspace data.

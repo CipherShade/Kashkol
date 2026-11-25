@@ -39,7 +39,7 @@ not navigation sketches.
 | F16 | Invite an assistant and set permissions | Owner | P2 |
 | F17 | Parent links to a child and uses the portal | Parent | P2 |
 | F18 | Student links to their record and uses the portal | Student | P2 |
-| F19 | Record a manual payment | Teacher | P2 |
+| F19 | Record collected session earnings | Teacher (owner) | P2 |
 | F20 | Take attendance by QR | Teacher | P2 |
 | F21 | Review a student's progress and follow up | Teacher | P2 |
 | F22 | Export data | Teacher / Owner | P2 |
@@ -772,52 +772,31 @@ parent has a phone number
 
 ---
 
-## F19 — Record a manual payment
+## F19 — Record collected session earnings
 
-**Actor:** Teacher · **Tier:** P2 · **Preconditions:** a student exists; a monthly fee may be configured
+**Actor:** Workspace owner only · **Tier:** P2 · **Preconditions:** a session exists (`ADR-0041`)
 
-1. Teacher opens **Payments** (owner only, or an assistant holding `payments`).
-2. Teacher taps **"Record payment"** and selects: student, period covered, amount, method
-   (`cash` / `transfer` / `other`), date, optional receipt reference, and an optional note. The
-   authenticated operator is recorded by the server.
-3. **[WRITE]** The payment record is created. Audit: `payment.recorded`.
-4. The student's outstanding balance is recomputed in piastres from the monthly/group fee rules,
-   payment rows, and separate adjustment rows.
-5. Teacher records a discount, refund, or correction as a separate record with a required reason.
-   The original receipt is never amended or deleted. Refunds cannot exceed the remaining refundable
-   receipt amount. Audit: `payment.<kind>_recorded`.
-6. The **Outstanding** list shows students with a positive balance and shows overpayments as credits.
-7. Teacher opens **Reports** → **Student balances**, chooses an as-of date and optional group/student
-   filters, and views the expected, received, adjustment, and resulting balance amounts. Export
-   queues a CSV using those same filters.
-8. Monthly/group fees accrue by enrolled period, not by attendance. Cancelling a session does not
-   reduce a monthly fee; a make-up session does not add a fee. The teacher must record a reasoned
-   adjustment for an agreed exception.
-9. Per-session billing, when the teacher has priced sessions or a group with a `default_price_per_student_minor`,
-   is charged as price × (present + late marks) per non-cancelled session, replacing the monthly fee
-   rule for that group's enrolled students. The balance card and the payments list share the same
-   computation (`ADR-0025`). The per-student "paid" toggle in a session's attendance view writes or
-   voids a real session-linked `payment` row in the same transaction; toggles are disabled when
-   no price is configured for the session.
+1. The owner opens **Session receipts**. No other role can reach the screen or the API.
+2. The owner taps **"Record receipt"** and selects: session, amount, method (`cash` / `transfer` /
+   `other`), date, and an optional note. The authenticated owner is recorded by the server.
+3. **[WRITE]** The receipt is created. Audit: `payment.recorded`.
+4. The screen lists receipts by session and shows the **total collected** — the sum of the real
+   receipt rows in scope. No expected, outstanding, balance, credit, or adjustment figure exists.
+5. The session price is entered and edited whenever the session is opened. It is variable per
+   session, never inherited from a group, and never multiplied by attendance.
+6. A receipt is append-only: no amendment, void, refund, discount, or correction path exists.
 
 **Error / edge cases**
 
 | Case | Behaviour |
 |---|---|
 | Amount ≤ 0 | Rejected. |
-| No fee configured | The teacher can still record payments; outstanding is not computed and the UI says "set a monthly fee to track balances". |
-| Partial payment | Allowed; the remainder stays outstanding. |
-| Overpayment | Allowed and shown as a credit, not clamped. |
-| Payment for a future period | Allowed with a note. |
-| Cancelled session | Does not change a period-based monthly/group fee or create a transaction. Session-priced groups accrue 0 from a cancelled session. |
-| Make-up session | Does not create an additional fee or transaction. |
-| Session-priced group, no fee rule configured | Expected revenue = price × (present+late) marks; collected = real session-linked payments; outstanding = expected − collected. |
-| No session price configured | The "paid" toggle is disabled; marking attendance is still possible; no session charge is accrued. |
-| Toggle paid for a student with no price on the session | Rejected with `Payment.errors.sessionPriceMissing`. |
-| Agreed fee exception | Requires a separately audited adjustment with a reason. |
+| No session selected | Rejected; a receipt must reference a session. |
+| Cancelled session | Rejected; no session took place, so no earnings are recorded. |
+| No session price configured | Receipts can still be recorded for money actually received; no projected figure is shown. |
 | Duplicate submission | Same idempotency key and payload returns the existing record; a different payload is rejected. |
-| Parent requests a balance or receipt | Denied; parent payment projections are not enabled in this release. |
-| Assistant without `payments` | The screen is hidden **and** the API returns `403`. |
+| Parent or student requests a receipt | Denied; there is no portal money surface. |
+| Assistant requests receipts | `403` from the API regardless of grants. |
 
 **AC:** F-P2-04, F-P0-07
 

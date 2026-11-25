@@ -10,7 +10,6 @@ export const PERMISSION_RESOURCES = [
   "homework",
   "files",
   "messages",
-  "payments",
   "exports",
   "integrations",
   "settings",
@@ -34,7 +33,6 @@ export const GRANTABLE_ACTIONS: Record<PermissionResource, readonly PermissionAc
   homework: ["read", "write"],
   files: ["read", "write"],
   messages: ["read", "write"],
-  payments: ["read", "write"],
   exports: ["read", "write"],
   integrations: ["read", "write"],
   settings: ["read", "write"],
@@ -44,7 +42,7 @@ export const GRANTABLE_ACTIONS: Record<PermissionResource, readonly PermissionAc
 };
 
 /**
- * Capabilities that expose money, personal data, or the workspace boundary.
+ * Capabilities that expose personal data or the workspace boundary.
  *
  * The permission editor marks these explicitly so a teacher cannot grant one by
  * accident. The warning is presentation only: the server still enforces the
@@ -64,8 +62,6 @@ export const SENSITIVE_PERMISSIONS: ReadonlySet<Permission> = new Set([
   "files:write",
   "messages:read",
   "messages:write",
-  "payments:read",
-  "payments:write",
   "exports:read",
   "exports:write",
   "integrations:write",
@@ -91,8 +87,8 @@ export const INVITATION_RESEND_COOLDOWN_MS = 60_000;
  * Actions an assistant can never perform, even if a grant row exists.
  *
  * The owner role is the only role that can invite, remove, or change another
- * member (`F-P2-01` AC-5). `settings:write` and `payments:write` are ordinary
- * grantable permissions; billing is not modelled here and is not delegated.
+ * member (`F-P2-01` AC-5). Money is not a permission at all: owner-only services
+ * call `assertOwner` before any query (`ADR-0043`).
  */
 const ASSISTANT_ALWAYS_DENIED: ReadonlySet<Permission> = new Set(["team:write"]);
 

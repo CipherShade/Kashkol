@@ -101,7 +101,7 @@ function atRiskStudents(marks: readonly RecentMark[], threshold: number) {
 }
 
 /**
- * Evaluate the five F-P2-07 staff rules for one workspace.
+ * Evaluate the four F-P2-07 staff rules for one workspace.
  *
  * Every number in a notification is computed from stored records. Rules are
  * switched off per workspace through `workspace_settings.notification_rule_config`.
@@ -299,53 +299,6 @@ export async function evaluateNotificationRules(
             entityType: "assessment",
             entityId: assessment.id,
             conditionKey: `assessment_pending_grades:${assessment.id}`,
-          }),
-        );
-      }
-    }
-
-    // Rule 5: session revenue with no receipt after the configured number of
-    // days. ADR-0028 removed per-student balances, so this is session-scoped;
-    // no per-student debt or phone number is ever inferred or stored.
-    if (rules.paymentOverdueEnabled) {
-      const paymentCutoff = new Date(
-        now.getTime() - rules.paymentOverdueDays * 24 * 60 * 60 * 1000,
-      );
-      const sessions = await tx.teachingSession.findMany({
-        where: {
-          workspaceId: scope.workspaceId,
-          startsAt: { lte: paymentCutoff },
-          status: { not: "cancelled" },
-          attendanceMarks: { some: { mark: { in: ["present", "late"] } } },
-          payments: { none: { voidedAt: null } },
-        },
-        include: {
-          group: {
-            select: { name: true, defaultPricePerStudentMinor: true },
-          },
-        },
-        orderBy: { startsAt: "desc" },
-        take: 10,
-      });
-
-      for (const session of sessions) {
-        const price =
-          session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? 0;
-        if (price <= 0) continue;
-        const groupName = session.group?.name ?? session.gradeLabel ?? "Session";
-        await createForAll(
-          `payment_overdue:${session.id}`,
-          (recipientUserId) => ({
-            recipientUserId,
-            type: "payment_overdue",
-            severity: "info",
-            messageKey: "Notifications.messages.paymentOverdue",
-            messageParams: { groupName, days: rules.paymentOverdueDays },
-            title: `إيصال معلّق: ${groupName}`,
-            body: `لم يُسجّل إيصال لحصة ${groupName} منذ ${rules.paymentOverdueDays} يومًا.`,
-            entityType: "teaching_session",
-            entityId: session.id,
-            conditionKey: `payment_overdue:${session.id}`,
           }),
         );
       }

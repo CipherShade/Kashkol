@@ -15,8 +15,8 @@ attendance, homework, assessments, files, parent communication, and a manual pay
 Arabic-first, RTL-correct, with English as a required second language.
 
 The users are individuals. The data belongs to minors and their families. The product's core
-promise is that **the teacher always sees the truth**: nothing is fabricated, nothing is faked, and
-no screen claims a capability the system does not have.
+promise is that **nothing is fabricated, nothing is faked, and no screen claims a capability the
+system does not have**.
 
 ---
 

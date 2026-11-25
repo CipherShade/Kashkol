@@ -215,7 +215,7 @@ export async function loadReport(
           startsAt: true,
           pricePerStudentMinor: true,
           gradeLabel: true,
-          group: { select: { name: true, defaultPricePerStudentMinor: true } },
+          group: { select: { name: true } },
         },
         orderBy: { startsAt: "asc" },
         take:
@@ -226,46 +226,23 @@ export async function loadReport(
       // Sessions are few relative to rows; count exactly for pagination.
       const sessionCount = await tx.teachingSession.count({ where: sessionWhere });
       const sessionIds = sessions.map((session) => session.id);
-      const [marks, collectedRows] = await Promise.all([
-        tx.attendanceMark.findMany({
-          where: {
-            workspaceId: scope.workspaceId,
-            sessionId: { in: sessionIds },
-            mark: { in: ["present", "late"] },
-            session: { status: { not: "cancelled" } },
-          },
-          select: { sessionId: true },
-        }),
-        tx.payment.groupBy({
-          by: ["sessionId"],
-          where: {
-            workspaceId: scope.workspaceId,
-            sessionId: { in: sessionIds },
-            voidedAt: null,
-          },
-          _sum: { amountMinor: true },
-        }),
-      ]);
-      const attendedBySession = new Map<string, number>();
-      for (const mark of marks) {
-        attendedBySession.set(mark.sessionId, (attendedBySession.get(mark.sessionId) ?? 0) + 1);
-      }
+      const collectedRows = await tx.payment.groupBy({
+        by: ["sessionId"],
+        where: {
+          workspaceId: scope.workspaceId,
+          sessionId: { in: sessionIds },
+        },
+        _sum: { amountMinor: true },
+      });
       const collectedBySession = new Map(
         collectedRows.map((row) => [row.sessionId, row._sum.amountMinor ?? 0]),
       );
-      const rows = sessions.map((session): ReportRow => {
-        const price =
-          session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
-        const attended = attendedBySession.get(session.id) ?? 0;
-        return {
-          date: session.startsAt,
-          group: session.group?.name ?? session.gradeLabel ?? "—",
-          priceMinor: price,
-          attended,
-          expectedMinor: price != null ? price * attended : null,
-          collectedMinor: collectedBySession.get(session.id) ?? 0,
-        };
-      });
+      const rows = sessions.map((session): ReportRow => ({
+        date: session.startsAt,
+        group: session.group?.name ?? session.gradeLabel ?? "—",
+        priceMinor: session.pricePerStudentMinor,
+        collectedMinor: collectedBySession.get(session.id) ?? 0,
+      }));
       const offset = exportLimit === undefined ? (query.page - 1) * query.pageSize : 0;
       const visible = rows.slice(
         offset,
@@ -274,52 +251,29 @@ export async function loadReport(
       return { timezone, total: sessionCount, items: visible };
     }
 
-    const studentFilter = {
-      ...(query.studentId ? { studentId: query.studentId } : {}),
-      ...(query.groupId
-        ? {
-            OR: [
-              { session: { groupId: query.groupId } },
-              { student: { enrollments: { some: { groupId: query.groupId } } } },
-            ],
-          }
-        : {}),
-    };
-    const paidOn =
-      bounds.dateFrom || bounds.dateTo
-        ? { gte: bounds.dateFrom, lte: bounds.dateTo }
-        : undefined;
     const paymentWhere = {
       workspaceId: scope.workspaceId,
-      ...studentFilter,
-      paidOn,
+      ...(query.studentId ? { studentId: query.studentId } : {}),
+      ...(query.groupId ? { session: { groupId: query.groupId } } : {}),
+      ...(bounds.dateFrom || bounds.dateTo
+        ? { paidOn: { gte: bounds.dateFrom, lte: bounds.dateTo } }
+        : {}),
     };
-    const adjustmentWhere = {
-      workspaceId: scope.workspaceId,
-      ...studentFilter,
-      paidOn,
-    };
-    const [paymentRows, adjustmentRows, paymentCount, adjustmentCount] = await Promise.all([
+    const [paymentRows, paymentCount] = await Promise.all([
       tx.payment.findMany({
         where: paymentWhere,
-        include: {
-          student: { select: { firstName: true, lastName: true } },
+        select: {
+          id: true,
+          amountMinor: true,
+          method: true,
+          methodLabel: true,
+          paidOn: true,
+          createdAt: true,
           session: {
-            select: { startsAt: true, gradeLabel: true, group: { select: { name: true } } },
-          },
-        },
-        orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
-        take,
-      }),
-      tx.paymentAdjustment.findMany({
-        where: adjustmentWhere,
-        include: {
-          student: { select: { firstName: true, lastName: true } },
-          payment: {
             select: {
-              session: {
-                select: { startsAt: true, gradeLabel: true, group: { select: { name: true } } },
-              },
+              startsAt: true,
+              gradeLabel: true,
+              group: { select: { name: true } },
             },
           },
         },
@@ -327,59 +281,20 @@ export async function loadReport(
         take,
       }),
       tx.payment.count({ where: paymentWhere }),
-      tx.paymentAdjustment.count({ where: adjustmentWhere }),
     ]);
-    const items: Array<ReportRow & { sortDate: Date; sortCreated: Date }> = [
-      ...paymentRows.map((row) => ({
-        date: row.paidOn,
-        student: row.student
-          ? `${row.student.firstName} ${row.student.lastName}`
-          : row.session
-            ? `${row.session.group?.name ?? row.session.gradeLabel ?? "—"} · ${row.session.startsAt.toISOString().slice(0, 10)}`
-            : "—",
-        kind: "receipt",
-        amountMinor: row.amountMinor,
-        balanceImpact: -1,
-        period: row.period,
-        purpose: row.purpose,
-        method: row.methodLabel ?? row.method,
-        referenceNumber: row.referenceNumber,
-        reason: null,
-        status: row.voidedAt ? "voided" : "recorded",
-        sortDate: row.paidOn,
-        sortCreated: row.createdAt,
-      })),
-      ...adjustmentRows.map((row) => ({
-        date: row.paidOn,
-        student: row.student
-          ? `${row.student.firstName} ${row.student.lastName}`
-          : row.payment?.session
-            ? `${row.payment.session.group?.name ?? row.payment.session.gradeLabel ?? "—"} · ${row.payment.session.startsAt.toISOString().slice(0, 10)}`
-            : "—",
-        kind: row.kind,
-        amountMinor: row.amountMinor,
-        balanceImpact: row.balanceImpact,
-        period: null,
-        purpose: null,
-        method: null,
-        referenceNumber: null,
-        reason: row.reason,
-        status: "recorded",
-        sortDate: row.paidOn,
-        sortCreated: row.createdAt,
-      })),
-    ];
-    items.sort(
-      (left, right) =>
-        right.sortDate.getTime() - left.sortDate.getTime() ||
-        right.sortCreated.getTime() - left.sortCreated.getTime(),
+    const items = paymentRows.map((row) => ({
+      date: row.paidOn,
+      group: row.session
+        ? `${row.session.group?.name ?? row.session.gradeLabel ?? "—"} · ${row.session.startsAt.toISOString().slice(0, 10)}`
+        : "—",
+      amountMinor: row.amountMinor,
+      method: row.methodLabel ?? row.method,
+    }));
+    const visible = items.slice(
+      exportLimit === undefined ? offset : 0,
+      exportLimit === undefined ? offset + query.pageSize : exportLimit,
     );
-    const visible = items.slice(exportLimit === undefined ? offset : 0, exportLimit === undefined ? offset + query.pageSize : exportLimit);
-    return {
-      timezone,
-      total: paymentCount + adjustmentCount,
-      items: visible.map(({ sortDate: _sortDate, sortCreated: _sortCreated, ...row }) => row),
-    };
+    return { timezone, total: paymentCount, items: visible };
   });
 }
 
@@ -481,7 +396,7 @@ export async function findReportExportForWorker(workspaceId: string, exportId: s
 export async function canUserReadReport(
   workspaceId: string,
   userId: string,
-  resource: "attendance" | "students" | "grades" | "homework" | "payments",
+  resource: "attendance" | "students" | "grades" | "homework" | "sessions",
 ) {
   return withScope({ workspaceId }, async (tx) => {
     const member = await tx.workspaceMember.findFirst({

@@ -21,23 +21,7 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
     maximumFractionDigits: 0,
   });
 
-  const formattedExpected =
-    revenue.expectedMinor !== null
-      ? (revenue.expectedMinor / 100).toLocaleString(undefined, {
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 0,
-        })
-      : null;
-
-  const revenuePercent =
-    revenue.expectedMinor !== null && revenue.expectedMinor > 0
-      ? Math.min(100, Math.round((revenue.collectedMinor / revenue.expectedMinor) * 100))
-      : null;
-
-  const revenueTone =
-    revenue.expectedMinor !== null && revenue.collectedMinor < revenue.expectedMinor
-      ? "warn"
-      : "success";
+  const revenueTone = "success";
 
   const attendanceTone =
     attendance.rate !== null && attendance.rate < 75 ? "danger" : "success";
@@ -75,7 +59,7 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
         </div>
       </Link>
 
-      {/* 2. Revenue */}
+      {/* 2. Revenue — owner-only. Assistants get no card, not even an empty one. */}
       {canSeeFinancials ? (
         <Link href="/app/payments" className="ui-stat" data-interactive="true" data-tone={revenueTone}>
           <div className="ui-stat-top">
@@ -88,17 +72,8 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
             {formattedCollected}{" "}
             <span className="ui-stat-unit">{revenue.currency}</span>
           </div>
-          {revenuePercent !== null ? (
-            <div className="ui-stat-meter" aria-hidden="true">
-              <span data-tone={revenueTone} style={{ inlineSize: `${revenuePercent}%` }} />
-            </div>
-          ) : null}
           <div className="ui-stat-hint">
-            <span>
-              {formattedExpected !== null
-                ? t("kpiRevenueExpected", { amount: formattedExpected, currency: revenue.currency })
-                : t("kpiRevenueNoRules")}
-            </span>
+            <span>{t("kpiRevenueCollectedHint", { currency: revenue.currency })}</span>
             <span className="ui-stat-hint-sub">
               {revenue.priorPeriodChangePercent !== null
                 ? `${revenue.priorPeriodChangePercent > 0 ? "+" : ""}${revenue.priorPeriodChangePercent}%`
@@ -106,18 +81,7 @@ export function GlobalOverview({ data, canSeeFinancials }: GlobalOverviewProps) 
             </span>
           </div>
         </Link>
-      ) : (
-        <div className="ui-stat" data-tone="muted">
-          <div className="ui-stat-top">
-            <span className="ui-stat-label">{t("kpiRevenueTitle")}</span>
-            <span className="ui-stat-icon" aria-hidden="true">
-              <Icon name="lock" size={18} />
-            </span>
-          </div>
-          <div className="ui-stat-value">—</div>
-          <div className="ui-stat-hint">{t("permissionRestricted")}</div>
-        </div>
-      )}
+      ) : null}
 
       {/* 3. Students */}
       <Link href="/app/students" className="ui-stat" data-interactive="true" data-tone="primary">

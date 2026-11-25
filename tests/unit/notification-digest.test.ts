@@ -22,4 +22,17 @@ describe("F-P2-07 email digest", () => {
     expect(text).not.toMatch(/\+?\d{7,}/);
     expect(text.toLowerCase()).not.toContain("private note");
   });
+
+  it("omits legacy money notifications from the digest", () => {
+    const text = buildDigestText(
+      [
+        { type: "payment_overdue", count: 2 },
+        { type: "student_at_risk", count: 1 },
+      ],
+      "en",
+    );
+    expect(text).not.toContain("payment_overdue");
+    expect(text).not.toContain("Student at risk: 2");
+    expect(text).toContain("Student at risk: 1");
+  });
 });

@@ -133,8 +133,8 @@ what the UI shows (`NF-8`).
    only proof, which invites the classic takeover when an IdP tolerates unverified emails or an
    attacker controls a Workspace domain. Explicit linking keeps the teacher's act visible and
    auditable.
-2. **`disableImplicitLinking: false`.** Rejected: silent linking contradicts "the teacher always
-   sees the truth" and `NF-12`'s spirit of explicit, teacher-visible state.
+2. **`disableImplicitLinking: false`.** Rejected: silent linking contradicts the requirement that
+   state be explicit and teacher-visible (`NF-12`).
 3. **Passwordless social-only (disable email/password).** Rejected: breaks the recovery path for
    accounts whose IdP drops `email_verified`, and the spec (`F-P0-02`) treats email/password as the
    mandated baseline.

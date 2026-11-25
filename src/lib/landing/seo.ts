@@ -117,7 +117,7 @@ export function buildRobots(siteUrl: string): MetadataRoute.Robots {
 
 /**
  * Only the two landing pages are listed. `/status` stays out on purpose: it is
- * `noindex`, and a sitemap entry for a `noindex` URL contradicts itself.
+ * a private, owner-only readiness page and must not be advertised at all.
  */
 export function buildSitemap(siteUrl: string, lastModified: Date): MetadataRoute.Sitemap {
   const origin = metadataBase(siteUrl).origin;

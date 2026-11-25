@@ -136,11 +136,6 @@ function isoDate(day: CairoDay): string {
   return `${day.year}-${String(day.month).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
 }
 
-function monthKey(day: CairoDay, offsetMonths: number): string {
-  const d = new Date(Date.UTC(day.year, day.month - 1 + offsetMonths, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 function daysAgo(days: number, hour = 10): Date {
   return cairoAt(addDays(todayInCairo(), -days), hour);
 }
@@ -179,7 +174,6 @@ type GroupSeed = {
   room: string;
   color: string;
   capacity: number;
-  pricePerStudentMinor: number;
   teacherNote: string;
 };
 
@@ -197,7 +191,6 @@ const GROUPS: GroupSeed[] = [
     room: "قاعة أ",
     color: "indigo",
     capacity: 20,
-    pricePerStudentMinor: 45000,
     teacherNote: "مجموعة الصف الأول الثانوي — منهج الترم الأول.",
   },
   {
@@ -213,7 +206,6 @@ const GROUPS: GroupSeed[] = [
     room: "قاعة ب",
     color: "teal",
     capacity: 18,
-    pricePerStudentMinor: 50000,
     teacherNote: "قوانين نيوتن والحركة الدائرية.",
   },
   {
@@ -229,7 +221,6 @@ const GROUPS: GroupSeed[] = [
     room: "قاعة أ",
     color: "amber",
     capacity: 15,
-    pricePerStudentMinor: 60000,
     teacherNote: "مراجعة العزم والاتزان قبل الامتحان.",
   },
   {
@@ -245,10 +236,12 @@ const GROUPS: GroupSeed[] = [
     room: "قاعة ج",
     color: "rose",
     capacity: 20,
-    pricePerStudentMinor: 45000,
     teacherNote: "مجموعة تعزيز لمهارات الجبر.",
   },
 ];
+
+/** Deterministic per-session prices for the local demo; never a group default. */
+const DEMO_SESSION_PRICE_MINOR = [45_000, 50_000, 60_000, 45_000] as const;
 
 type StudentSeed = {
   id: string;
@@ -433,7 +426,6 @@ async function seedSubjectsGroupsAndPeople(): Promise<void> {
           grade: group.grade,
           color: group.color,
           teacherNote: group.teacherNote,
-          defaultPricePerStudentMinor: group.pricePerStudentMinor,
           searchKey: normalizeSearchTerm(group.name),
         };
         const slotData = {
@@ -662,8 +654,8 @@ type MarkPlanEntry = {
  * what was attended.
  *
  * The most recent completed session of each group records no receipt — a
- * small, truthful uncollected subset for the demo (expected is shown, but
- * collected for that session stays 0 until the teacher records it).
+ * truthful uncollected subset for the demo. Nothing projects what it might
+ * earn; only receipts that exist are counted.
  */
 function buildMarkPlan(): MarkPlanEntry[] {
   const plan = buildSessionPlan();
@@ -685,7 +677,7 @@ function buildMarkPlan(): MarkPlanEntry[] {
         studentIndex: index,
         mark,
         startsAt: session.startsAt,
-        pricePerStudentMinor: GROUPS[session.groupIndex].pricePerStudentMinor,
+        pricePerStudentMinor: DEMO_SESSION_PRICE_MINOR[session.groupIndex],
       };
       // One recorded correction, with a matching revision row.
       if (session.groupIndex === 0 && session.occurrenceNo === 4 && index === 2) {
@@ -754,7 +746,7 @@ async function seedSessionsAndAttendance(): Promise<void> {
           assistantId: session.groupIndex === 1 ? ASSISTANT_USER_ID : null,
           seriesId: fid(0x76, session.groupIndex + 1),
           occurrenceNo: session.occurrenceNo,
-          pricePerStudentMinor: group.pricePerStudentMinor,
+          pricePerStudentMinor: DEMO_SESSION_PRICE_MINOR[session.groupIndex],
           cancelledAt: session.status === "cancelled" ? new Date(session.startsAt.getTime() - 86400000) : null,
           cancelledBy: session.status === "cancelled" ? OWNER_USER_ID : null,
           startedAt: session.status === "completed" ? session.startsAt : null,
@@ -1164,43 +1156,22 @@ async function seedAssessmentsAndHomework(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// 4. The session-scoped payments ledger (ADR-0028), adjustments, and revisions.
+// 4. Owner-only collected session receipts (ADR-0041).
 // ---------------------------------------------------------------------------
-
-function monthDay(offsetMonths: number, day: number): CairoDay {
-  const d = new Date(Date.UTC(todayInCairo().year, todayInCairo().month - 1 + offsetMonths, day));
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
-}
 
 async function seedPayments(): Promise<void> {
   await withScope(
     scope,
     async (tx) => {
-      // 1. The financial ledger is append-only by design (migration
-      //    20261029150000_manual_payment_ledger creates triggers that forbid
-      //    UPDATE and DELETE on payment / payment_adjustment / fee_rule, and
-      //    REVOKE from the app role). A local-only demo reset therefore cannot
-      //    rewrite individual rows. `TRUNCATE` does not fire row triggers and
-      //    this script refuses to run outside the local loopback database
-      //    (see assertLocalSeedTarget), so it is the honest way to rebuild the
-      //    demo ledger from scratch. The complete row set is re-created below
-      //    in the same transaction. Nothing here fabricates the billing model:
-      //    one session receipt per completed session that had present/late
-      //    attendance (expected = attendees × session price, per ADR-0028),
-      //    an explicitly voided mistaken entry, a payment revision, a discount
-      //    adjustment, and a refund adjustment — none of them per-student.
-      //
-      //    NOTE: this wipes ledger rows for every workspace in the local
-      //    database. That is safe locally (scripts/seed.ts creates no ledger
-      //    rows) and would be unacceptable anywhere else.
-      await tx.$executeRawUnsafe(
-        'TRUNCATE TABLE "payment", "payment_adjustment", "fee_rule", "payment_revision"',
-      );
+      // The payment table is append-only by migration; TRUNCATE is the only
+      // local reset path and this script refuses any non-loopback target.
+      // The physical schema now contains only session-linked collected receipts
+      // (ADR-0043), so there are no legacy tables left to clear.
+      await tx.$executeRawUnsafe('TRUNCATE TABLE "payment"');
 
-      // 2. Payment rows: one receipt per completed session with present/late
-      //    attendance, except the latest completed session of each group,
-      //    which is left unreceipted on purpose (ADR-0028 truthful subset).
-      const today = todayInCairo();
+      // One receipt per completed session that had attendance and was actually
+      // collected. The latest completed session of each group has no receipt;
+      // it is uncollected, not a projected balance.
       const marks = buildMarkPlan();
       const attendedBySession = new Map<string, number>();
       for (const mark of marks) {
@@ -1224,128 +1195,23 @@ async function seedPayments(): Promise<void> {
         const sessionId = mark.sessionId;
         const attended = attendedBySession.get(sessionId) ?? 0;
         const parts = cairoParts(mark.startsAt);
-        const period = `${parts.year}-${String(parts.month).padStart(2, "0")}`;
         const method = (index % 3 === 0 ? "transfer" : "cash") as "cash" | "transfer";
         paymentRows.push({
           id: fid(0x91, 200 + index),
           workspaceId: NILE_WORKSPACE_ID,
-          studentId: null,
           sessionId,
-          period,
           amountMinor: mark.pricePerStudentMinor * attended,
           currency: "EGP",
           method,
           methodLabel: method === "transfer" ? "تحويل بنكي" : null,
           paidOn: new Date(Date.UTC(parts.year, parts.month - 1, parts.day)),
-          purpose: "سداد حصة",
-          referenceNumber: method === "transfer" ? `TRX-${period}-${index + 1}` : null,
           idempotencyKey: `demo-session-receipt-${sessionId}`,
           note: `تحصيل حصة (${attended} حاضر/متأخر × ${mark.pricePerStudentMinor / 100} جنيه) في ${mark.startsAt.toISOString().slice(0, 10)}`,
-          voidedAt: null,
-          voidReason: null,
           createdBy: OWNER_USER_ID,
         });
       }
 
       await tx.payment.createMany({ data: paymentRows, skipDuplicates: true });
-
-      // A voided mistaken entry on the demo ledger — a real ledger row
-      // linked to a session, not an inferred balance.
-      const voidedId = fid(0x91, 101);
-      const voidedSession = receiptable[0] ?? sessionById.values().next().value;
-      if (voidedSession) {
-        const voidedAttended = attendedBySession.get(voidedSession.sessionId) ?? 0;
-        await tx.payment.create({
-          data: {
-            id: voidedId,
-            workspaceId: NILE_WORKSPACE_ID,
-            studentId: null,
-            sessionId: voidedSession.sessionId,
-            period: monthKey(today, -1),
-            amountMinor: GROUPS[1].pricePerStudentMinor * Math.max(voidedAttended, 1),
-            currency: "EGP",
-            method: "cash" as const,
-            methodLabel: null,
-            paidOn: dateOnly(monthDay(-1, 4)),
-            purpose: "سداد حصة",
-            referenceNumber: null,
-            idempotencyKey: "demo-payment-voided-1",
-            note: "قيد خاطئ أُلغي بعد مراجعة الخزينة.",
-            voidedAt: daysAgo(20, 13),
-            voidReason: "سُجّل المبلغ مرتين بالخطأ.",
-            createdBy: OWNER_USER_ID,
-          },
-        });
-      }
-
-      // 3. A payment revision pointing at the first seeded receipt.
-      const firstPaymentId: string = paymentRows[0]?.id ?? "";
-      const firstReceiptAmount = paymentRows[0]?.amountMinor ?? 0;
-      if (paymentRows.length > 0) {
-        await tx.paymentRevision.upsert({
-          where: { id: fid(0x94, 1) },
-          create: {
-            id: fid(0x94, 1),
-            workspaceId: NILE_WORKSPACE_ID,
-            paymentId: firstPaymentId,
-            actorId: OWNER_USER_ID,
-            before: { amountMinor: firstReceiptAmount, method: "cash", methodLabel: null },
-            after: {
-              amountMinor: firstReceiptAmount,
-              method: "transfer",
-              methodLabel: "تحويل بنكي",
-            },
-            reason: "تصحيح طريقة الدفع بعد مطابقة كشف الحساب البنكي.",
-            createdAt: daysAgo(25, 11),
-          },
-          update: {
-            paymentId: firstPaymentId,
-            before: { amountMinor: firstReceiptAmount, method: "cash", methodLabel: null },
-            after: {
-              amountMinor: firstReceiptAmount,
-              method: "transfer",
-              methodLabel: "تحويل بنكي",
-            },
-            reason: "تصحيح طريقة الدفع بعد مطابقة كشف الحساب البنكي.",
-          },
-        });
-      }
-
-      // 4. Adjustments (real rows on the same ledger, not UI voodoo), linked
-      //    to receipts rather than to students (ADR-0028).
-      const lastPaymentId: string = paymentRows[paymentRows.length - 1]?.id ?? firstPaymentId;
-      const adjustments: Prisma.PaymentAdjustmentUncheckedCreateInput[] = [
-        {
-          id: fid(0x92, 1),
-          workspaceId: NILE_WORKSPACE_ID,
-          studentId: null,
-          paymentId: firstPaymentId || null,
-          kind: "discount",
-          amountMinor: 5000,
-          balanceImpact: -1,
-          paidOn: dateOnly(monthDay(-1, 5)),
-          reason: "خصم أُقر بالتنسيق مع ولي الأمر بعد الحصة.",
-          idempotencyKey: "demo-adjustment-discount-1",
-          createdBy: OWNER_USER_ID,
-        },
-        {
-          id: fid(0x92, 2),
-          workspaceId: NILE_WORKSPACE_ID,
-          studentId: null,
-          paymentId: lastPaymentId || null,
-          kind: "refund",
-          amountMinor: 10000,
-          balanceImpact: 1,
-          paidOn: dateOnly(monthDay(-1, 18)),
-          reason: "استرداد مقابل سجل دفع مبالغ فيه.",
-          idempotencyKey: "demo-adjustment-refund-1",
-          createdBy: OWNER_USER_ID,
-        },
-      ];
-      await tx.paymentAdjustment.createMany({
-        data: adjustments,
-        skipDuplicates: true,
-      });
     },
     TX_OPTIONS,
   );
@@ -2932,21 +2798,10 @@ async function seedPortalsInvitationsReportsAndAudit(): Promise<void> {
           actorDisplayName: "أ. منى عبد الرحمن",
           actorType: "user" as const,
           entityType: "payment",
-          entityId: fid(0x91, 1),
+          entityId: fid(0x91, 200),
           action: "payment.recorded",
-          diff: { amountMinor: GROUPS[0].pricePerStudentMinor, method: "cash" },
+          diff: { amountMinor: DEMO_SESSION_PRICE_MINOR[0], method: "cash" },
           createdAt: daysAgo(31, 12),
-        },
-        {
-          id: fid(0xaa, 11),
-          actorUserId: OWNER_USER_ID,
-          actorDisplayName: "أ. منى عبد الرحمن",
-          actorType: "user" as const,
-          entityType: "payment",
-          entityId: fid(0x91, 101),
-          action: "payment.voided",
-          diff: { reason: "سُجّل المبلغ مرتين بالخطأ." },
-          createdAt: daysAgo(20, 13),
         },
         {
           id: fid(0xaa, 12),

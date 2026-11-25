@@ -67,7 +67,6 @@ describe("getSessionRoster homework context", () => {
         workspaceId: scope.workspaceId,
         name: "Group A",
         color: "indigo",
-        defaultPricePerStudentMinor: 60000,
       },
     } as never);
 

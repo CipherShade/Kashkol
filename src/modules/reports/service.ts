@@ -11,7 +11,7 @@ import {
 } from "./adapters";
 import { reportExportContentType, reportExportExtension, type ReportExportFormat } from "./formats";
 import { getFileStorageAdapter } from "@/modules/files/adapters";
-import { authorize, type Scope } from "@/modules/tenancy/types";
+import { assertOwner, authorize, type Scope } from "@/modules/tenancy/types";
 import { sanitizeSpreadsheetFormula } from "@/modules/students/schemas";
 import { minorUnitsToEgp } from "@/modules/payments/schemas";
 import {
@@ -34,8 +34,10 @@ const REPORT_PERMISSION = {
   enrollment: ["students", "read"],
   academics: ["grades", "read"],
   homework: ["homework", "read"],
-  payments: ["payments", "read"],
-  sessionRevenue: ["payments", "read"],
+  // Money reports are gated by assertOwner above. This resource is only the
+  // generic report-read check and is not a money permission (ADR-0043).
+  payments: ["sessions", "read"],
+  sessionRevenue: ["sessions", "read"],
 } as const;
 
 const HEADERS = {
@@ -54,18 +56,9 @@ const HEADERS = {
     dueDate: "Due date",
     homework: "Homework",
     updatedAt: "Updated at",
-    kind: "Record type",
-    amount: "Amount (EGP)",
-    period: "Period",
-    purpose: "Purpose",
+    amountEgp: "Collected (EGP)",
     method: "Method",
-    referenceNumber: "Receipt number",
-    reason: "Reason",
-    amountEgp: "Amount (EGP)",
-    balanceImpactEgp: "Adjustment impact (EGP)",
     priceEgp: "Session price (EGP)",
-    attended: "Present/late",
-    expectedEgp: "Expected (EGP)",
     collectedEgp: "Collected (EGP)",
   },
   ar: {
@@ -83,18 +76,9 @@ const HEADERS = {
     dueDate: "تاريخ الاستحقاق",
     homework: "الواجب",
     updatedAt: "تاريخ التحديث",
-    kind: "نوع السجل",
-    amount: "المبلغ (جنيه)",
-    period: "الفترة",
-    purpose: "الغرض",
     method: "الطريقة",
-    referenceNumber: "رقم الإيصال",
-    reason: "السبب",
-    amountEgp: "المبلغ (جنيه)",
-    balanceImpactEgp: "أثر التعديل (جنيه)",
+    amountEgp: "المحصّل (جنيه)",
     priceEgp: "سعر الجلسة (جنيه)",
-    attended: "الحاضرون والمتأخرون",
-    expectedEgp: "المتوقع (جنيه)",
     collectedEgp: "المحصّل (جنيه)",
   },
 } as const;
@@ -166,6 +150,7 @@ function reportBounds(query: ReportQuery | ReportExportQuery, timezone: string) 
 }
 
 function authorizeReport(scope: Scope, type: ReportQuery["type"]) {
+  if (type === "payments" || type === "sessionRevenue") assertOwner(scope);
   const [resource, action] = REPORT_PERMISSION[type];
   authorize(scope, resource, action);
 }
@@ -216,21 +201,12 @@ function serializeMoneyRow(
   type: ReportQuery["type"],
 ) {
   if (type === "payments") {
-    const amountMinor = Number(row.amountMinor);
-    const balanceImpact = Number(row.balanceImpact);
-    return {
-      ...row,
-      amountEgp: minorUnitsToEgp(amountMinor),
-      balanceImpactEgp: minorUnitsToEgp(amountMinor * balanceImpact),
-    };
+    return { ...row, amountEgp: minorUnitsToEgp(Number(row.amountMinor)) };
   }
   if (type === "sessionRevenue") {
     return {
       ...row,
-      priceEgp:
-        row.priceMinor === null ? null : minorUnitsToEgp(Number(row.priceMinor)),
-      expectedEgp:
-        row.expectedMinor === null ? null : minorUnitsToEgp(Number(row.expectedMinor)),
+      priceEgp: row.priceMinor === null ? null : minorUnitsToEgp(Number(row.priceMinor)),
       collectedEgp: minorUnitsToEgp(Number(row.collectedMinor)),
     };
   }
@@ -272,27 +248,8 @@ async function buildReportTable(
     enrollment: ["student", "group", "enrolledOn", "leftOn"],
     academics: ["date", "group", "student", "assessment", "score", "maximum", "status"],
     homework: ["dueDate", "group", "student", "homework", "status", "updatedAt"],
-    payments: [
-      "date",
-      "student",
-      "kind",
-      "amountEgp",
-      "period",
-      "purpose",
-      "method",
-      "referenceNumber",
-      "reason",
-      "balanceImpactEgp",
-      "status",
-    ],
-    sessionRevenue: [
-      "date",
-      "group",
-      "priceEgp",
-      "attended",
-      "expectedEgp",
-      "collectedEgp",
-    ],
+    payments: ["date", "group", "amountEgp", "method"],
+    sessionRevenue: ["date", "group", "priceEgp", "collectedEgp"],
   } as const;
   const headers: readonly string[] = columns[query.type];
   return {

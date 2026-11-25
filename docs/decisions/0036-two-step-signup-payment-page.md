@@ -49,8 +49,8 @@ written to the database by this flow, and no claim of activation is made on scre
 
 - No schema, migration, permission, or route-registry change: the new page is an App Router page, not
   an API route.
-- The existing `/app/payments` screen remains the teacher's manual student-payment ledger and is
-  unrelated to this subscription step.
+- The existing `/app/payments` screen remains the teacher's owner-only collected session-receipt
+  view and is unrelated to this subscription step (`ADR-0041`, `ADR-0043`).
 
 ## Alternatives considered
 

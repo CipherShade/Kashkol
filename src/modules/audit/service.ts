@@ -51,5 +51,7 @@ export async function writeAuditEvent(tx: AuditTransaction, input: AuditInput): 
  */
 export async function listAuditEvents(scope: Scope) {
   authorize(scope, "audit", "read");
-  return listAuditEventsForWorkspace(scope);
+  // Legacy payment events are money data. Only the owner may see them; an
+  // assistant with `audit:read` gets the rest of the history (ADR-0041).
+  return listAuditEventsForWorkspace(scope, { includeFinancialEvents: scope.role === "owner" });
 }

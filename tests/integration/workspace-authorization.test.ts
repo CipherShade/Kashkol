@@ -32,6 +32,7 @@ import {
   assistantScope,
   createStudent,
   createTestUser,
+  deletePaymentFixture,
   deleteStudent,
   deleteTestUser,
   DELTA,
@@ -370,16 +371,25 @@ describe("cross-tenant isolation on the core domain tables", () => {
     }
   });
 
-  it("rejects a payment that points at another workspace's student", async () => {
-    const foreignStudent = await createStudent(DELTA, "Foreign Student");
+  it("rejects a receipt that points at another workspace's session", async () => {
+    const foreignSessionId = randomUUID();
+    await withScope({ workspaceId: DELTA }, (tx) =>
+      tx.teachingSession.create({
+        data: {
+          id: foreignSessionId,
+          workspaceId: DELTA,
+          startsAt: new Date("2026-10-01T16:00:00.000Z"),
+          endsAt: new Date("2026-10-01T18:00:00.000Z"),
+        },
+      }),
+    );
     try {
       await expect(
         withScope({ workspaceId: NILE }, (tx) =>
           tx.payment.create({
             data: {
               workspaceId: NILE,
-              studentId: foreignStudent,
-              period: "2026-10",
+              sessionId: foreignSessionId,
               amountMinor: 50_000,
               currency: "EGP",
               method: "cash",
@@ -390,7 +400,9 @@ describe("cross-tenant isolation on the core domain tables", () => {
         ),
       ).rejects.toThrow();
     } finally {
-      await deleteStudent(DELTA, foreignStudent);
+      await withScope({ workspaceId: DELTA }, (tx) =>
+        tx.teachingSession.deleteMany({ where: { workspaceId: DELTA, id: foreignSessionId } }),
+      );
     }
   });
 
@@ -401,6 +413,7 @@ describe("cross-tenant isolation on the core domain tables", () => {
     const sessionId = randomUUID();
     const assessmentId = randomUUID();
     const fileId = randomUUID();
+    const paymentId = randomUUID();
 
     try {
       await withScope({ workspaceId: NILE }, async (tx) => {
@@ -466,9 +479,9 @@ describe("cross-tenant isolation on the core domain tables", () => {
         });
         await tx.payment.create({
           data: {
+            id: paymentId,
             workspaceId: NILE,
-            studentId,
-            period: "2026-10",
+            sessionId,
             amountMinor: 50_000,
             currency: "EGP",
             method: "cash",
@@ -509,17 +522,20 @@ describe("cross-tenant isolation on the core domain tables", () => {
       const ownCounts = await withScope({ workspaceId: NILE }, async (tx) => ({
         marks: await tx.attendanceMark.count({ where: { studentId } }),
         scores: await tx.assessmentScore.count({ where: { studentId } }),
-        payments: await tx.payment.count({ where: { studentId } }),
+        payments: await tx.payment.count({ where: { sessionId } }),
         files: await tx.file.count({ where: { studentId } }),
       }));
       expect(ownCounts).toEqual({ marks: 1, scores: 1, payments: 1, files: 1 });
     } finally {
       await withScope({ workspaceId: NILE }, async (tx) => {
         await tx.file.deleteMany({ where: { workspaceId: NILE, studentId } });
-        // Payments are append-only; do not attempt to delete.
         await tx.assessmentScore.deleteMany({ where: { workspaceId: NILE, studentId } });
         await tx.attendanceMark.deleteMany({ where: { workspaceId: NILE, studentId } });
         await tx.assessment.deleteMany({ where: { workspaceId: NILE, id: assessmentId } });
+        // The application role cannot delete an append-only receipt. Clean up
+        // this fixture through the local privileged helper before releasing the
+        // session that the receipt references.
+        await deletePaymentFixture(paymentId);
         await tx.teachingSession.deleteMany({ where: { workspaceId: NILE, id: sessionId } });
         await tx.enrollment.deleteMany({ where: { workspaceId: NILE, studentId } });
         await tx.groupScheduleSlot.deleteMany({ where: { workspaceId: NILE, groupId } });

@@ -65,18 +65,6 @@ export async function LandingFooter({ signedIn }: { signedIn: boolean }) {
             </ul>
           </nav>
 
-          <nav className="landing-footer__group" aria-labelledby="footer-system">
-            <h2 id="footer-system" className="landing-footer__heading">
-              {t("footer.groups.system")}
-            </h2>
-            <ul>
-              <li>
-                <Link className="landing-footer__link" href="/status">
-                  {t("footer.status")}
-                </Link>
-              </li>
-            </ul>
-          </nav>
         </div>
 
         <div className="landing-footer__bottom">

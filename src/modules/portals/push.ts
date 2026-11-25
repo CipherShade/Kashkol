@@ -48,7 +48,7 @@ function scrubSecrets(text: string): string {
  * Build a Web Push notification payload that defaults to generic lock-screen-safe
  * text (`includeSensitiveDetails = false`).
  *
- * Grades, scores, attendance statuses, student names, and balances are NEVER
+ * Grades, scores, attendance statuses, student names, and money amounts are NEVER
  * placed in the payload unless the recipient has explicitly opted in.
  */
 export function buildPushNotificationPayload(

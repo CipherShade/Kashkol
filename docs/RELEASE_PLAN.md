@@ -15,7 +15,7 @@ phone, and nothing in it lies."*
 |---|---|---|---|
 | **M0 — Foundation** | P0 | Tenancy, auth, i18n/RTL, theming, design system, data model, audit, privacy groundwork, infra | Internal build; the app is not usable by a teacher yet |
 | **M1 — First usable release** | P1 | Dashboard, students, groups, schedule, attendance + corrections, homework, paper grades, parent updates, files, basic reports, search | **Private beta** with a small group of real Egyptian teachers |
-| **M2 — Expansion** | P2 | Assistants + enforced permissions, parent portal, student portal, manual payments, QR attendance, progress & follow-up, notifications, exports | **Public beta**, Arabic-first, with a paid pilot cohort |
+| **M2 — Expansion** | P2 | Assistants + enforced permissions, parent portal, student portal, owner-only collected session receipts, QR attendance, progress & follow-up, notifications, exports | **Public beta**, Arabic-first, with a paid pilot cohort |
 | **M3 — Advanced** | P3 | Online exams, recorded video via external provider, admin console, subscription, scale hardening, printable report cards | **General availability** |
 
 **M3 scope note (2026-11-18, ADR-0033):** `F-P3-07` is delivered **"terms only for now"** — AC-1
@@ -109,7 +109,7 @@ Kashkol shows them is derived from what they entered.
 |---|---|---|
 | Assistants, invitations, permissions | M2 | Needs real RBAC; a half-built permission system is worse than none |
 | Parent portal / student portal | M2 | Needs real authentication and a privacy review; the prototype's hardcoded mock is not shippable |
-| Manual payment tracking | M2 | Money data needs a permission boundary and an export story |
+| Owner-only collected session receipts | M2 | Money is the most sensitive category: owner-only, no projection, no exports of other roles (`ADR-0041`) |
 | QR attendance | M2 | Needs camera, token lifecycle, anti-abuse design |
 | Progress/follow-up workflow | M2 | Depends on trustworthy history from M1 |
 | Exports (CSV/XLSX/PDF) | M2 | Needs a job runner and a file-delivery flow |
@@ -183,7 +183,7 @@ money is tracked.
 | F-P2-01 | Assistants, invitations, enforced permissions | Deny-by-default; server-side enforcement |
 | F-P2-02 | Parent portal (authenticated) | Real auth; teacher-issued or request-then-approve linking |
 | F-P2-03 | Student portal (authenticated) | Students attach up to five scanned files when submitting homework from the portal; validation, scanning, storage, submission, and audit are atomic, and downloads reauthorize against the student's own submission |
-| F-P2-04 | Manual payment tracking | EGP, partial payments, void-not-delete |
+| F-P2-04 | Collected session earnings (owner only) | EGP, collected receipts only, append-only, no fee rules or adjustments in the physical schema (`ADR-0041`, `ADR-0043`) |
 | F-P2-05 | QR attendance | Server-validated tokens |
 | F-P2-06 | Academic progress and follow-up | Source-backed rules and staff-only follow-up tasks; parent access requires an explicit allowlisted route |
 | F-P2-07 | Notifications expansion | Rule-generated, deep-linking, optional email digest |
@@ -208,8 +208,9 @@ money is tracked.
    hides but the API allows fails the build.
 2. **Portal isolation test:** a parent token cannot read another parent's child, a student's data, or
    any teacher endpoint. A student token cannot read any teacher endpoint or another student's data.
-3. **Payments correctness:** totals are recomputed from the payment ledger by an automated check;
-   voiding never removes a record; no screen claims a payment is "settled".
+3. **Payments correctness:** every displayed total is recomputed from real owner-scoped receipt rows
+   by an automated check; no record is voided or amended; no screen claims a payment is "settled",
+   and no screen shows a projected, outstanding, or adjusted amount (`ADR-0041`, `ADR-0043`).
 4. **QR correctness:** tokens are stored hashed; expired/rotated/enrolled-only checks are proven by
    integration tests; a rejected scan is logged.
 5. **Export correctness:** an export of workspace A contains zero rows from workspace B (asserted in a

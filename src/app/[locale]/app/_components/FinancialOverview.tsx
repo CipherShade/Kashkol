@@ -41,14 +41,6 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
     maximumFractionDigits: 0,
   });
 
-  const formattedExpected =
-    data.expectedRevenueMinor !== null
-      ? (data.expectedRevenueMinor / 100).toLocaleString(undefined, {
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 0,
-        })
-      : null;
-
   const trendData = data.revenueTrend.map((d) => ({
     label: d.label.slice(5), // "MM"
     value: Math.round(d.amountMinor / 100),
@@ -112,30 +104,6 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
             </span>
             <div style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--ink)", marginTop: "4px" }}>
               {formattedCollected} <span style={{ fontSize: "0.875rem", fontWeight: 500 }}>{currency}</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "16px",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--surface-2)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 500 }}>
-              {t("financialExpectedLabel")}
-            </span>
-            <div style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--ink)", marginTop: "4px" }}>
-              {formattedExpected !== null ? (
-                <>
-                  {formattedExpected} <span style={{ fontSize: "0.875rem", fontWeight: 500 }}>{currency}</span>
-                </>
-              ) : (
-                <span style={{ fontSize: "0.9375rem", color: "var(--muted)", fontWeight: 400 }}>
-                  {t("kpiRevenueNoRules")}
-                </span>
-              )}
             </div>
           </div>
 
@@ -236,10 +204,10 @@ export function FinancialOverview({ data, currency }: FinancialOverviewProps) {
                       <Icon name="checkCircle" size={16} />
                     </span>
                     <Link
-                      href={p.studentId ? `/app/students/${p.studentId}` : "/app/payments"}
+                      href="/app/payments"
                       style={{ fontWeight: 600, color: "var(--ink)", textDecoration: "none" }}
                     >
-                      {p.studentName}
+                      {p.sessionLabel}
                     </Link>
                     <Badge tone="neutral">{p.method}</Badge>
                   </div>

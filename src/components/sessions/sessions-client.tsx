@@ -38,6 +38,7 @@ export type SessionItem = {
   room?: string | null;
   location?: string | null;
   notes?: string | null;
+  pricePerStudentMinor?: number | null;
   seriesId?: string | null;
 };
 
@@ -74,7 +75,15 @@ function toDateTimeLocalValue(value: string | Date | null | undefined) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function SessionsClient({ groups, initialSessions }: { groups: GroupListItem[]; initialSessions: SessionItem[] }) {
+export function SessionsClient({
+  groups,
+  initialSessions,
+  canManagePrice,
+}: {
+  groups: GroupListItem[];
+  initialSessions: SessionItem[];
+  canManagePrice: boolean;
+}) {
   const t = useTranslations("Sessions");
   const tRoot = useTranslations();
   const locale = useLocale();
@@ -365,6 +374,15 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
               <Field label={t("room")} name="room" defaultValue={selectedSession.room ?? ""} />
               <Field label={t("location")} name="location" defaultValue={selectedSession.location ?? ""} />
               <Field label={t("notes")} name="notes" defaultValue={selectedSession.notes ?? ""} />
+              {canManagePrice ? (
+                <Field
+                  label={t("sessionPriceEgp")}
+                  name="priceEgp"
+                  inputMode="decimal"
+                  defaultValue={selectedSession.pricePerStudentMinor != null ? (selectedSession.pricePerStudentMinor / 100).toFixed(2) : ""}
+                  placeholder={t("sessionPricePlaceholder")}
+                />
+              ) : null}
               <SubmitButton idleKey="Sessions.editSession" />
             </form>
 

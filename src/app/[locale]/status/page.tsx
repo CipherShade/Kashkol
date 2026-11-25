@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import NextLink from "next/link";
+import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { directionForLocale, type AppLocale } from "@/i18n/routing";
 import { getReadiness, type CheckState, type ReadinessCheck } from "@/lib/health/readiness";
+import { requireStaffSession } from "@/modules/identity/session";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,18 @@ export default async function StatusPage({ params }: StatusPageProps) {
   const { locale } = await params;
   const appLocale: AppLocale = locale === "en" ? "en" : "ar";
   setRequestLocale(appLocale);
+
+  // The readiness view is private: only an authenticated workspace owner may
+  // see it. Anonymous, portal, and assistant actors get the same 404 as an
+  // unknown page, so the page cannot be used to probe deployment internals.
+  let isOwner = false;
+  try {
+    const { scope } = await requireStaffSession();
+    isOwner = scope.role === "owner";
+  } catch {
+    isOwner = false;
+  }
+  if (!isOwner) notFound();
 
   const t = await getTranslations("Status");
   const readiness = await getReadiness();

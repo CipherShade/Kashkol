@@ -68,7 +68,11 @@ export default async function SessionsPage({
         title={t("pageTitle")}
         description={t("pageDescription")}
       />
-      <SessionsClient groups={groups} initialSessions={serialized} />
+      <SessionsClient
+        groups={groups}
+        initialSessions={serialized}
+        canManagePrice={scope.role === "owner"}
+      />
     </div>
   );
 }

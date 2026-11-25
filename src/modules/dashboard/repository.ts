@@ -9,7 +9,6 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
       settings,
       allStudents,
       groups,
-      feeRules,
       enrollments,
       sessions,
       attendanceMarks,
@@ -18,7 +17,6 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
       homeworkList,
       homeworkSubmissions,
       payments,
-      adjustments,
       onlineExams,
       onlineExamAttempts,
       forms,
@@ -71,18 +69,11 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
           name: true,
           color: true,
           grade: true,
-          defaultPricePerStudentMinor: true,
         },
         orderBy: { name: "asc" },
       }),
 
-      // 5. Fee rules
-      tx.feeRule.findMany({
-        where: { workspaceId: scope.workspaceId },
-        orderBy: { effectiveFrom: "asc" },
-      }),
-
-      // 6. Enrollments
+      // 5. Enrollments
       tx.enrollment.findMany({
         where: { workspaceId: scope.workspaceId },
         select: {
@@ -120,7 +111,6 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
               id: true,
               name: true,
               color: true,
-              defaultPricePerStudentMinor: true,
             },
           },
         },
@@ -231,17 +221,12 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
         where: { workspaceId: scope.workspaceId },
         select: {
           id: true,
-          studentId: true,
           sessionId: true,
           amountMinor: true,
           currency: true,
           method: true,
           paidOn: true,
-          voidedAt: true,
           createdAt: true,
-          student: {
-            select: { id: true, firstName: true, lastName: true },
-          },
           session: {
             select: {
               id: true,
@@ -255,20 +240,7 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
         orderBy: [{ paidOn: "desc" }, { createdAt: "desc" }],
       }),
 
-      // 14. Payment adjustments
-      tx.paymentAdjustment.findMany({
-        where: { workspaceId: scope.workspaceId },
-        select: {
-          id: true,
-          studentId: true,
-          kind: true,
-          amountMinor: true,
-          balanceImpact: true,
-          paidOn: true,
-        },
-      }),
-
-      // 15. Online exams
+      // 14. Online exams
       tx.onlineExam.findMany({
         where: { workspaceId: scope.workspaceId },
         select: {
@@ -372,7 +344,6 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
       settings,
       allStudents,
       groups,
-      feeRules,
       enrollments,
       sessions,
       attendanceMarks,
@@ -381,7 +352,6 @@ export async function fetchDashboardRawData(scope: Scope, _filter: DashboardFilt
       homeworkList,
       homeworkSubmissions,
       payments,
-      adjustments,
       onlineExams,
       onlineExamAttempts,
       forms,

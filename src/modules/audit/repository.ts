@@ -41,10 +41,17 @@ export async function insertAuditEvent(tx: AuditTransaction, data: AuditRecord):
   });
 }
 
-export async function listAuditEventsForWorkspace(scope: { workspaceId: string }) {
+export async function listAuditEventsForWorkspace(
+  scope: { workspaceId: string },
+  options: { includeFinancialEvents?: boolean } = {},
+) {
+  const includeFinancialEvents = options.includeFinancialEvents ?? false;
   return withScope(scope, (tx) =>
     tx.auditEvent.findMany({
-      where: { workspaceId: scope.workspaceId },
+      where: {
+        workspaceId: scope.workspaceId,
+        ...(includeFinancialEvents ? {} : { entityType: { not: "payment" } }),
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
       select: {

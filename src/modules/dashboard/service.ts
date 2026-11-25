@@ -83,7 +83,7 @@ export async function getDashboardData(
   // -------------------------------------------------------------------------
   // 1. Permissions
   // -------------------------------------------------------------------------
-  const canSeeFinancials = isAllowed(scope, "payments", "read");
+  const canSeeFinancials = scope.role === "owner";
   const canSeeTeam = isAllowed(scope, "team", "read");
   const canSeeStudents = isAllowed(scope, "students", "read");
   const canSeeAssessments = isAllowed(scope, "grades", "read");
@@ -148,52 +148,20 @@ export async function getDashboardData(
   }
 
   // -------------------------------------------------------------------------
-  // 3. Session-scoped revenue (ADR-0028)
+  // 3. Section 1: Global Overview Metrics
   // -------------------------------------------------------------------------
-  // Expected revenue counts present/late marks on non-cancelled sessions that
-  // have a resolvable price (session price, else group default). Nothing
-  // per-student is computed: there is no balance, no outstanding, no credit.
-  const presentLateBySession = new Map<string, number>();
-  for (const mark of raw.attendanceMarks) {
-    if (mark.session.status === "cancelled") continue;
-    if (mark.mark !== "present" && mark.mark !== "late") continue;
-    presentLateBySession.set(mark.sessionId, (presentLateBySession.get(mark.sessionId) ?? 0) + 1);
-  }
-
-  function resolvablePrice(session: {
-    pricePerStudentMinor: number | null;
-    group: { defaultPricePerStudentMinor: number | null } | null;
-  }): number | null {
-    const price =
-      session.pricePerStudentMinor ?? session.group?.defaultPricePerStudentMinor ?? null;
-    return price != null && price > 0 ? price : null;
-  }
-
-  // Expected revenue over the *current period* (symmetric with collected).
-  let periodExpectedMinor: number | null = null;
-  for (const session of raw.sessions) {
-    if (session.status === "cancelled") continue;
-    if (session.startsAt < start || session.startsAt > end) continue;
-    const price = resolvablePrice(session);
-    if (price == null) continue;
-    const attended = presentLateBySession.get(session.id) ?? 0;
-    periodExpectedMinor = (periodExpectedMinor ?? 0) + price * attended;
-  }
-
-  // -------------------------------------------------------------------------
-  // 4. Section 1: Global Overview Metrics
-  // -------------------------------------------------------------------------
-  // Payments collected in period & prior period
+  // Collected receipts in period & prior period. No projection is computed.
   let periodCollectedMinor = 0;
   let priorPeriodCollectedMinor = 0;
 
-  for (const payment of raw.payments) {
-    if (payment.voidedAt) continue;
-    const paidAt = payment.paidOn;
-    if (paidAt >= start && paidAt <= end) {
-      periodCollectedMinor += payment.amountMinor;
-    } else if (paidAt >= priorStart && paidAt <= priorEnd) {
-      priorPeriodCollectedMinor += payment.amountMinor;
+  if (canSeeFinancials) {
+    for (const payment of raw.payments) {
+      const paidAt = payment.paidOn;
+      if (paidAt >= start && paidAt <= end) {
+        periodCollectedMinor += payment.amountMinor;
+      } else if (paidAt >= priorStart && paidAt <= priorEnd) {
+        priorPeriodCollectedMinor += payment.amountMinor;
+      }
     }
   }
 
@@ -453,11 +421,10 @@ export async function getDashboardData(
   let financialOverview: DashboardData["financialOverview"] = null;
 
   if (canSeeFinancials) {
-    // Revenue by group: session receipts are attributed via the session's group
-    // (ADR-0028). Receipts not linked to a session are excluded from the group chart.
+    // Revenue by group: every receipt is attributed through its session's group.
+    // Independent sessions without a group stay out of the group chart only.
     const revenueByGroupMap = new Map<string, number>();
     for (const payment of raw.payments) {
-      if (payment.voidedAt) continue;
       const groupId = payment.session?.groupId ?? null;
       if (groupId == null) continue;
       revenueByGroupMap.set(
@@ -481,7 +448,6 @@ export async function getDashboardData(
       trendMap.set(key, 0);
     }
     for (const payment of raw.payments) {
-      if (payment.voidedAt) continue;
       const m = payment.paidOn.toISOString().slice(0, 7);
       if (trendMap.has(m)) {
         trendMap.set(m, (trendMap.get(m) ?? 0) + payment.amountMinor);
@@ -492,15 +458,10 @@ export async function getDashboardData(
       amountMinor,
     }));
 
-    // Recent payments
+    // Recent collected receipts. Every receipt has a session by schema.
     const recentPayments = raw.payments.slice(0, 5).map((p) => ({
       id: p.id,
-      studentId: p.studentId,
-      studentName: p.student
-        ? `${p.student.firstName} ${p.student.lastName}`
-        : p.session
-          ? `${p.session.group?.name ?? p.session.gradeLabel ?? ""} · ${p.session.startsAt.toISOString().slice(0, 10)}`
-          : "—",
+      sessionLabel: `${p.session.group?.name ?? p.session.gradeLabel ?? ""} · ${p.session.startsAt.toISOString().slice(0, 10)}`,
       amountMinor: p.amountMinor,
       paidOn: p.paidOn.toISOString().slice(0, 10),
       method: p.method,
@@ -509,7 +470,6 @@ export async function getDashboardData(
     financialOverview = {
       totalRevenueMinor: periodCollectedMinor,
       currency,
-      expectedRevenueMinor: periodExpectedMinor,
       revenueByGroup,
       revenueTrend,
       recentPayments,
@@ -678,26 +638,28 @@ export async function getDashboardData(
   // -------------------------------------------------------------------------
   // 11. Section 8: Recent Activity
   // -------------------------------------------------------------------------
-  const recentActivity: RecentActivityEvent[] = raw.auditEvents.map((event) => {
-    let link = "/app";
-    if (event.entityType === "student") link = `/app/students/${event.entityId}`;
-    else if (event.entityType === "payment") link = "/app/payments";
-    else if (event.entityType === "attendance") link = "/app/sessions";
-    else if (event.entityType === "homework") link = "/app/homework";
-    else if (event.entityType === "assessment") link = "/app/assessments";
-    else if (event.entityType === "exam") link = "/app/assessments";
+  const recentActivity: RecentActivityEvent[] = raw.auditEvents
+    .filter((event) => canSeeFinancials || event.entityType !== "payment")
+    .map((event) => {
+      let link = "/app";
+      if (event.entityType === "student") link = `/app/students/${event.entityId}`;
+      else if (event.entityType === "payment") link = "/app/payments";
+      else if (event.entityType === "attendance") link = "/app/sessions";
+      else if (event.entityType === "homework") link = "/app/homework";
+      else if (event.entityType === "assessment") link = "/app/assessments";
+      else if (event.entityType === "exam") link = "/app/assessments";
 
-    return {
-      id: event.id,
-      actorName: event.actorDisplayName,
-      action: event.action,
-      actionKey: `audit_${event.action.replace(".", "_")}`,
-      entityType: event.entityType,
-      entityId: event.entityId,
-      createdAt: event.createdAt.toISOString(),
-      link,
-    };
-  });
+      return {
+        id: event.id,
+        actorName: event.actorDisplayName,
+        action: event.action,
+        actionKey: `audit_${event.action.replace(".", "_")}`,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        createdAt: event.createdAt.toISOString(),
+        link,
+      };
+    });
 
   return {
     workspace: {
@@ -726,7 +688,6 @@ export async function getDashboardData(
       },
       revenue: {
         collectedMinor: periodCollectedMinor,
-        expectedMinor: periodExpectedMinor,
         currency,
         priorPeriodChangePercent: revenueChangePercent,
       },

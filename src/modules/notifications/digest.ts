@@ -20,7 +20,10 @@ type DigestRow = { type: string; count: number };
 export function buildDigestText(rows: readonly DigestRow[], locale: "ar" | "en"): string {
   const catalogue = locale === "ar" ? ar : en;
   const labels = catalogue.Notifications.types as Record<string, string>;
-  const lines = rows.map((row) => `- ${labels[row.type] ?? row.type}: ${row.count}`);
+  // Only known current types enter a digest; no legacy type remains in storage.
+  const lines = rows
+    .filter((row) => labels[row.type] !== undefined)
+    .map((row) => `- ${labels[row.type]}: ${row.count}`);
   const heading = locale === "ar" ? "ملخص إشعارات كشكول" : "Kashkol notification digest";
   return [heading, "", ...lines].join("\n");
 }

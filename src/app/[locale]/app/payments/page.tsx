@@ -1,11 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Card, CardBody } from "@/components/ui/card";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { PaymentsClient } from "@/components/payments/payments-client";
 import { requireStaffSession } from "@/modules/identity/session";
 import { getPayments } from "@/modules/payments/service";
 import { paymentQuerySchema } from "@/modules/payments/schemas";
-import { isAllowed } from "@/modules/tenancy/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,22 +16,11 @@ export default async function PaymentsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const { scope } = await requireStaffSession();
-  const t = await getTranslations("Payments");
-  if (!isAllowed(scope, "payments", "read")) {
-    return (
-      <div className="app-page">
-        <PageHeader title={t("title")} />
-        <Card>
-          <CardBody>{t("noPermission")}</CardBody>
-        </Card>
-      </div>
-    );
-  }
+  // Money never exists for assistants or portals, even as an empty screen.
+  if (scope.role !== "owner") notFound();
 
-  const data = await getPayments(
-    scope,
-    paymentQuerySchema.parse({ page: 1, pageSize: 25 }),
-  );
+  const t = await getTranslations("Payments");
+  const data = await getPayments(scope, paymentQuerySchema.parse({ page: 1, pageSize: 25 }));
   return (
     <div className="app-page space-y-6">
       <PageHeader title={t("title")} description={t("subtitle")} />
@@ -43,17 +31,10 @@ export default async function PaymentsPage({
           payments: data.payments.map((payment) => ({
             ...payment,
             paidOn: payment.paidOn.toISOString().slice(0, 10),
-            voidedAt: payment.voidedAt?.toISOString() ?? null,
-          })),
-          adjustments: data.adjustments.map((adjustment) => ({
-            ...adjustment,
-            paidOn: adjustment.paidOn.toISOString().slice(0, 10),
-            createdAt: adjustment.createdAt.toISOString(),
           })),
           totals: data.totals,
           pagination: data.pagination,
         }}
-        canWrite={isAllowed(scope, "payments", "write")}
         today={data.today}
       />
     </div>

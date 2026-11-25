@@ -544,7 +544,7 @@ Assertions per case:
 Permission set (from `F-P2-01` AC-2), each with `read` and `write`:
 
 ```
-students · grades · attendance · homework · files · messages · payments · settings · team · audit
+students · grades · attendance · homework · files · messages · settings · team · audit
 ```
 
 ### 9.2 Rules
@@ -957,7 +957,7 @@ These are measured on a representative mid-range Android device profile, not on 
 |---|---|
 | **M0** | Repository, CI, Prisma 7 + migrations + RLS, scoped data layer, isolation matrix generator, Better Auth + sessions, workspace + settings, i18n/RTL, theme tokens, design system, audit substrate, notification substrate, app shell with URL routing, observability, Railway deployment, backups |
 | **M1** | Student/group/session/attendance/homework/assessment/messaging/files/reporting modules, import pipeline, notification rules, file scan pipeline, reports, accessibility gate |
-| **M2** | Assistant membership and permission grants, portal authentication (parent, student), payment ledger, QR token lifecycle, export/restore jobs, multi-workspace active selection, notification digest |
+| **M2** | Assistant membership and permission grants, portal authentication (parent, student), owner-only collected session receipts, QR token lifecycle, export/restore jobs, multi-workspace active selection, notification digest |
 | **M3** | Exam authoring and attempt lifecycle, video attachment, admin console, break-glass grants, billing webhooks, scale hardening |
 
 **M0 contains no user-facing data entry beyond the workspace profile** (`RELEASE_PLAN.md` §2.4). The

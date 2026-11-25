@@ -65,16 +65,16 @@ export async function findStudentById(scope: Scope, studentId: string) {
 
 export async function countStudentLinkedRecords(scope: Scope, studentId: string) {
   return withScope(scope, async (tx) => {
-    const [attendanceCount, assessmentCount, paymentCount] = await Promise.all([
+    // Collected receipts are linked to sessions, never to students (ADR-0043),
+    // so they cannot block a student deletion.
+    const [attendanceCount, assessmentCount] = await Promise.all([
       tx.attendanceMark.count({ where: { workspaceId: scope.workspaceId, studentId } }),
       tx.assessmentScore.count({ where: { workspaceId: scope.workspaceId, studentId } }),
-      tx.payment.count({ where: { workspaceId: scope.workspaceId, studentId } }),
     ]);
     return {
       attendanceCount,
       assessmentCount,
-      paymentCount,
-      totalLinked: attendanceCount + assessmentCount + paymentCount,
+      totalLinked: attendanceCount + assessmentCount,
     };
   });
 }

@@ -23,11 +23,11 @@ const owner: Scope = {
   permissions: new Set(),
 };
 
-const assistantWithoutPayments: Scope = {
+const assistantWithReportGrants: Scope = {
   ...owner,
   actorUserId: "10000000-0000-4000-8000-000000000002",
   role: "assistant",
-  permissions: new Set(["attendance:read"]),
+  permissions: new Set(["attendance:read", "sessions:read", "exports:read"]),
 };
 
 beforeEach(() => {
@@ -136,16 +136,18 @@ describe("report filters and CSV security", () => {
     await expect(exportReport(owner, query)).rejects.toBeInstanceOf(AppError);
   });
 
-  it("denies payments reports without a payment grant before querying tenant data", async () => {
-    const query = reportQuerySchema.parse({ type: "payments" });
-    await expect(getReport(assistantWithoutPayments, query)).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
+  it("denies money reports to assistants even with every report grant", async () => {
+    for (const type of ["payments", "sessionRevenue"] as const) {
+      const query = reportQuerySchema.parse({ type });
+      await expect(getReport(assistantWithReportGrants, query)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    }
     expect(getReportTimezone).not.toHaveBeenCalled();
     expect(loadReport).not.toHaveBeenCalled();
   });
 
-  it("reports session revenue as expected vs collected using integer EGP amounts", async () => {
+  it("reports only collected session earnings using integer EGP amounts", async () => {
     loadReport.mockResolvedValue({
       timezone: "Africa/Cairo",
       total: 1,
@@ -153,8 +155,6 @@ describe("report filters and CSV security", () => {
         date: new Date("2026-10-20T14:00:00.000Z"),
         group: "Physics",
         priceMinor: 10_000,
-        attended: 1,
-        expectedMinor: 10_000,
         collectedMinor: 2_500,
       }],
     });
@@ -179,10 +179,9 @@ describe("report filters and CSV security", () => {
     );
     expect(result.items[0]).toMatchObject({
       priceEgp: "100.00",
-      attended: 1,
-      expectedEgp: "100.00",
       collectedEgp: "25.00",
     });
+    expect(result.items[0]).not.toHaveProperty("expectedEgp");
     expect(result.items[0]).not.toHaveProperty("balanceEgp");
     expect(result.items[0]).not.toHaveProperty("collectionRate");
   });
@@ -195,8 +194,6 @@ describe("report filters and CSV security", () => {
         date: new Date("2026-10-20T14:00:00.000Z"),
         group: "+=IMPORT",
         priceMinor: 10_000,
-        attended: 1,
-        expectedMinor: 10_000,
         collectedMinor: 7_500,
       }],
     });
