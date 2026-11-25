@@ -7,8 +7,8 @@ import { LandingHero } from "@/components/landing/hero";
 import { LandingInteractiveCalculator } from "@/components/landing/interactive-calculator";
 import { LandingScrollTop } from "@/components/landing/scroll-top";
 import {
-  LandingBenefits,
   LandingCallToAction,
+  LandingChallenges,
   LandingFaq,
   LandingHow,
   LandingPricing,
@@ -77,7 +77,7 @@ export default async function LandingPage({ params }: LandingPageProps) {
       <main id="main">
         <LandingHero signedIn={signedIn} locale={appLocale} />
         <LandingClassroomTicker />
-        <LandingBenefits />
+        <LandingChallenges />
         <LandingProof />
         <LandingHow />
         <LandingInteractiveCalculator signedIn={signedIn} />

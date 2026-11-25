@@ -64,7 +64,10 @@ export type IconName =
   | "externalLink"
   | "refresh"
   | "eye"
-  | "qr";
+  | "qr"
+  | "wallet"
+  | "folder"
+  | "video";
 
 const PATHS: Record<IconName, ReactNode> = {
   grid: (
@@ -397,6 +400,25 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M20.5 13.5h.1" />
       <path d="M17 17.8h.1" />
       <path d="M20.5 20.5h.1" />
+    </>
+  ),
+  wallet: (
+    <>
+      <path d="M20 7H5.5A2.5 2.5 0 0 1 3 4.5v0A1.5 1.5 0 0 1 4.5 3H18" />
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <circle cx="16.5" cy="13.5" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  folder: (
+    <>
+      <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11z" />
+    </>
+  ),
+  video: (
+    <>
+      <rect x="3" y="5" width="14" height="14" rx="2" />
+      <path d="M17 10l4-2v8l-4-2v-4z" />
+      <path d="M8.5 9.5l4 2.5-4 2.5v-5z" />
     </>
   ),
 };

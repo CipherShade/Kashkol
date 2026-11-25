@@ -6,11 +6,29 @@ import {
   buildRobots,
   buildSitemap,
 } from "@/lib/landing/seo";
-import { BENEFIT_ITEMS, PROOF_ITEMS, STEPS, FAQ_ITEMS } from "@/lib/landing/content";
+import { CHALLENGE_ITEMS, FAQ_ITEMS, PROOF_ITEMS, STEPS } from "@/lib/landing/content";
+
+type ChallengeItem = {
+  number: string;
+  nav: string;
+  title: string;
+  problemHeadline: string;
+  problemBody: string;
+  solutionHeadline: string;
+  solutionBody: string;
+  solutionDetail: string;
+  showcase: string;
+  points: string[];
+};
 
 type LandingCatalogue = {
   Landing: {
-    benefits: { items: Record<string, { title: string; body: string }> };
+    challenges: {
+      problemLabel: string;
+      solutionLabel: string;
+      featureLabel: string;
+      items: Record<string, ChallengeItem>;
+    };
     proof: { items: Record<string, { title: string; body: string }> };
     how: { items: Record<string, { title: string; body: string }> };
     faq: { items: Record<string, { question: string; answer: string }> };
@@ -19,8 +37,8 @@ type LandingCatalogue = {
 const ar = arJson as unknown as LandingCatalogue;
 const en = enJson as unknown as LandingCatalogue;
 
-const arBenefits = ar.Landing.benefits.items;
-const enBenefits = en.Landing.benefits.items;
+const arChallenges = ar.Landing.challenges.items;
+const enChallenges = en.Landing.challenges.items;
 const arProof = ar.Landing.proof.items;
 const enProof = en.Landing.proof.items;
 const arSteps = ar.Landing.how.items;
@@ -39,11 +57,32 @@ describe("landing page contracts", () => {
   });
 
   it("contains all required landing keys in catalogues", () => {
-    for (const { key } of BENEFIT_ITEMS) {
-      expect(arBenefits[key].title).toBeTypeOf("string");
-      expect(arBenefits[key].body).toBeTypeOf("string");
-      expect(enBenefits[key].title).toBeTypeOf("string");
-      expect(enBenefits[key].body).toBeTypeOf("string");
+    expect(ar.Landing.challenges.problemLabel).toBeTypeOf("string");
+    expect(ar.Landing.challenges.solutionLabel).toBeTypeOf("string");
+    expect(ar.Landing.challenges.featureLabel).toBeTypeOf("string");
+    expect(en.Landing.challenges.problemLabel).toBeTypeOf("string");
+    expect(en.Landing.challenges.solutionLabel).toBeTypeOf("string");
+    expect(en.Landing.challenges.featureLabel).toBeTypeOf("string");
+
+    for (const { key } of CHALLENGE_ITEMS) {
+      for (const [locale, items] of [
+        ["ar", arChallenges],
+        ["en", enChallenges],
+      ] as const) {
+        const item = items[key];
+        expect(item, `${locale}.${key}`).toBeDefined();
+        expect(item.number, `${locale}.${key}.number`).toBeTypeOf("string");
+        expect(item.nav, `${locale}.${key}.nav`).toBeTypeOf("string");
+        expect(item.title, `${locale}.${key}.title`).toBeTypeOf("string");
+        expect(item.problemHeadline, `${locale}.${key}.problemHeadline`).toBeTypeOf("string");
+        expect(item.problemBody, `${locale}.${key}.problemBody`).toBeTypeOf("string");
+        expect(item.solutionHeadline, `${locale}.${key}.solutionHeadline`).toBeTypeOf("string");
+        expect(item.solutionBody, `${locale}.${key}.solutionBody`).toBeTypeOf("string");
+        expect(item.solutionDetail, `${locale}.${key}.solutionDetail`).toBeTypeOf("string");
+        expect(item.showcase, `${locale}.${key}.showcase`).toBeTypeOf("string");
+        expect(Array.isArray(item.points), `${locale}.${key}.points`).toBe(true);
+        expect(item.points.length, `${locale}.${key}.points.length`).toBeGreaterThan(0);
+      }
     }
 
     for (const { key } of PROOF_ITEMS) {

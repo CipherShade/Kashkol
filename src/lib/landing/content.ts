@@ -15,21 +15,38 @@ export type LandingEntry = {
 };
 
 /** Same-page anchors. The header and the footer both read this list. */
-export const LANDING_SECTIONS = ["benefits", "pricing", "proof", "faq"] as const;
+export const LANDING_SECTIONS = ["challenges", "pricing", "proof", "faq"] as const;
 export type LandingSection = (typeof LANDING_SECTIONS)[number];
 
 export const NAV_ITEMS: readonly { key: LandingSection }[] = LANDING_SECTIONS.map((key) => ({
   key,
 }));
 
-/** Problem → Solution feature cards backed by real product capabilities. */
-export const BENEFIT_ITEMS: readonly LandingEntry[] = [
+/**
+ * The ten problem/solution showcases. Each key maps to a real, shipped or
+ * clearly-scoped capability. The order follows the user's requested narrative.
+ */
+export const CHALLENGE_ITEMS: readonly LandingEntry[] = [
+  { key: "students", icon: "users" },
+  { key: "schedule", icon: "calendar" },
   { key: "attendance", icon: "check" },
-  { key: "parents", icon: "whatsapp" },
   { key: "homework", icon: "book" },
+  { key: "exams", icon: "file" },
+  { key: "performance", icon: "bar" },
+  { key: "payments", icon: "wallet" },
+  { key: "content", icon: "folder" },
+  { key: "parents", icon: "whatsapp" },
   { key: "team", icon: "staff" },
-  { key: "files", icon: "file" },
 ];
+
+/** The five items given the largest visual treatment on the landing page. */
+export const FEATURED_CHALLENGE_KEYS = new Set([
+  "students",
+  "attendance",
+  "exams",
+  "performance",
+  "payments",
+]);
 
 /** Social proof uses real product facts, not fabricated testimonials. */
 export const PROOF_ITEMS: readonly LandingEntry[] = [

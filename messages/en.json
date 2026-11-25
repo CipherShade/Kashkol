@@ -13,7 +13,7 @@
     "menuLabel": "Menu",
     "nav": {
       "label": "Primary",
-      "benefits": "Benefits",
+      "challenges": "Challenges & solutions",
       "proof": "Why Kashkol",
       "faq": "FAQ",
       "pricing": "Pricing"
@@ -96,44 +96,175 @@
       "breakdownReports": "~3 hrs/mo automated for monthly student report cards",
       "ctaPrompt": "Start now and focus your energy on teaching"
     },
-    "benefits": {
-      "eyebrow": "The daily headaches Kashkol solves",
-      "title": "Free from admin chaos",
-      "subtitle": "Kashkol is built around every problem you face daily — not just another data storage app.",
+    "challenges": {
+      "eyebrow": "Problems and solutions",
+      "title": "Every challenge in managing your teaching business. One solution.",
+      "subtitle": "Each part of your teaching workflow gets a clear problem, a practical solution, and a real Kashkol feature behind it.",
+      "problemLabel": "The problem",
+      "solutionLabel": "The solution in Kashkol",
+      "featureLabel": "Feature showcase",
       "items": {
-        "attendance": {
-          "title": "Attendance & Roll Call",
-          "body": "Save 30 minutes every class. Mark attendance with a scan, and generate a parent-ready absence report in seconds.",
-          "problem": "15-25 minutes of every class is wasted on paper roll calls and students disputing their attendance records.",
-          "solution": "1-tap digital roster + QR scan 60 students in 60 seconds + instant WhatsApp absence report."
+        "students": {
+          "number": "01",
+          "nav": "Students",
+          "title": "Student management",
+          "problemHeadline": "Forgetting student details, with their information scattered across more than one place?",
+          "problemBody": "Every student has a number, group, grades, attendance, payments, and notes. As the number grows, it becomes hard to remember every detail and find the information when you need it.",
+          "solutionHeadline": "A complete file for every student. Everything in front of you.",
+          "solutionBody": "Every student has their own file that brings together their details, groups, attendance record, grades, homework, payments, and follow-up history.",
+          "solutionDetail": "Instead of searching for a student's information across paper and chats, open their file and know everything.",
+          "showcase": "A real student profile: tabs, details, grades, attendance, and payments in one place.",
+          "points": [
+            "Student profile with key details",
+            "Attendance, grades, homework, and payments in one record",
+            "Follow-up history when you need context"
+          ]
         },
-        "parents": {
-          "title": "Parent Portal",
-          "body": "Give every student a secure link showing real-time attendance, homework, and grades. Cut parent messages by 70%.",
-          "problem": "Parents flood your phone with the same questions day and night: Did my son attend? What was his grade?",
-          "solution": "A private parent portal installed as an app on their phone answers every question automatically, 24/7."
+        "schedule": {
+          "number": "02",
+          "nav": "Schedule",
+          "title": "Sessions and schedule",
+          "problemHeadline": "Is your schedule messy? Do you keep reviewing your session times every day?",
+          "problemBody": "Between groups, sessions, changes, and different times, organizing your schedule can become a daily task on its own.",
+          "solutionHeadline": "Your whole session schedule in one calendar.",
+          "solutionBody": "Organize your groups and sessions, see your daily and weekly schedule, and know the next session and every group's time from one place.",
+          "solutionDetail": "Plan your week in minutes, instead of reviewing your times all day.",
+          "showcase": "An interactive calendar: Day / Week / Month, groups, upcoming sessions, and adding a session.",
+          "points": [
+            "Daily, weekly, and monthly calendar views",
+            "Upcoming sessions and group timing",
+            "Add and manage sessions from one place"
+          ]
+        },
+        "attendance": {
+          "number": "03",
+          "nav": "Attendance",
+          "title": "Attendance and absence",
+          "problemHeadline": "Who attended? Who was absent? And who has been irregular for a while?",
+          "problemBody": "Recording attendance manually and reviewing absences every time takes time, and a student may miss more than once without you noticing.",
+          "solutionHeadline": "Record attendance. Kashkol keeps every student's record.",
+          "solutionBody": "Record group attendance, track absence and lateness, and review any student's attendance history at any time. Know who is regular and who needs follow-up.",
+          "solutionDetail": "Every session you record builds an attendance history you can return to at any time.",
+          "showcase": "Attendance screen with visual attendance history and absence patterns.",
+          "points": [
+            "Fast attendance recording per session",
+            "Absence and lateness history per student",
+            "Clear patterns for students who need follow-up"
+          ]
         },
         "homework": {
-          "title": "Homework & Academic Performance",
-          "body": "Track who submitted and who did not, record grades, and spot struggling students early — without a single spreadsheet.",
-          "problem": "You only realize a student stopped submitting homework when they fail the monthly exam — too late to intervene.",
-          "solution": "Per-session homework tracking, live performance cards, and early-warning alerts for at-risk students."
+          "number": "04",
+          "nav": "Homework",
+          "title": "Homework",
+          "problemHeadline": "You assign homework and don't know who solved it and who didn't?",
+          "problemBody": "You assign the homework, then you start asking, reviewing, and remembering who submitted and who is late. Following up with every student consumes your time.",
+          "solutionHeadline": "Every homework. Every student. The status is clear.",
+          "solutionBody": "Create the homework, assign it to students or a group, track submissions, and review each student's status from one place instead of random follow-up.",
+          "solutionDetail": "Know who finished, who is late, and who needs a reminder — without asking one by one.",
+          "showcase": "Homework dashboard, completion status, submission list, and overdue indicators.",
+          "points": [
+            "Create and assign homework to groups or students",
+            "Track submission status clearly",
+            "See who is done, late, or needs a reminder"
+          ]
+        },
+        "exams": {
+          "number": "05",
+          "nav": "Exams",
+          "title": "Exams and grading",
+          "problemHeadline": "Preparing an exam, grading it, and collecting grades... every time from scratch?",
+          "problemBody": "Exams take time to prepare and grade, then you need to collect grades, calculate results, and understand each student's level.",
+          "solutionHeadline": "Create your exams, grade them, and see results in the same system.",
+          "solutionBody": "Prepare tests with varied questions, see student answers, use automatic grading for objective questions, and review essay questions and record their grades.",
+          "solutionDetail": "From creating the exam to seeing the result — every assessment step in one place.",
+          "showcase": "Exam builder: create questions, MCQ and essay, assign exam, review answers, results and grades.",
+          "points": [
+            "Create questions, including MCQ and essay",
+            "Assign exams and review answers",
+            "See results and grades in the same workflow"
+          ]
+        },
+        "performance": {
+          "number": "06",
+          "nav": "Performance",
+          "title": "Student performance follow-up",
+          "problemHeadline": "Do you only know a student is weak after the result gets worse?",
+          "problemBody": "Recording grades alone is not enough. You need to know who is improving, who is stable, and who started declining before the problem grows.",
+          "solutionHeadline": "Turn grades into a tool for understanding your students.",
+          "solutionBody": "Follow student grades and exam results, review their progress, and compare results so you know who needs extra attention.",
+          "solutionDetail": "Not just knowing how much a student scored — knowing whether they are improving or declining.",
+          "showcase": "Student performance chart, exam history, group averages, and top and struggling students.",
+          "points": [
+            "Track exam history and progress",
+            "Compare group averages and student results",
+            "Spot students who need attention early"
+          ]
+        },
+        "payments": {
+          "number": "07",
+          "nav": "Payments",
+          "title": "Payments and dues",
+          "problemHeadline": "Can't remember who paid, and who still owes money?",
+          "problemBody": "Following subscriptions and payments across many students can cause missed dues, or force you to review notebooks and chats to be sure.",
+          "solutionHeadline": "Know where your money comes from, and who still has dues.",
+          "solutionBody": "Record payments for each student, review payment history, and track dues and late payments from one dashboard.",
+          "solutionDetail": "Every student has a clear financial record. Every due amount can be reviewed instead of relying on memory.",
+          "showcase": "Financial dashboard: collected, outstanding, payments, and student payment history.",
+          "points": [
+            "Record payments per student",
+            "Review collected and outstanding amounts",
+            "Keep a clear payment history"
+          ]
+        },
+        "content": {
+          "number": "08",
+          "nav": "Content",
+          "title": "Learning content",
+          "problemHeadline": "Your files and videos are lost between phone, Drive, and WhatsApp?",
+          "problemBody": "PDFs, videos, revisions, and recordings get spread across different places, and students may ask you for the same file every time.",
+          "solutionHeadline": "Your whole learning library in one place.",
+          "solutionBody": "Upload and organize your files and learning content, link content to your groups, and share materials with your students easily.",
+          "solutionDetail": "Your content is organized, and your students can reach the material they need.",
+          "showcase": "Content library, folder organization, resource previews, and group access.",
+          "points": [
+            "Organize files and learning materials",
+            "Share content with the right groups",
+            "Keep resources easy to find"
+          ]
+        },
+        "parents": {
+          "number": "09",
+          "nav": "Parents",
+          "title": "Parents",
+          "problemHeadline": "The same questions from parents every day?",
+          "problemBody": "Did they attend? Were they absent? Did they do the homework? What score did they get? When is the session? Individual communication and constant follow-up take your time.",
+          "solutionHeadline": "Make student follow-up clearer, without follow-up consuming your day.",
+          "solutionBody": "Give parents a way to follow their child's attendance, grades, homework, and schedule, and keep important information organized instead of repeating the same questions.",
+          "solutionDetail": "Organized follow-up gives parents more clarity, and gives you more time for teaching.",
+          "showcase": "Parent portal mockup on a mobile device showing child's attendance, results, and homework.",
+          "points": [
+            "Parents can follow attendance, grades, and homework",
+            "Important information stays organized",
+            "Less repeated communication"
+          ]
         },
         "team": {
-          "title": "Team & Assistants",
-          "body": "Add assistants with safe, limited permissions. Every change is timestamped with their name, keeping your private workspace data private.",
-          "problem": "Giving assistants access to your account can expose private workspace information to everyone.",
-          "solution": "Role-based permissions so assistants can take attendance without seeing private owner-only information or other groups."
-        },
-        "files": {
-          "title": "Files & Study Materials",
-          "body": "Upload revision sheets, model answers, and booklets once. Students find everything organized in their portal.",
-          "problem": "PDF model answers get buried in WhatsApp groups and students cannot find last week revision sheets.",
-          "solution": "A session-linked file library that is securely accessible only to students enrolled in that specific group."
+          "number": "10",
+          "nav": "Team",
+          "title": "Assistants and team",
+          "problemHeadline": "Does everything have to go through you personally?",
+          "problemBody": "If you have an assistant or team, you remain the contact point for every student detail, attendance, exams, and organization, which makes growing your work harder.",
+          "solutionHeadline": "Distribute tasks. Stay in control of your work.",
+          "solutionBody": "Add your assistants, give each one the right permissions, and let your team work on the same system instead of everyone managing work separately.",
+          "solutionDetail": "Your team can help you with administration, and you remain in control of the system.",
+          "showcase": "Team settings, assistant roles, permissions, and activity workflow.",
+          "points": [
+            "Invite assistants with the right permissions",
+            "Keep control over sensitive actions",
+            "Work as one team on the same system"
+          ]
         }
-      },
-      "problemLabel": "The Pain",
-      "solutionLabel": "Kashkol Solves It"
+      }
     },
     "proof": {
       "eyebrow": "Built on trust",

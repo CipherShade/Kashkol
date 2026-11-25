@@ -56,6 +56,14 @@ function flattenKeys(value, prefix = "", output = []) {
   return output;
 }
 
+function isValidLeafValue(value) {
+  if (typeof value === "string") return value.trim() !== "";
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every((item) => typeof item === "string" && item.trim() !== "");
+  }
+  return false;
+}
+
 // 1. Message catalogue parity.
 {
   const locales = ["ar", "en"];
@@ -79,14 +87,14 @@ function flattenKeys(value, prefix = "", output = []) {
     for (const [key, value] of first) {
       if (!second.has(key))
         fail(path.join(ROOT, "messages", `${locales[1]}.json`), `missing key "${key}"`);
-      if (typeof value !== "string" || value.trim() === "") {
+      if (!isValidLeafValue(value)) {
         fail(path.join(ROOT, "messages", `${locales[0]}.json`), `empty value for "${key}"`);
       }
     }
     for (const [key, value] of second) {
       if (!first.has(key))
         fail(path.join(ROOT, "messages", `${locales[0]}.json`), `missing key "${key}"`);
-      if (typeof value !== "string" || value.trim() === "") {
+      if (!isValidLeafValue(value)) {
         fail(path.join(ROOT, "messages", `${locales[1]}.json`), `empty value for "${key}"`);
       }
     }

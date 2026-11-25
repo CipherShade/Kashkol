@@ -855,8 +855,13 @@ These implement the established session-priced billing rules (`ADR-0025`): direc
     and `workspace-en.png` captures showed M2 UI (record payment, follow-up, guardian messaging) and
     are not truthful for the current M1 landing. `HAS_DEMO_SCREENSHOT` is now `false`, so the hero
     renders the structural illustration until M1-only screenshots are recaptured and verified.
-  - After disabling stale screenshots, landing now falls back to the structural illustration; M1-only
-    screenshots still need recapture before re-enabling `HAS_DEMO_SCREENSHOT`.
+  - **2026-11-25 challenges section refresh (uncommitted in this checkout):** the landing replaced the
+    old 5-card benefits block with a 10-item challenges/solutions showcase (`Landing.challenges`)
+    using the user-provided Arabic problem/solution/showcase copy, with English parity. The section
+    uses in-code feature previews (CSS/SVG mock UI panels) for each capability rather than captured
+    product screenshots; stale workspace screenshots remain disabled. Claims stay scoped to real
+    Kashkol capabilities and do not present unavailable/fake flows as shipped. Full lint/typecheck/
+    test/build gates still need to be run for this change.
   - **Migration `20261113000001_homework_completion_mark_grants` (approved 2026-11-11).** A
     forward-only migration grants the application role `SELECT, INSERT, UPDATE, DELETE` on
     `homework_completion_mark`; no historical migration was modified. Verified against a fresh,
