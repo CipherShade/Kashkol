@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import {
   CHALLENGE_ITEMS,
   FAQ_ITEMS,
@@ -268,26 +268,179 @@ export async function LandingChallenges() {
   );
 }
 
+type ProofVisualLabels = {
+  recordsOverview: string;
+  students: string;
+  attendance: string;
+  payments: string;
+  arabic: string;
+  english: string;
+  rtl: string;
+  ltr: string;
+  arabicSample: string;
+  englishSample: string;
+  teamAccess: string;
+  teacher: string;
+  assistant: string;
+  fullAccess: string;
+  assignedPermissions: string;
+};
+
+/**
+ * Small in-product previews for the trust cards. They carry labels only —
+ * never invented student names, counts, or results — so the illustration
+ * reinforces the product without claiming data that does not exist.
+ */
+function ProofVisual({
+  itemKey,
+  icon,
+  labels,
+}: {
+  itemKey: string;
+  icon: IconName;
+  labels: ProofVisualLabels;
+}) {
+  if (itemKey === "records") {
+    return (
+      <div className="landing-truth__visual" aria-hidden="true">
+        <div className="landing-truth__window">
+          <div className="landing-truth__window-head">
+            <span className="landing-truth__window-icon">
+              <Icon name={icon} size={12} />
+            </span>
+            <span>{labels.recordsOverview}</span>
+          </div>
+          <div className="landing-truth__stats">
+            {[
+              { label: labels.students, className: "is-wide" },
+              { label: labels.attendance, className: "is-mid" },
+              { label: labels.payments, className: "is-short" },
+            ].map((stat) => (
+              <div key={stat.label} className="landing-truth__stat">
+                <span className="landing-truth__stat-label">{stat.label}</span>
+                <span className={`landing-truth__stat-bar ${stat.className}`} />
+              </div>
+            ))}
+          </div>
+          <div className="landing-truth__rows">
+            <div className="landing-truth__row">
+              <span className="landing-truth__row-dot" />
+              <span className="landing-truth__row-line" />
+              <span className="landing-truth__row-check">
+                <Icon name="check" size={10} />
+              </span>
+            </div>
+            <div className="landing-truth__row is-short">
+              <span className="landing-truth__row-dot" />
+              <span className="landing-truth__row-line" />
+              <span className="landing-truth__row-check">
+                <Icon name="check" size={10} />
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (itemKey === "arabic") {
+    return (
+      <div className="landing-truth__visual" aria-hidden="true">
+        <div className="landing-truth__window">
+          <div className="landing-truth__switch">
+            <span className="is-active">{labels.arabic}</span>
+            <span>{labels.english}</span>
+          </div>
+          <div className="landing-truth__lang-row" dir="rtl">
+            <span className="landing-truth__lang-tag">{labels.rtl}</span>
+            <span className="landing-truth__lang-text">{labels.arabicSample}</span>
+          </div>
+          <div className="landing-truth__lang-row" dir="ltr">
+            <span className="landing-truth__lang-tag">{labels.ltr}</span>
+            <span className="landing-truth__lang-text">{labels.englishSample}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="landing-truth__visual" aria-hidden="true">
+      <div className="landing-truth__window">
+        <div className="landing-truth__window-head">
+          <span className="landing-truth__window-icon">
+            <Icon name={icon} size={12} />
+          </span>
+          <span>{labels.teamAccess}</span>
+        </div>
+        <div className="landing-truth__access">
+          <div className="landing-truth__access-row is-primary">
+            <span className="landing-truth__access-avatar" />
+            <span className="landing-truth__access-info">
+              <span className="landing-truth__access-name">{labels.teacher}</span>
+              <span className="landing-truth__access-badge is-active">
+                <Icon name="check" size={10} />
+                {labels.fullAccess}
+              </span>
+            </span>
+          </div>
+          <div className="landing-truth__access-row">
+            <span className="landing-truth__access-avatar is-soft" />
+            <span className="landing-truth__access-info">
+              <span className="landing-truth__access-name">{labels.assistant}</span>
+              <span className="landing-truth__access-badge">{labels.assignedPermissions}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export async function LandingProof() {
   const t = await getTranslations("Landing.proof");
+  const visualLabels: ProofVisualLabels = {
+    recordsOverview: t("visual.recordsOverview"),
+    students: t("visual.students"),
+    attendance: t("visual.attendance"),
+    payments: t("visual.payments"),
+    arabic: t("visual.arabic"),
+    english: t("visual.english"),
+    rtl: t("visual.rtl"),
+    ltr: t("visual.ltr"),
+    arabicSample: t("visual.arabicSample"),
+    englishSample: t("visual.englishSample"),
+    teamAccess: t("visual.teamAccess"),
+    teacher: t("visual.teacher"),
+    assistant: t("visual.assistant"),
+    fullAccess: t("visual.fullAccess"),
+    assignedPermissions: t("visual.assignedPermissions"),
+  };
 
   return (
     <section className="landing-truth" id="proof" aria-labelledby="proof-title">
       <div className="landing-container">
-        <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="proof-title" className="landing-h2">
-          {t("title")}
-        </h2>
-        <p className="landing-sub">{t("subtitle")}</p>
+        <div className="landing-truth__header">
+          <p className="landing-eyebrow landing-truth__eyebrow">
+            <span className="landing-truth__eyebrow-dot" aria-hidden="true" />
+            {t("eyebrow")}
+          </p>
+          <h2 id="proof-title" className="landing-h2 landing-truth__title">
+            {t("title")}
+          </h2>
+          <p className="landing-sub landing-truth__description">{t("subtitle")}</p>
+        </div>
 
         <ul className="landing-truth__grid">
           {PROOF_ITEMS.map(({ key, icon }) => (
             <li key={key} className="landing-truth__item">
-              <span className="landing-icon" aria-hidden="true">
-                <Icon name={icon} size={20} />
-              </span>
-              <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
-              <p>{t(`items.${key}.body`)}</p>
+              <ProofVisual itemKey={key} icon={icon} labels={visualLabels} />
+              <div className="landing-truth__card-body">
+                <h3 className="landing-h3 landing-truth__card-title">
+                  {t(`items.${key}.title`)}
+                </h3>
+                <p className="landing-truth__card-description">{t(`items.${key}.body`)}</p>
+              </div>
             </li>
           ))}
         </ul>

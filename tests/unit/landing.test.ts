@@ -29,7 +29,13 @@ type LandingCatalogue = {
       featureLabel: string;
       items: Record<string, ChallengeItem>;
     };
-    proof: { items: Record<string, { title: string; body: string }> };
+    proof: {
+      eyebrow: string;
+      title: string;
+      subtitle: string;
+      items: Record<string, { title: string; body: string }>;
+      visual: Record<string, string>;
+    };
     how: { items: Record<string, { title: string; body: string }> };
     faq: { items: Record<string, { question: string; answer: string }> };
   };
@@ -41,6 +47,8 @@ const arChallenges = ar.Landing.challenges.items;
 const enChallenges = en.Landing.challenges.items;
 const arProof = ar.Landing.proof.items;
 const enProof = en.Landing.proof.items;
+const arProofVisual = ar.Landing.proof.visual;
+const enProofVisual = en.Landing.proof.visual;
 const arSteps = ar.Landing.how.items;
 const enSteps = en.Landing.how.items;
 const arFaq = ar.Landing.faq.items;
@@ -85,11 +93,38 @@ describe("landing page contracts", () => {
       }
     }
 
+    for (const key of ["eyebrow", "title", "subtitle"] as const) {
+      expect(ar.Landing.proof[key], `ar.proof.${key}`).toBeTypeOf("string");
+      expect(en.Landing.proof[key], `en.proof.${key}`).toBeTypeOf("string");
+    }
+
     for (const { key } of PROOF_ITEMS) {
       expect(arProof[key].title).toBeTypeOf("string");
       expect(arProof[key].body).toBeTypeOf("string");
       expect(enProof[key].title).toBeTypeOf("string");
       expect(enProof[key].body).toBeTypeOf("string");
+    }
+
+    const visualKeys = [
+      "recordsOverview",
+      "students",
+      "attendance",
+      "payments",
+      "arabic",
+      "english",
+      "rtl",
+      "ltr",
+      "arabicSample",
+      "englishSample",
+      "teamAccess",
+      "teacher",
+      "assistant",
+      "fullAccess",
+      "assignedPermissions",
+    ] as const;
+    for (const key of visualKeys) {
+      expect(arProofVisual[key], `ar.proof.visual.${key}`).toBeTypeOf("string");
+      expect(enProofVisual[key], `en.proof.visual.${key}`).toBeTypeOf("string");
     }
 
     for (const { key } of STEPS) {
@@ -105,6 +140,19 @@ describe("landing page contracts", () => {
       expect(enFaq[item].question).toBeTypeOf("string");
       expect(enFaq[item].answer).toBeTypeOf("string");
     }
+  });
+
+  it("uses the requested trust copy in English", () => {
+    expect(en.Landing.proof.eyebrow).toBe("BUILT WITH CARE");
+    expect(en.Landing.proof.title).toBe(
+      "Your teaching business deserves a system you can trust.",
+    );
+    expect(en.Landing.proof.subtitle).toBe(
+      "Kashkol brings your records, workflow, and student information together in one thoughtfully designed workspace — built to make your daily work clearer and more organized.",
+    );
+    expect(enProof.records.title).toBe("Clear, dependable records");
+    expect(enProof.arabic.title).toBe("Arabic & English, naturally");
+    expect(enProof.privacy.title).toBe("Your workspace. Your control.");
   });
 
   it("builds correct metadata with canonical and hreflang alternates", () => {

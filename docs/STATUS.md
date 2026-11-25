@@ -862,6 +862,17 @@ These implement the established session-priced billing rules (`ADR-0025`): direc
     product screenshots; stale workspace screenshots remain disabled. Claims stay scoped to real
     Kashkol capabilities and do not present unavailable/fake flows as shipped. Full lint/typecheck/
     test/build gates still need to be run for this change.
+  - **2026-11-26 trust section redesign (user-requested):** the `Landing.proof` band moved from an
+    inverted dark panel to a soft green-gray token surface with a dominant headline and three equal
+    cards. Each card carries a CSS-built product preview — records overview, an Arabic/English
+    RTL/LTR switcher, and teacher/assistant permissions — with labels only, never invented student
+    data or fabricated statistics. Both catalogues carry the new copy and all preview labels; the
+    old inverted-band cascade assertion was replaced with soft-surface, subtle-hover, and
+    reduced-motion assertions. Verified in Chrome at 1440/1024/820/640/390/320px in both locales
+    and themes: three columns on desktop, side-by-side cards on tablet, stacked cards on mobile,
+    equal 200px illustrations, no in-section overflow, and AA-or-better text contrast. The 320px
+    page-level overflow comes from the pre-existing header/ticker, outside this section. All gates
+    pass: lint, typecheck, 572 unit + 34 UI tests, 167 integration tests, and the production build.
   - **Migration `20261113000001_homework_completion_mark_grants` (approved 2026-11-11).** A
     forward-only migration grants the application role `SELECT, INSERT, UPDATE, DELETE` on
     `homework_completion_mark`; no historical migration was modified. Verified against a fresh,

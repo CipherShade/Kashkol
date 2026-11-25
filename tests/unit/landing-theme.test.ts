@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * The landing page is the only public surface. Its inverted "truth" band and
+ * The landing page is the only public surface. Its soft-surface trust band and
  * the calculator's filled stat card use foreground/background pairs that can
  * silently collapse to the same colour when a token or the cascade changes.
  * These assertions run without a browser or a build so a regression is caught
@@ -79,9 +79,27 @@ describe("landing theme token contrast", () => {
 });
 
 describe("landing cascade rules", () => {
-  it("paints inverted-band headings with the inverted ink", () => {
+  it("paints the trust band on a soft token surface with ink headings", () => {
+    const band = landingCss.match(/\.landing-truth \{([^}]*)\}/)?.[1];
+    expect(band).toBeDefined();
+    expect(band).toContain("background: color-mix(in srgb, var(--primary-tint)");
+    expect(band).toContain("color: var(--ink)");
+
+    const title = landingCss.match(/\.landing-truth__title \{([^}]*)\}/)?.[1];
+    expect(title).toBeDefined();
+    expect(title).toContain("color: var(--ink)");
+  });
+
+  it("keeps the trust-card motion subtle and reduced-motion aware", () => {
     expect(landingCss).toMatch(
-      /\.landing-truth h1,\s*\.landing-truth h2,\s*\.landing-truth h3,\s*\.landing-truth h4\s*\{\s*color: var\(--card-invert-ink\);/,
+      /\.landing-truth__item:hover \{[\s\S]*?transform: translateY\(-3px\)/,
+    );
+    expect(landingCss).toMatch(
+      /\.landing-truth__item:hover \.landing-truth__visual \{[\s\S]*?transform: translateY\(-2px\)/,
+    );
+    expect(landingCss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(landingCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.landing-truth__item:hover,\s*\.landing-truth__item:hover \.landing-truth__visual \{\s*transform: none;/,
     );
   });
 

@@ -172,11 +172,6 @@
   transition: transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 200ms ease, color 200ms ease;
 }
 
-.landing-truth .landing-icon {
-  background: color-mix(in srgb, var(--card-invert-ink) 12%, transparent);
-  color: var(--card-invert-ink);
-}
-
 /* ---------------------------------------------------------------------------
  * Header
  * ------------------------------------------------------------------------- */
@@ -1345,52 +1340,63 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Truth band
+ * Trust band — three in-product previews on a soft green-gray surface
  * ------------------------------------------------------------------------- */
 
 .landing-truth {
   position: relative;
   overflow: hidden;
-  padding-block: clamp(46px, 6vw, 84px);
-  background: var(--card-invert-bg);
-  color: var(--card-invert-ink);
+  padding-block: clamp(56px, 7vw, 96px);
+  border-block: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary-tint) 55%, var(--bg));
+  color: var(--ink);
 }
 
-.landing-truth::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: 20%;
-  inline-size: 60%;
-  block-size: 100%;
-  background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--card-invert-muted) 16%, transparent), transparent 70%);
-  pointer-events: none;
+.landing-truth__header {
+  max-inline-size: 52rem;
 }
 
 .landing-truth .landing-eyebrow {
-  border-color: var(--card-invert-border);
-  background: transparent;
-  color: var(--card-invert-muted);
+  gap: 0.45rem;
+  margin-block-end: 1rem;
+  border-color: color-mix(in srgb, var(--primary) 16%, var(--border));
+  background: var(--surface);
+  color: var(--primary-strong);
 }
 
-.landing-truth .landing-sub {
-  color: var(--card-invert-muted);
+.landing-truth__eyebrow-dot {
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border-radius: var(--radius-pill);
+  background: var(--primary-strong);
 }
 
-/* The global h1–h4 rule paints headings with --ink; on the inverted band that
-   colour is the same as the background in both themes. Override it here. */
-.landing-truth h1,
-.landing-truth h2,
-.landing-truth h3,
-.landing-truth h4 {
-  color: var(--card-invert-ink);
+.landing-truth__title {
+  max-inline-size: 24ch;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.9rem, 3.9vw, 3rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+:root[lang="ar"] .landing-truth__title {
+  max-inline-size: none;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.landing-truth__description {
+  max-inline-size: 46rem;
+  margin-block-start: 1rem;
+  color: var(--muted);
 }
 
 .landing-truth__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-  gap: 0.9rem;
-  margin: 1.9rem 0 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(0.9rem, 1.6vw, 1.4rem);
+  margin: clamp(2rem, 3.5vw, 3rem) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -1398,25 +1404,334 @@
 .landing-truth__item {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  border: 1px solid color-mix(in srgb, var(--card-invert-ink) 16%, transparent);
+  gap: 1.15rem;
+  min-inline-size: 0;
+  padding: clamp(1rem, 1.5vw, 1.35rem);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.05rem;
-  background: color-mix(in srgb, var(--card-invert-ink) 5%, transparent);
-  backdrop-filter: blur(8px);
-  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1), border-color 240ms ease, background-color 240ms ease;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease, box-shadow 220ms ease;
 }
 
 .landing-truth__item:hover {
-  transform: translateY(-5px);
-  background: color-mix(in srgb, var(--card-invert-ink) 9%, transparent);
-  border-color: color-mix(in srgb, var(--card-invert-ink) 32%, transparent);
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  box-shadow: var(--shadow-card);
 }
 
-.landing-truth__item p {
+.landing-truth__card-body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.5rem;
+}
+
+.landing-truth__card-title {
+  font-size: 1.03rem;
+  letter-spacing: -0.01em;
+}
+
+:root[lang="ar"] .landing-truth__card-title {
+  letter-spacing: 0;
+}
+
+.landing-truth__card-description {
   margin: 0;
-  font-size: 0.88rem;
+  color: var(--muted);
+  font-size: 0.86rem;
   line-height: 1.65;
+}
+
+/* Miniature product UI — shared shell ------------------------------------- */
+
+.landing-truth__visual {
+  flex: none;
+  min-block-size: 200px;
+  padding: clamp(0.7rem, 1.2vw, 0.9rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary-tint) 38%, var(--surface-2));
+  overflow: hidden;
+  transition: transform 260ms ease;
+}
+
+.landing-truth__item:hover .landing-truth__visual {
+  transform: translateY(-2px);
+}
+
+.landing-truth__window {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.landing-truth__window-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.landing-truth__window-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+  border-radius: 6px;
+  background: var(--primary-tint);
+  color: var(--primary-strong);
+}
+
+/* Records preview ---------------------------------------------------------- */
+
+.landing-truth__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.landing-truth__stat {
+  display: grid;
+  gap: 0.3rem;
+  min-inline-size: 0;
+  padding: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.landing-truth__stat-label {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.57rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.landing-truth__stat-bar {
+  display: block;
+  block-size: 0.3rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--primary) 24%, var(--surface));
+}
+
+.landing-truth__stat-bar.is-wide {
+  inline-size: 85%;
+}
+
+.landing-truth__stat-bar.is-mid {
+  inline-size: 65%;
+  background: color-mix(in srgb, var(--primary) 55%, var(--surface));
+}
+
+.landing-truth__stat-bar.is-short {
+  inline-size: 45%;
+}
+
+.landing-truth__rows {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.landing-truth__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.landing-truth__row-dot {
+  flex: none;
+  inline-size: 0.45rem;
+  block-size: 0.45rem;
+  border-radius: 50%;
+  background: var(--primary);
+  opacity: 0.7;
+}
+
+.landing-truth__row-line {
+  flex: 1;
+  block-size: 0.32rem;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--border-strong) 75%, var(--surface));
+}
+
+.landing-truth__row.is-short .landing-truth__row-line {
+  flex: 0 1 55%;
+}
+
+.landing-truth__row-check {
+  display: inline-flex;
+  flex: none;
+  color: var(--success-ink);
+}
+
+/* Language preview --------------------------------------------------------- */
+
+.landing-truth__switch {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+.landing-truth__switch span {
+  flex: 1;
+  padding-block: 0.3rem;
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.landing-truth__switch .is-active {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--primary-strong);
+}
+
+.landing-truth__lang-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.landing-truth__lang-tag {
+  flex: none;
+  padding-block: 0.14rem;
+  padding-inline: 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--primary-tint);
+  color: var(--primary-strong);
+  font-size: 0.55rem;
+  font-weight: 800;
+}
+
+.landing-truth__lang-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Permissions preview ------------------------------------------------------ */
+
+.landing-truth__access {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.landing-truth__access-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.landing-truth__access-row.is-primary {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+  background: color-mix(in srgb, var(--primary-tint) 45%, var(--surface));
+}
+
+.landing-truth__access-avatar {
+  position: relative;
+  flex: none;
+  inline-size: 1.4rem;
+  block-size: 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--primary-tint);
+}
+
+.landing-truth__access-avatar::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 0.32rem;
+  inset-inline-start: 0.38rem;
+  inline-size: 0.42rem;
+  block-size: 0.42rem;
+  border-radius: 50%;
+  background: var(--primary-strong);
+  opacity: 0.55;
+}
+
+.landing-truth__access-avatar.is-soft {
+  background: var(--surface);
+}
+
+.landing-truth__access-info {
+  display: grid;
+  gap: 0.18rem;
+  min-inline-size: 0;
+}
+
+.landing-truth__access-name {
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.landing-truth__access-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.landing-truth__access-badge.is-active {
+  color: var(--primary-strong);
+}
+
+/* Three columns on desktop; side-by-side cards on tablet. */
+
+@media (min-width: 860px) {
+  .landing-truth__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) and (max-width: 859px) {
+  .landing-truth__item {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: center;
+    gap: 1.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-truth__item:hover,
+  .landing-truth__item:hover .landing-truth__visual {
+    transform: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------

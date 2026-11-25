@@ -267,22 +267,39 @@
       }
     },
     "proof": {
-      "eyebrow": "Built on trust",
-      "title": "A product that earns confidence",
-      "subtitle": "Kashkol is designed to be clear, reliable, and respectful of your work and your students' data.",
+      "eyebrow": "BUILT WITH CARE",
+      "title": "Your teaching business deserves a system you can trust.",
+      "subtitle": "Kashkol brings your records, workflow, and student information together in one thoughtfully designed workspace — built to make your daily work clearer and more organized.",
       "items": {
         "records": {
           "title": "Clear, dependable records",
-          "body": "The numbers you see come from the records you keep, so you always know where they came from."
+          "body": "Your students, attendance, grades, and payments organized in one place. Know where your information stands whenever you need it."
         },
         "arabic": {
-          "title": "Made for Arabic and English",
-          "body": "Use Kashkol in Arabic or English, with the right direction and a polished experience in both."
+          "title": "Arabic & English, naturally",
+          "body": "A complete experience in both languages, with the right layout, direction, and interface for each."
         },
         "privacy": {
-          "title": "Your workspace stays yours",
-          "body": "Each workspace is separate, with access handled carefully so your data stays in the right place."
+          "title": "Your workspace. Your control.",
+          "body": "Your teaching workspace stays separate, with access managed according to account roles and permissions."
         }
+      },
+      "visual": {
+        "recordsOverview": "Records overview",
+        "students": "Students",
+        "attendance": "Attendance",
+        "payments": "Payments",
+        "arabic": "العربية",
+        "english": "English",
+        "rtl": "RTL",
+        "ltr": "LTR",
+        "arabicSample": "الطلاب والحضور",
+        "englishSample": "Students & attendance",
+        "teamAccess": "Team access",
+        "teacher": "Teacher",
+        "assistant": "Assistant",
+        "fullAccess": "Full access",
+        "assignedPermissions": "Assigned permissions"
       }
     },
     "how": {
