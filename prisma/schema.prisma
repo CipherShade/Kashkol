@@ -252,6 +252,22 @@ enum ReportExportStatus {
   @@map("report_export_status")
 }
 
+enum WorkspaceArchiveJobKind {
+  backup
+  restore
+
+  @@map("workspace_archive_job_kind")
+}
+
+enum WorkspaceArchiveJobStatus {
+  queued
+  processing
+  succeeded
+  failed
+
+  @@map("workspace_archive_job_status")
+}
+
 enum FileScope {
   teacher_only
   groups
@@ -315,6 +331,7 @@ enum NotificationType {
   session_unrecorded
   homework_due_soon
   assessment_pending_grades
+  payment_overdue
   backup_ready
   export_ready
   general
@@ -665,6 +682,7 @@ model Workspace {
   paymentAdjustments  PaymentAdjustment[]
   feeRules            FeeRule[]
   reportExports       ReportExport[]
+  archiveJobs         WorkspaceArchiveJob[]
   files               File[]
   fileGroups          FileGroupAccess[]
   fileStudents        FileStudentAccess[]
@@ -713,6 +731,8 @@ model WorkspaceSettings {
   timezone           String   @default("Africa/Cairo")
   currency           String   @default("EGP")
   emailDigestEnabled Boolean @default(false) @map("email_digest_enabled")
+  /// F-P2-07: workspace rule switches and cooldown (ADR-0038).
+  notificationRuleConfig Json? @map("notification_rule_config")
   /// F-P3-10: workspace-configurable, deterministic risk thresholds (ADR-0034).
   performanceRiskEnabled             Boolean @default(true) @map("performance_risk_enabled")
   performanceRiskMinAssessments      Int     @default(3) @map("performance_risk_min_assessments")
@@ -1770,6 +1790,34 @@ model ReportExport {
   @@unique([workspaceId, id])
   @@index([workspaceId, createdAt])
   @@map("report_export")
+}
+
+/// F-P2-11: an owner-requested workspace JSON backup or a validated restore.
+/// The job row is tenant-scoped; the worker claims one inside withScope().
+model WorkspaceArchiveJob {
+  id            String                    @id @default(uuid(7)) @db.Uuid
+  workspaceId   String                    @map("workspace_id") @db.Uuid
+  kind          WorkspaceArchiveJobKind
+  status        WorkspaceArchiveJobStatus @default(queued)
+  requestedBy   String                    @map("requested_by")
+  /** Backup: generated archive. Restore: staged archive to apply. */
+  storageKey    String                    @map("storage_key")
+  schemaVersion String                    @map("schema_version")
+  /** Restore preview: entity counts, retained tables and unapplicable rows. */
+  preview       Json?
+  /** Restore result: applied counts and conflicts. */
+  result        Json?
+  failureCode   String?                   @map("failure_code")
+  lockedAt      DateTime?                 @map("locked_at") @db.Timestamptz(6)
+  attempts      Int                       @default(0)
+  createdAt     DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt   DateTime?                 @map("completed_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, status, createdAt])
+  @@map("workspace_archive_job")
 }
 
 /// Worker drain queue for report exports. Not a tenant table: it has no RLS

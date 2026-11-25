@@ -7,9 +7,18 @@ import {
   createNotificationWorkerScope,
 } from "@/lib/worker/system-actor";
 import { evaluateNotificationRules } from "@/modules/notifications/rules";
+import { processWorkspaceArchiveBatch } from "@/modules/workspace-backup/service";
 
 export const REPORT_BATCH_SIZE = 10;
 export const OUTBOX_BATCH_SIZE = 25;
+export const ARCHIVE_BATCH_SIZE = 5;
+
+export type ArchiveDrainReport = {
+  readonly job: "workspace_archive";
+  readonly processed: number;
+  readonly succeeded: number;
+  readonly failedOrDeferred: number;
+};
 
 /**
  * The counts returned by one drain pass. Counts are safe to log: they contain
@@ -105,6 +114,41 @@ export async function drainMessageOutboxes(
   }
 
   return { ...total, workspaces: iterations };
+}
+
+/**
+ * Drain owner-requested workspace backups and restores. Like the message
+ * outbox, the only cross-workspace step is identifier enumeration; every job
+ * runs inside its own scoped transactions (ADR-0024, ADR-0039).
+ */
+export async function drainWorkspaceArchives(
+  maxWorkspacesPerPass: number = Number.POSITIVE_INFINITY,
+): Promise<ArchiveDrainReport & { readonly workspaces: number }> {
+  const workspaceIds = await listActiveWorkspaceIdsForWorker();
+  let processed = 0;
+  let succeeded = 0;
+  let iterations = 0;
+
+  for (const workspaceId of workspaceIds) {
+    if (iterations >= maxWorkspacesPerPass) break;
+    iterations += 1;
+    try {
+      const results = await processWorkspaceArchiveBatch(workspaceId, ARCHIVE_BATCH_SIZE);
+      processed += results.length;
+      succeeded += results.filter((result) => result.status === "succeeded").length;
+    } catch {
+      // One workspace's archive failure must not stop the other drains.
+      continue;
+    }
+  }
+
+  return {
+    job: "workspace_archive",
+    processed,
+    succeeded,
+    failedOrDeferred: processed - succeeded,
+    workspaces: iterations,
+  };
 }
 
 export function workerPollIntervalMs(): number {

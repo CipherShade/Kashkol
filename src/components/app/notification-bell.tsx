@@ -122,20 +122,35 @@ export function NotificationBell() {
     }
   }, [refreshNotifications]);
 
+  /** F-P2-07 AC-3: every rule-generated alert opens its relevant screen. */
+  const deepLinkFor = (item: StaffNotification): string | null => {
+    const { entityType, entityId } = item;
+    if (!entityType || !entityId) return null;
+    switch (entityType) {
+      case "teaching_session":
+        return `/app/sessions/${entityId}`;
+      case "student":
+        return `/app/students/${entityId}`;
+      case "group":
+        return `/app/groups/${entityId}`;
+      case "homework":
+        return `/app/homework?homework=${entityId}`;
+      case "assessment":
+        return `/app/assessments?assessment=${entityId}`;
+      default:
+        return null;
+    }
+  };
+
   const handleNotificationClick = (item: StaffNotification) => {
     if (!item.isRead) {
       void handleMarkAsRead(item.id);
     }
 
-    if (item.entityType && item.entityId) {
+    const href = deepLinkFor(item);
+    if (href) {
       startTransition(() => {
-        if (item.entityType === "teaching_session") {
-          router.push(`/app/sessions/${item.entityId}`);
-        } else if (item.entityType === "student") {
-          router.push(`/app/students/${item.entityId}`);
-        } else if (item.entityType === "homework") {
-          router.push(`/app/homework`);
-        }
+        router.push(href);
       });
     }
   };

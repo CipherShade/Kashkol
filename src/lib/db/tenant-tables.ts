@@ -44,6 +44,7 @@ export const TENANT_TABLES = [
   "payment_adjustment",
   "fee_rule",
   "report_export",
+  "workspace_archive_job",
   "file",
   "file_group_access",
   "file_student_access",

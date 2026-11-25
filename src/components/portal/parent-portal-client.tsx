@@ -171,11 +171,13 @@ export function ParentPortalClient({
   userName,
   childrenList,
   initialChild,
+  isPreview = false,
 }: {
   userEmail: string;
   userName: string;
   childrenList: LinkedChildSummary[];
   initialChild: ParentChildDetail;
+  isPreview?: boolean;
 }) {
   const t = useTranslations("Portal.parent");
   const [activeChild, setActiveChild] =
@@ -194,6 +196,8 @@ export function ParentPortalClient({
     title: string;
     playbackEndpoint: string;
   }) => {
+    // A preview has no parent session; never call the entitled playback route.
+    if (isPreview) return;
     setVideoPlaybackError(false);
     try {
       const res = await fetch(
@@ -220,7 +224,7 @@ export function ParentPortalClient({
   };
 
   const handleSelectChild = async (studentId: string) => {
-    if (studentId === activeChild.student.id) return;
+    if (isPreview || studentId === activeChild.student.id) return;
     setLoadingChildId(studentId);
     setActiveVideoPlayback(null);
     try {
@@ -286,6 +290,16 @@ export function ParentPortalClient({
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-primary)]">
+      {isPreview ? (
+        <div
+          className="sticky top-0 z-30 flex items-center justify-center gap-2 border-b border-[var(--warning-border)] bg-[var(--warning-subtle)] px-4 py-2 text-center text-xs font-semibold text-[var(--warning-fg)]"
+          role="status"
+        >
+          <Icon name="eye" size={16} />
+          <span>{t("previewBanner")}</span>
+        </div>
+      ) : null}
+
       {/* Top Role-Protected Portal Header */}
       <header className="border-b border-[var(--border-subtle)] bg-[var(--surface-elevated)]">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -303,24 +317,36 @@ export function ParentPortalClient({
                 </span>
               </div>
               <p className="text-xs text-[var(--text-secondary)]">
-                {userName} · <bdi>{userEmail}</bdi>
+                {isPreview ? (
+                  t("previewIdentity")
+                ) : (
+                  <>
+                    {userName} · <bdi>{userEmail}</bdi>
+                  </>
+                )}
               </p>
             </div>
           </div>
 
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-            >
-              {t("signOut")}
-            </button>
-          </form>
+          {isPreview ? (
+            <span className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)]">
+              {t("roleBadge")}
+            </span>
+          ) : (
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              >
+                {t("signOut")}
+              </button>
+            </form>
+          )}
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        <PWAInstallBanner />
+        {isPreview ? null : <PWAInstallBanner />}
 
         {/* Multi-child selector when parent has multiple explicitly linked children */}
         {childrenList.length > 1 && (
@@ -816,7 +842,9 @@ export function ParentPortalClient({
                         <button
                           type="button"
                           onClick={() => void handleWatchVideo(video)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                          disabled={isPreview}
+                          title={isPreview ? t("previewActionDisabled") : undefined}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span>{t("videos.watchAction")}</span>
                         </button>
@@ -833,6 +861,7 @@ export function ParentPortalClient({
         {activeTab === "notifications" && (
           <PortalNotificationsPanel
             initialNotifications={activeChild.notifications}
+            readOnly={isPreview}
           />
         )}
       </main>

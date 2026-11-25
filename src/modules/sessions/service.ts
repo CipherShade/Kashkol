@@ -177,15 +177,9 @@ export async function rescheduleSession(
   const startsAt = new Date(input.startsAt);
   const endsAt = input.endsAt ? new Date(input.endsAt) : null;
 
-  // Check conflicts only for group sessions — a session without a group has
-  // no group timeline to double-book (ADR-0029).
-  if (existing.groupId) {
-    const conflicts = await findConflictingSessions(scope, existing.groupId, startsAt, endsAt, input.id);
-    if (conflicts.length > 0) {
-      throw new AppError("CONFLICT");
-    }
-  }
-
+  // F10: a conflicting slot is a warning, not a block. The client shows the
+  // warning before submitting; the server still records the move and its
+  // revision so the teacher's correction is never silently discarded.
   return withScope(scope, async (tx) => {
     if (input.scope === "series" && existing.seriesId) {
       await rescheduleSeriesTx(tx, scope, existing.seriesId, {

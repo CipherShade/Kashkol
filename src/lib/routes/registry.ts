@@ -235,6 +235,48 @@ export const ROUTES: RouteEntry[] = [
     description: "Process queued report exports using the dedicated worker token.",
   },
   {
+    path: "/api/workspace/backup",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Queue a full workspace JSON backup. Owner-only at the service layer.",
+  },
+  {
+    path: "/api/workspace/archive/[jobId]",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Read the status of an owner-requested workspace backup or restore job.",
+  },
+  {
+    path: "/api/workspace/archive/[jobId]/download",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Redirect to the signed URL of a completed workspace backup.",
+  },
+  {
+    path: "/api/workspace/restore/preview",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Validate a workspace archive and return a pre-flight report without mutating data.",
+  },
+  {
+    path: "/api/workspace/restore",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Queue a validated workspace restore after the exact typed confirmation.",
+  },
+  {
+    path: "/api/worker/archive",
+    methods: ["POST"],
+    access: "public",
+    tenantScoped: false,
+    description: "Process owner-requested workspace backup and restore jobs using the worker token.",
+  },
+  {
     path: "/api/students/template",
     methods: ["GET"],
     access: "workspace",
@@ -296,6 +338,13 @@ export const ROUTES: RouteEntry[] = [
     access: "workspace",
     tenantScoped: true,
     description: "Acknowledge one computed risk evidence snapshot and optionally create a follow-up.",
+  },
+  {
+    path: "/api/performance/students/[studentId]/progress",
+    methods: ["GET"],
+    access: "workspace",
+    tenantScoped: true,
+    description: "Read one student's computed attendance, assessment and homework progress series.",
   },
   {
     path: "/api/performance/students/[studentId]/topic-results",
@@ -578,6 +627,14 @@ export const ROUTES: RouteEntry[] = [
     access: "workspace",
     tenantScoped: true,
     description: "Staff in-app notification center for teacher and assistants (F-P0-10).",
+  },
+  {
+    path: "/api/notifications/rules-settings",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    description:
+      "F-P2-07 workspace notification rule switches and digest opt-in. Read requires settings:read; write requires settings:write.",
   },
   {
     path: "/api/notifications/[notificationId]/read",

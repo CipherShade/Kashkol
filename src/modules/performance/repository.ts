@@ -62,6 +62,16 @@ export type StudentPerformanceRaw = {
   reportNotes: Array<{ id: string; body: string; createdAt: string }>;
 };
 
+export type StudentProgressRaw = {
+  student: { id: string; firstName: string; lastName: string; grade: string | null };
+  attendance: Array<{
+    date: string;
+    mark: "present" | "absent" | "late" | "excused";
+  }>;
+  homework: Array<{ date: string; completed: boolean | null }>;
+  scores: PerformanceScoreRow[];
+};
+
 export type ClassIntelligenceRaw = {
   settings: PerformanceSettings;
   group: { id: string; name: string; subjectId: string | null; subjectName: string | null };
@@ -556,6 +566,111 @@ export async function loadStudentPerformanceData(
         body: row.body,
         createdAt: row.createdAt.toISOString(),
       })),
+    };
+  });
+}
+
+/**
+ * F-P2-06 / ADR-0040: load only the sources the caller is allowed to see.
+ * Each source is still read through the caller's tenant transaction.
+ */
+export async function loadStudentProgressData(
+  scope: Scope,
+  studentId: string,
+  query: StudentPerformanceQuery,
+  sources: { attendance: boolean; assessment: boolean; homework: boolean },
+): Promise<StudentProgressRaw | null> {
+  return withScope(scope, async (tx) => {
+    const student = await tx.student.findFirst({
+      where: { id: studentId, workspaceId: scope.workspaceId, archivedAt: null },
+      select: { id: true, firstName: true, lastName: true, grade: true },
+    });
+    if (!student) return null;
+
+    const dateFilter = dateBounds(query.from, query.to);
+    const [attendanceRows, completionRows, submissionRows, scoreRows] = await Promise.all([
+      sources.attendance
+        ? tx.attendanceMark.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              studentId,
+              session: {
+                status: { not: "cancelled" },
+                ...(dateFilter ? { startsAt: dateFilter } : {}),
+              },
+            },
+            select: { mark: true, session: { select: { startsAt: true } } },
+            take: 10_000,
+          })
+        : Promise.resolve([]),
+      sources.homework
+        ? tx.homeworkCompletionMark.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              studentId,
+              ...(dateFilter ? { homework: { dueAt: dateFilter } } : {}),
+            },
+            select: { homeworkId: true, status: true, homework: { select: { dueAt: true } } },
+            take: 10_000,
+          })
+        : Promise.resolve([]),
+      sources.homework
+        ? tx.homeworkSubmission.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              studentId,
+              ...(dateFilter ? { homework: { dueAt: dateFilter } } : {}),
+            },
+            select: { homeworkId: true, status: true, homework: { select: { dueAt: true } } },
+            take: 10_000,
+          })
+        : Promise.resolve([]),
+      sources.assessment
+        ? tx.assessmentScore.findMany({
+            where: {
+              workspaceId: scope.workspaceId,
+              studentId,
+              ...(dateFilter ? { assessment: { date: dateFilter } } : {}),
+              ...(query.type ? { assessment: { type: query.type } } : {}),
+            },
+            select: scoreSelect,
+            orderBy: { assessment: { date: "asc" } },
+            take: 5_000,
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const homework = new Map<string, { date: string; completed: boolean | null; explicit: boolean }>();
+    for (const row of completionRows) {
+      homework.set(row.homeworkId, {
+        date: row.homework.dueAt.toISOString().slice(0, 10),
+        completed:
+          row.status === "completed" ? true : row.status === "not_completed" ? false : null,
+        explicit: true,
+      });
+    }
+    for (const row of submissionRows) {
+      if (homework.has(row.homeworkId)) continue;
+      homework.set(row.homeworkId, {
+        date: row.homework.dueAt.toISOString().slice(0, 10),
+        completed:
+          row.status === "submitted" || row.status === "late"
+            ? true
+            : row.status === "not_submitted"
+              ? false
+              : null,
+        explicit: false,
+      });
+    }
+
+    return {
+      student,
+      attendance: attendanceRows.map((row) => ({
+        date: row.session.startsAt.toISOString().slice(0, 10),
+        mark: row.mark,
+      })),
+      homework: [...homework.values()].map(({ date, completed }) => ({ date, completed })),
+      scores: scoreRows.map(mapScore),
     };
   });
 }

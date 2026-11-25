@@ -1,4 +1,5 @@
 export * from "./calculations";
+export * from "./progress";
 export * from "./schemas";
 export {
   acknowledgeRisk,
@@ -10,6 +11,7 @@ export {
   getPerformanceOverview,
   getPerformancePaperAssessments,
   getStudentPerformance,
+  getStudentProgress,
   saveBulkGrades,
   saveReportNote,
   saveTopicResults,

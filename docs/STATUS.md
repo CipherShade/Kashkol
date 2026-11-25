@@ -1446,16 +1446,84 @@ task.
 | 2.3 | Student portal and enrolment tokens | `F-P2-03` passes; invitation tokens are hashed, single-use, email-verified, expiry-checked, and revocable; student portal shows only own upcoming sessions, permitted attendance, homework (with scanned file attachments), locked grades, and shared clean materials | ☑ |
 | 2.4 | Manual payments with a ledger and no settlement claim | `F-P2-04` passes for EGP/monthly fees **and** per-session attendance-based billing (`ADR-0025`); parent payment views remain disabled | ☑ |
 | 2.5 | QR attendance | `F-P2-05` passes | ◐ student QR identity tab with SVG/PNG/print download on the student profile and a session-page QR scanner panel exist; integration and unit tests exist; camera capture was not exercised on real hardware in this checkout |
-| 2.6 | Academic progress and follow-up | Source-backed flags and staff follow-up tasks are implemented; full progress series and configurable non-attendance rules remain | Partial |
-| 2.7 | Notifications expansion | `F-P2-07` passes; the email digest is opt-in and contains no note content | ☐ |
+| 2.6 | Academic progress and follow-up | `F-P2-06` passes: computed attendance/assessment/homework series, visible directions and rules, permission-filtered sources, explicit attention rules, audited follow-up tasks, and the empty state are implemented (`ADR-0040`) | ☑ |
+| 2.7 | Notifications expansion | `F-P2-07` passes; the email digest is opt-in and contains no note content | ☑ |
 | 2.8 | Multi-workspace switching | `F-P2-08` passes; the current workspace is explicit in the sidebar | ☑ |
-| 2.9 | Teacher-side preview of the portals | `F-P2-09` passes; the preview is labelled as a preview and is not a portal | ☐ |
+| 2.9 | Teacher-side preview of the portals | `F-P2-09` passes; the preview is labelled as a preview and is not a portal | ☑ |
 | 2.10 | Reports and export | Filtered tenant-scoped asynchronous CSV, XLSX, and PDF exports for attendance, enrollment, academics, homework, payments, and session revenue pass; PDF fails closed unless a renderer is explicitly configured | ☑ |
-| 2.11 | Data import/export and backup (server-side) | `F-P2-11` passes; the export includes the audit log and a schema version | ☐ |
-| 2.12 | Session correction workflow | `F-P2-12` passes; a correction requires a reason and is audited | ☐ |
+| 2.11 | Data import/export and backup (server-side) | `F-P2-11` passes; the export includes the audit log and a schema version | ☑ |
+| 2.12 | Session correction workflow | `F-P2-12` passes; a correction requires a reason and is audited | ☑ |
 | 2.13 | Publish the privacy notice (Arabic and English) | Signed off by the legal reviewer (`F-P0-08` AC-7) | ☐ |
 | 2.14 | External penetration test | A third-party report with no open critical or high findings | ☐ |
 | 2.15 | Run the M2 release gate | Every gate item is checked with evidence | ☐ |
+
+**2.7 — Notifications expansion (`F-P2-07`, `ADR-0038`).** Five workspace-configurable rules now
+produce staff alerts from real records: at-risk absence streaks, past sessions with no attendance,
+homework due within 48 hours, assessments with no marks, and unreceipted session revenue after N
+days (`ADR-0028`: session-scoped, never a student debt). Each alert has a stable `conditionKey` in
+metadata and a bucketed dedupe key, so the cooldown is enforced both in the tenant transaction and
+by the database unique constraint. Settings live in
+`workspace_settings.notification_rule_config`; the server-owned digest cursor is stripped from API
+responses, and the UI exposes rule switches, the cooldown, the N-day threshold, and the explicit
+digest opt-in. Deep links open the relevant student, session, homework, or assessment screen. The
+hourly worker evaluates rules and drains digests; the digest contains localized type labels and
+counts only, is skipped when no email transport is configured, and never calls a provider inside a
+tenant transaction. Unit and PostgreSQL tests cover all five rules, disabled switches, cooldown,
+deep-link fields, malformed settings, cursor stripping, redaction, and audited settings changes.
+Full gate passed on 2026-11-24 (555 unit + 34 UI tests, 162 integration tests, lint, typecheck, build).
+
+**2.11 — Workspace backup and restore (`F-P2-11`, `F22`, `ADR-0039`).** Settings → Data offers an
+owner-only JSON export with an exact schema version (`2026-11-24.1`) and a generated-at timestamp.
+The archive covers every registered tenant table, including the append-only audit log, and lists
+private file-object keys instead of embedding file bytes. `POST /api/workspace/backup` queues a
+scoped worker job; the worker reads all tenant rows in one transaction, writes the archive to private
+storage, then records the storage key, two audit events, and a staff notification atomically. Restore
+requires a pre-flight preview that rejects an incompatible version, a foreign workspace, an unknown
+table, a malformed row, or a missing file object and returns entity counts plus explicit retained and
+conflict lists. Confirmation requires the exact phrase `RESTORE` and the fingerprint of the previewed
+bytes; a non-owner receives `403` before any archive is read. The worker revalidates the staged file,
+then replaces mutable rows in one transaction, retaining the audit log, financial/attendance history,
+note history, the job table, and published assessment marks because triggers and grants make those
+rows immutable. A row-count and orphan-foreign-key integrity check runs before commit; any failure
+rolls back the whole workspace and exposes only a stable failure code. A `workspace.restored` event
+is appended in the same transaction as the restored data. Unit and PostgreSQL tests cover topology,
+parsing, fingerprinting, owner-only enforcement, schema rejection, cross-tenant isolation, exact
+state restoration, audit append, queued backups, and storage-key safety. Full gate passed on
+2026-11-25 (568 unit + 34 UI tests, 166 integration tests, lint, typecheck, build).
+
+**2.6 — Academic progress and follow-up (`F-P2-06`, `ADR-0040`).** Each student now has a progress
+view with attendance-rate, graded-assessment-average, and homework-completion series computed at
+read time from tenant-scoped records. Populated monthly buckets carry their source count; direction
+uses the same visible `mean(latest half) - mean(previous half)` rule for all three series, and a
+series with fewer than three months is labelled insufficient rather than guessed. No stored trend,
+rollup, or cached value is written. The route requires `students:read` and returns `null` for any
+source whose `attendance:read`, `grades:read`, or `homework:read` grant is absent, so hidden data
+cannot be inferred from an empty series. The existing explicit flag rules, source-record evidence,
+audited follow-up tasks, and Arabic/English empty state remain in place. Unit and PostgreSQL tests
+cover bucketing, directions, excluded states, tenant isolation, and permission-filtered omission.
+Full gate passed on 2026-11-25 (573 unit + 34 UI tests, 167 integration tests, lint, typecheck,
+build).
+
+**2.12 — Session correction workflow (`F-P2-12`, `F10`).** Rescheduling and cancelling a session
+require a reason and append a `session_revision` row plus an audit event in the same scoped
+transaction. Recorded attendance stays attached to the same session id after a move; cancelling a
+session with attendance keeps the marks in history and excludes the session from attendance rates.
+The session dialog shows the required confirmation copy, and conflicting slots and past times are
+warnings rather than server-side blocks. Unit and integration tests cover revisions, audits,
+attendance retention, rate exclusion, and the warning mapping. Full gate passed on 2026-11-23
+(547 unit + 32 UI tests, 159 integration tests, lint, typecheck, build).
+
+**2.9 — Teacher-side portal preview (`F-P2-09`, `F17`).** A teacher with `students:read` and
+`portal_access:read` can open `/app/students/[studentId]/portal-preview`. The page builds an
+in-memory parent grant from the teacher's tenant scope, reuses `getParentPortalOverview` and the
+real `ParentPortalClient` tree, and writes a `portal.previewed` audit event in the same scoped
+transaction. It creates no parent account, grant, login, or portal session; playback, mark-read,
+push, and child-switching controls are disabled in preview. A persistent Arabic/English banner
+states that it is not the real portal and no parent session is involved. The link is hidden from
+staff without `portal_access:read`, and direct requests fail closed. UI and PostgreSQL tests cover
+the projection, audit event, no account creation, permission denial, banner, and disabled
+mutations. Full gate passed on 2026-11-24 (547 unit + 34 UI tests, 161 integration tests, lint,
+typecheck, build).
 
 **2.8 — Multi-workspace switching (`F-P2-08`, ADR-0031).** The active workspace is stored on
 `session_activity.active_workspace_id`, never in a URL or a request body. A stale pointer falls back

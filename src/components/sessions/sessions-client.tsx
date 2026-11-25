@@ -20,6 +20,7 @@ import {
 } from "@/app/actions/sessions";
 import { initialFormState } from "@/lib/forms/action-state";
 import type { GroupListItem } from "@/modules/groups/repository";
+import { rescheduleWarningKeys, sessionCorrectionWarningKey } from "@/modules/sessions/corrections";
 
 export type SessionItem = {
   id: string;
@@ -65,6 +66,14 @@ function formatTime(d: Date, locale: string) {
   }
 }
 
+function toDateTimeLocalValue(value: string | Date | null | undefined) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function SessionsClient({ groups, initialSessions }: { groups: GroupListItem[]; initialSessions: SessionItem[] }) {
   const t = useTranslations("Sessions");
   const tRoot = useTranslations();
@@ -75,6 +84,8 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
   const [sessions] = useState<SessionItem[]>(initialSessions);
   const [selectedSession, setSelectedSession] = useState<SessionItem | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [rescheduleStartsAt, setRescheduleStartsAt] = useState("");
+  const [rescheduleEndsAt, setRescheduleEndsAt] = useState("");
 
   const [createState, createAction] = useActionState(createOneOffSessionAction, initialFormState);
   const [rescheduleState, rescheduleAction] = useActionState(rescheduleSessionAction, initialFormState);
@@ -100,11 +111,33 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
     }
   }, [createState, rescheduleState, cancelState, updateState, startState, t, tRoot, push]);
 
+  const selectSession = (session: SessionItem) => {
+    setSelectedSession(session);
+    setRescheduleStartsAt(toDateTimeLocalValue(session.startsAt));
+    setRescheduleEndsAt(toDateTimeLocalValue(session.endsAt));
+  };
+
   const weekStart = useMemo(() => startOfWeekSaturday(currentDate), [currentDate]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
 
   const sessionTitle = (s: SessionItem) =>
     s.groupName || (s.gradeLabel ? `${t("grade")}: ${s.gradeLabel}` : t("independent"));
+
+  const rescheduleWarningKey = sessionCorrectionWarningKey(selectedSession, "reschedule");
+  const cancelWarningKey = sessionCorrectionWarningKey(selectedSession, "cancel");
+  const dynamicRescheduleWarnings = useMemo(
+    () =>
+      rescheduleWarningKeys(
+        selectedSession,
+        rescheduleStartsAt,
+        rescheduleEndsAt || null,
+        sessions,
+      ),
+    [selectedSession, rescheduleStartsAt, rescheduleEndsAt, sessions],
+  );
+  const rescheduleWarnings = [rescheduleWarningKey, ...dynamicRescheduleWarnings].filter(
+    (key): key is string => Boolean(key),
+  );
 
   const sessionsByDay = useMemo(() => {
     const map = new Map<string, SessionItem[]>();
@@ -215,7 +248,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() => setSelectedSession(s)}
+                        onClick={() => selectSession(s)}
                         className="w-full rounded-md border p-2 text-start text-sm hover:bg-accent"
                         style={{ borderLeft: `4px solid ${s.groupColor || "#3b82f6"}` }}
                       >
@@ -248,7 +281,7 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => setSelectedSession(s)}
+                    onClick={() => selectSession(s)}
                     className="flex w-full items-center justify-between rounded-md border p-3 text-start hover:bg-accent"
                   >
                     <div className="flex items-center gap-3">
@@ -335,10 +368,39 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
               <SubmitButton idleKey="Sessions.editSession" />
             </form>
 
-            <form action={rescheduleAction} className="space-y-2">
+            <form
+              action={rescheduleAction}
+              className="space-y-2"
+              onSubmit={(event) => {
+                for (const key of rescheduleWarnings) {
+                  if (!window.confirm(tRoot(key))) {
+                    event.preventDefault();
+                    return;
+                  }
+                }
+              }}
+            >
               <input type="hidden" name="id" value={selectedSession.id} />
-              <Field label={t("startsAtTime")} name="startsAt" type="datetime-local" required />
-              <Field label={t("endsAt")} name="endsAt" type="datetime-local" />
+              {rescheduleWarnings.map((key) => (
+                <p className="ui-hint" role="note" key={key}>
+                  {tRoot(key)}
+                </p>
+              ))}
+              <Field
+                label={t("startsAtTime")}
+                name="startsAt"
+                type="datetime-local"
+                required
+                value={rescheduleStartsAt}
+                onChange={(event) => setRescheduleStartsAt(event.target.value)}
+              />
+              <Field
+                label={t("endsAt")}
+                name="endsAt"
+                type="datetime-local"
+                value={rescheduleEndsAt}
+                onChange={(event) => setRescheduleEndsAt(event.target.value)}
+              />
               <Field label={t("reason")} name="reason" required />
               {selectedSession.seriesId ? (
                 <FormField label={t("scope")}>
@@ -351,8 +413,21 @@ export function SessionsClient({ groups, initialSessions }: { groups: GroupListI
               <SubmitButton idleKey="Sessions.reschedule" />
             </form>
 
-            <form action={cancelAction} className="space-y-2">
+            <form
+              action={cancelAction}
+              className="space-y-2"
+              onSubmit={(event) => {
+                if (cancelWarningKey && !window.confirm(tRoot(cancelWarningKey))) {
+                  event.preventDefault();
+                }
+              }}
+            >
               <input type="hidden" name="id" value={selectedSession.id} />
+              {cancelWarningKey ? (
+                <p className="ui-hint" role="note">
+                  {tRoot(cancelWarningKey)}
+                </p>
+              ) : null}
               <Field label={t("reason")} name="reason" required />
               {selectedSession.seriesId ? (
                 <FormField label={t("scope")}>

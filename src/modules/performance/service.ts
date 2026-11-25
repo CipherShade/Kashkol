@@ -10,7 +10,7 @@ import {
   renderReportPdfHtml,
 } from "@/modules/reports/adapters";
 import { reportExportContentType, reportExportExtension } from "@/modules/reports/formats";
-import { authorize, type Scope } from "@/modules/tenancy/types";
+import { authorize, isAllowed, type Scope } from "@/modules/tenancy/types";
 import {
   aggregateTopicEvidence,
   buildClassIntelligence,
@@ -25,6 +25,13 @@ import {
   type TopicAggregate,
   type TrendResult,
 } from "./calculations";
+import {
+  assessmentValue,
+  attendanceValue,
+  buildProgressSeries,
+  homeworkCompletionValue,
+  type ProgressSeries,
+} from "./progress";
 import {
   buildParentReportCsv,
   buildParentReportTable,
@@ -46,6 +53,7 @@ import {
   loadPerformanceSettings,
   loadParentReportData,
   loadStudentPerformanceData,
+  loadStudentProgressData,
   savePerformanceSettingsTx,
   saveReportNoteTx,
   saveTopicResultsTx,
@@ -363,6 +371,73 @@ export async function getStudentPerformance(
     reportNotes: raw.reportNotes,
     history,
     changedAssessmentCount: summary.consecutiveChanges.filter((change) => change !== 0).length,
+  };
+}
+
+/**
+ * F-P2-06 AC-1/AC-2: three read-time series. A source the viewer may not read
+ * is returned as `null`, never as an empty or fabricated series (ADR-0040).
+ */
+export async function getStudentProgress(
+  scope: Scope,
+  studentId: string,
+  input: StudentPerformanceQuery,
+): Promise<{
+  student: { id: string; name: string; grade: string | null };
+  query: { from: string | null; to: string | null };
+  sources: { attendance: boolean; assessment: boolean; homework: boolean };
+  series: {
+    attendance: ProgressSeries | null;
+    assessment: ProgressSeries | null;
+    homework: ProgressSeries | null;
+  };
+}> {
+  authorize(scope, "students", "read");
+  const query = studentPerformanceQuerySchema.parse(input);
+  const sources = {
+    attendance: isAllowed(scope, "attendance", "read"),
+    assessment: isAllowed(scope, "grades", "read"),
+    homework: isAllowed(scope, "homework", "read"),
+  };
+  const raw = await loadStudentProgressData(scope, studentId, query, sources);
+  if (!raw) throw new AppError("NOT_FOUND");
+
+  const attendance = sources.attendance
+    ? buildProgressSeries(
+        raw.attendance.flatMap((row) => {
+          const value = attendanceValue(row.mark);
+          return value === null ? [] : [{ date: row.date, value }];
+        }),
+      )
+    : null;
+  const assessment = sources.assessment
+    ? buildProgressSeries(
+        raw.scores.flatMap((row) => {
+          const value = assessmentValue(row.status, row.score, row.maxScore);
+          return value === null ? [] : [{ date: row.date, value }];
+        }),
+      )
+    : null;
+  const homework = sources.homework
+    ? buildProgressSeries(
+        raw.homework.flatMap((row) => {
+          const value = homeworkCompletionValue(
+            row.completed === null ? "unknown" : row.completed ? "completed" : "not_completed",
+          );
+          return value === null ? [] : [{ date: row.date, value: value ? 100 : 0 }];
+        }),
+      )
+    : null;
+
+  return {
+    student: {
+      id: raw.student.id,
+      name: studentName(raw.student),
+      grade: raw.student.grade,
+    },
+    query: { from: query.from ?? null, to: query.to ?? null },
+    sources,
+    series: { attendance, assessment, homework },
   };
 }
 

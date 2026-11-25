@@ -707,6 +707,22 @@ worker must claim queued jobs across every workspace before it knows which tenan
 It is listed in `NON_TENANT_WORKSPACE_TABLES` (`src/lib/db/tenant-tables.ts`) so the project-rules
 check does not force a fake RLS policy onto it. The report row itself remains protected by RLS.
 
+#### `workspace_archive_job` (M2)
+
+Owner-requested JSON backup and restore jobs (`F-P2-11`, `ADR-0039`). The row is tenant-scoped and
+protected by RLS: `workspace_id`, `kind` (`backup` / `restore`), `status` (`queued` / `running` /
+`ready` / `failed`), `requested_by`, `storage_key` (private object holding the generated archive or
+the staged upload), `schema_version`, `preview` (entity counts, retained tables, conflicts),
+`result` (applied counts), `failure_code` (a stable code, never a raw error), `locked_at`,
+`attempts`, `created_at`, and `completed_at`. No file bytes, personal data, or secret is stored in
+`preview` or `result`. The worker claims and completes a job through the scoped transaction; storage
+I/O happens outside it.
+
+The JSON archive itself contains every registered tenant table, including the append-only audit log,
+but a restore applies only the mutable tables. `audit_event`, financial/attendance evidence, note
+history, this job table, and published `assessment` / `assessment_score` rows are retained from the
+live workspace. File rows carry private storage keys; file bytes are never embedded in the archive.
+
 #### `portal_grant` (M2)
 
 `workspace_id`, `portal_user_id` (a `user` row used for portal sessions), `student_id`,
@@ -988,6 +1004,7 @@ or private follow-up notes (`F27`).
 | `fee_rule` | `(workspace_id, student_id, effective_from)`, `(workspace_id, group_id, effective_from)` | Effective fee convention lookup |
 | `report_export` | `(workspace_id, created_at)` | Tenant-scoped export history |
 | `report_export_queue` | `(status, created_at)` | Bounded worker polling |
+| `workspace_archive_job` | `(workspace_id, status, created_at)` | Tenant-scoped worker drain |
 | `file` | `(scope, group_id)`, `(scope, student_id)`, `(workspace_id, scan_status)` | Visibility queries, scan reconciliation |
 | `audit_event` | `(workspace_id, created_at desc)`, `(entity_type, entity_id)`, `(actor_user_id, created_at)` | Activity Log filters |
 | `notification` | `(recipient_user_id, read_at)`, `(recipient_user_id, dedupe_key)` unique where not null | Unread count, cooldown |
@@ -1115,6 +1132,8 @@ consolidated form rather than one directory per row above:
 | `20261117020000_homework_submission_files` | Adds `homework_submission_file` with composite tenant primary key, foreign keys, index, forced RLS and tenant policy, and application-role grants; extends `file_scope_check` so a `homework_submission` file has null group and student targets (`F-P2-03`) |
 | `20261118000000_academic_terms` | Adds `academic_term` with `start_date`/`end_date` order check, tenant indexes, forced RLS and tenant policy, and application-role grants (`F-P3-07` AC-1, `ADR-0033`) |
 | `20261119000000_performance_intelligence` | Adds bounded risk thresholds to `workspace_settings`, optional `online_exam_question.topic`, and `assessment_topic_result`, `performance_risk_state`, and `performance_report_note` with composite tenant foreign keys, forced RLS, tenant policies, indexes, and application-role grants (`F-P3-10`, `ADR-0034`) |
+| `20261124000000_notification_rule_config` | Adds `workspace_settings.notification_rule_config` (JSONB: five rule switches, cooldown, unreceipted-session threshold, private digest cursor) and the `payment_overdue` value to `notification_type` (`F-P2-07`, `ADR-0038`) |
+| `20261125000000_workspace_archive_jobs` | Adds the tenant-scoped `workspace_archive_job` table with kind/status enums, RLS, grants, and its worker-drain index (`F-P2-11`, `ADR-0039`) |
 
 The current local development database tracks all migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.

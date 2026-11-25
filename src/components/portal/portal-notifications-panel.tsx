@@ -39,9 +39,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 export function PortalNotificationsPanel({
   initialNotifications,
   onNotificationRead,
+  readOnly = false,
 }: {
   initialNotifications: PortalNotificationItem[] | null;
   onNotificationRead?: (id: string) => void;
+  /** Teacher preview: render the same tree but perform no portal mutations. */
+  readOnly?: boolean;
 }) {
   const t = useTranslations("Portal.notifications");
   const { isIOS, isInstalled } = usePWAInstall();
@@ -77,6 +80,7 @@ export function PortalNotificationsPanel({
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleMarkAllRead = useCallback(async () => {
+    if (readOnly) return;
     const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
     if (unreadIds.length === 0) return;
     try {
@@ -96,10 +100,10 @@ export function PortalNotificationsPanel({
     } catch {
       // Best-effort; do not block UI
     }
-  }, [notifications]);
+  }, [notifications, readOnly]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (readOnly || typeof window === "undefined") return;
     if (
       !("Notification" in window) ||
       !("serviceWorker" in navigator) ||
@@ -123,10 +127,11 @@ export function PortalNotificationsPanel({
       .catch(() => {
         // Silent fallback to in-app notifications
       });
-  }, []);
+  }, [readOnly]);
 
   const handleMarkRead = useCallback(
     async (notificationId: string) => {
+      if (readOnly) return;
       try {
         const res = await fetch(
           `/api/portal/notifications/${encodeURIComponent(notificationId)}/read`,
@@ -140,10 +145,11 @@ export function PortalNotificationsPanel({
         // Ignore transient network errors
       }
     },
-    [onNotificationRead],
+    [onNotificationRead, readOnly],
   );
 
   const handleEnablePush = async () => {
+    if (readOnly) return;
     if (
       permissionState === "unsupported" ||
       !pushConfigured ||
@@ -212,6 +218,7 @@ export function PortalNotificationsPanel({
     sub: PushSubscriptionRecord,
     nextValue: boolean,
   ) => {
+    if (readOnly) return;
     setBusyPush(true);
     try {
       const res = await fetch("/api/portal/push", {
@@ -236,6 +243,7 @@ export function PortalNotificationsPanel({
   };
 
   const handleDisablePush = async (sub: PushSubscriptionRecord) => {
+    if (readOnly) return;
     setBusyPush(true);
     try {
       await fetch("/api/portal/push", {
@@ -277,7 +285,7 @@ export function PortalNotificationsPanel({
               type="button"
               size="sm"
               variant="secondary"
-              disabled={busyPush}
+              disabled={busyPush || readOnly}
               onClick={() => void handleDisablePush(activeSub)}
               className="gap-1.5"
             >
@@ -292,7 +300,7 @@ export function PortalNotificationsPanel({
               <Button
                 type="button"
                 size="sm"
-                disabled={busyPush}
+                disabled={busyPush || readOnly}
                 onClick={() => void handleEnablePush()}
                 className="gap-1.5"
               >
@@ -344,7 +352,7 @@ export function PortalNotificationsPanel({
               <input
                 type="checkbox"
                 checked={activeSub.includeSensitiveDetails}
-                disabled={busyPush}
+                disabled={busyPush || readOnly}
                 onChange={(e) =>
                   void handleToggleLockScreenDetails(
                     activeSub,
@@ -382,7 +390,7 @@ export function PortalNotificationsPanel({
               type="button"
               size="sm"
               variant="outline"
-              disabled={false}
+              disabled={readOnly}
               onClick={() => void handleMarkAllRead()}
               className="gap-1.5 text-xs"
             >
@@ -429,6 +437,7 @@ export function PortalNotificationsPanel({
                     type="button"
                     size="sm"
                     variant="ghost"
+                    disabled={readOnly}
                     onClick={() => void handleMarkRead(item.id)}
                     className="gap-1 text-xs"
                   >

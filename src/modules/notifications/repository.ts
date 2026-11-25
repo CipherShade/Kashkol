@@ -2,6 +2,11 @@ import crypto from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { withScope } from "@/lib/db/scope";
 import type { Scope } from "@/modules/tenancy/types";
+import {
+  parseNotificationRuleConfig,
+  type NotificationRulesSettings,
+  type StoredNotificationRuleConfig,
+} from "./settings";
 
 export type CreateNotificationInput = {
   recipientUserId?: string | null;
@@ -21,6 +26,7 @@ export type CreateNotificationInput = {
     | "session_unrecorded"
     | "homework_due_soon"
     | "assessment_pending_grades"
+    | "payment_overdue"
     | "backup_ready"
     | "export_ready"
     | "general";
@@ -237,4 +243,52 @@ export async function listNotificationsForGuardian(
 
     return notifications.filter((n) => allowedStudentIds.has(n.studentId ?? ""));
   });
+}
+
+const RULE_SETTINGS_SELECT = {
+  notificationRuleConfig: true,
+  emailDigestEnabled: true,
+} as const;
+
+/** Read rule settings inside the caller's tenant transaction. */
+export async function findNotificationRuleSettingsTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+): Promise<NotificationRulesSettings> {
+  const row = await tx.workspaceSettings.findUnique({
+    where: { workspaceId },
+    select: RULE_SETTINGS_SELECT,
+  });
+  return {
+    rules: parseNotificationRuleConfig(row?.notificationRuleConfig),
+    emailDigestEnabled: row?.emailDigestEnabled ?? false,
+  };
+}
+
+export async function findNotificationRuleSettings(
+  scope: Scope,
+): Promise<NotificationRulesSettings> {
+  return withScope(scope, (tx) =>
+    findNotificationRuleSettingsTx(tx, scope.workspaceId),
+  );
+}
+
+export async function upsertNotificationRuleSettingsTx(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  rules: StoredNotificationRuleConfig,
+  emailDigestEnabled: boolean,
+): Promise<NotificationRulesSettings> {
+  const row = await tx.workspaceSettings.update({
+    where: { workspaceId },
+    data: {
+      notificationRuleConfig: rules as Prisma.InputJsonValue,
+      emailDigestEnabled,
+    },
+    select: RULE_SETTINGS_SELECT,
+  });
+  return {
+    rules: parseNotificationRuleConfig(row.notificationRuleConfig),
+    emailDigestEnabled: row.emailDigestEnabled,
+  };
 }

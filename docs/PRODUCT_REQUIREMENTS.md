@@ -1120,6 +1120,15 @@ so that I act before it becomes a problem.
    bodies or phone numbers beyond what the teacher configured.
 5. No push notifications in P2 (no mobile app).
 
+**Current scope (2026-11-24, `ADR-0038`).** AC-1's "outstanding payment beyond N days" is
+implemented under `ADR-0028` as a **session-scoped unreceipted revenue alert**: a past,
+non-cancelled session with chargeable attendance and a positive price but no non-voided receipt
+after N days. No per-student balance, debt, or phone number is inferred. AC-2 is implemented with
+workspace switches, a cooldown, and a database-enforced dedupe key. AC-3 deep-links to student
+profiles, sessions, homework, and assessments. AC-4 is an explicit opt-in digest with type labels
+and counts only; it is skipped when no email provider is configured. AC-5 remains in force: no
+new staff push channel is added.
+
 ---
 
 ### F-P2-08 — Multi-workspace switching

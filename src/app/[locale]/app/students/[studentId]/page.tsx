@@ -7,6 +7,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
 import { Link } from "@/i18n/navigation";
 import { requireStaffSession } from "@/modules/identity/session";
+import { isAllowed } from "@/modules/tenancy/types";
 import { getStudentProfileDetails } from "@/modules/students/service";
 import { StudentProfileTabs } from "@/components/students/student-profile-tabs";
 
@@ -159,6 +160,26 @@ export default async function StudentProfilePage({
                   <Icon name="qr" size={16} />
                   <span>{t("openQrCard")}</span>
                 </Link>
+
+                <Link
+                  href={`/app/students/${student.id}/progress`}
+                  className="ui-button"
+                  data-variant="secondary"
+                >
+                  <Icon name="activity" size={16} />
+                  <span>{t("openProgress")}</span>
+                </Link>
+
+                {isAllowed(scope, "portal_access", "read") && (
+                  <Link
+                    href={`/app/students/${student.id}/portal-preview`}
+                    className="ui-button"
+                    data-variant="secondary"
+                  >
+                    <Icon name="eye" size={16} />
+                    <span>{t("previewParentPortal")}</span>
+                  </Link>
+                )}
               </div>
             </div>
           </CardBody>

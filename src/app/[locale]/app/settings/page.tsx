@@ -18,6 +18,8 @@ import { getWorkspaceOverview, listMembers } from "@/modules/tenancy/service";
 import { isAllowed } from "@/modules/tenancy/types";
 import { WorkspaceSettingsForm } from "@/components/workspace/forms";
 import { NotificationPreferencesForm } from "@/components/workspace/notification-preferences";
+import { NotificationRuleSettingsForm } from "@/components/workspace/notification-rule-settings";
+import { DataBackupClient } from "@/components/workspace/data-backup-client";
 import { AcademicTermsClient } from "@/components/terms/terms-client";
 import { getTerms } from "@/modules/terms/service";
 import { currentDateInTimezone } from "@/modules/payments/calculations";
@@ -85,6 +87,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
     ...(canSeeTeam ? [{ value: "team", label: t("tabTeam") }] : []),
     { value: "terms", label: termsT("tab") },
     { value: "sessions", label: t("tabSessions") },
+    ...(scope.role === "owner" ? [{ value: "data", label: t("tabData") }] : []),
   ];
 
   const columns: Array<Column<MemberRow>> = [
@@ -194,6 +197,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
               </CardBody>
             </Card>
 
+            <Card labelledBy="notification-rules-title">
+              <CardHeader
+                title={t("notificationRulesTitle")}
+                titleId="notification-rules-title"
+                description={t("notificationRulesHint")}
+              />
+              <CardBody>
+                <NotificationRuleSettingsForm canWrite={canWrite} />
+              </CardBody>
+            </Card>
+
             {canReadIntegrations ? (
               <Card labelledBy="notification-settings-title">
                 <CardHeader
@@ -271,6 +285,21 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
             </CardBody>
           </Card>
         </TabPanel>
+
+        {scope.role === "owner" ? (
+          <TabPanel value="data">
+            <Card labelledBy="data-title">
+              <CardHeader
+                title={t("data.title")}
+                titleId="data-title"
+                description={t("data.description")}
+              />
+              <CardBody>
+                <DataBackupClient />
+              </CardBody>
+            </Card>
+          </TabPanel>
+        ) : null}
       </Tabs>
     </div>
   );

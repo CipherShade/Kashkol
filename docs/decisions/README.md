@@ -59,6 +59,9 @@ Every ADR uses the same sections:
 | [0035](0035-evergreen-parchment-interface.md) | Evergreen-and-parchment interface language (supersedes ADR-0023 visual values) | Accepted (approved 2026-11-21) | M0–M3 |
 | [0036](0036-two-step-signup-payment-page.md) | Two-step teacher sign-up with a separate payment page | Accepted (approved 2026-11-23) | M0 |
 | [0037](0037-arabic-kaf-brand-mark.md) | Arabic ك brand mark and theme-aware icon | Accepted (approved 2026-11-23) | M0 |
+| [0038](0038-workspace-notification-rules.md) | Workspace notification rules and a session-scoped overdue alert | Accepted (2026-11-24) | M2 |
+| [0039](0039-workspace-archive-backup-and-restore.md) | Workspace JSON backup and validated in-app restore | Accepted (2026-11-24) | M2 |
+| [0040](0040-computed-progress-series.md) | Computed per-student progress series | Accepted (2026-11-25) | M2 |
 
 ## Conventions
 

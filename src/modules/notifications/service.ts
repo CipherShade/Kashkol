@@ -1,14 +1,28 @@
 import { withScope } from "@/lib/db/scope";
-import type { Scope } from "@/modules/tenancy/types";
+import { newRequestId } from "@/lib/http/request-id";
+import { writeAuditEvent } from "@/modules/audit/service";
 import { getGuardianForStudent } from "@/modules/messaging/repository";
 import { dispatchWebPushNotification } from "@/modules/portals/push";
+import { authorize, type Scope } from "@/modules/tenancy/types";
 import {
   createNotificationTx,
+  findNotificationRuleSettings,
+  findNotificationRuleSettingsTx,
   listNotificationsForUser,
   markNotificationReadTx,
   markAllNotificationsReadTx,
+  upsertNotificationRuleSettingsTx,
   type CreateNotificationInput,
 } from "./repository";
+import type {
+  NotificationRulesSettings,
+  NotificationRulesSettingsInput,
+} from "./settings";
+
+export type NotificationRulesRequestContext = {
+  requestId?: string;
+  ipHash?: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // Internal helper: look up push subscriptions for the portal user linked to
@@ -191,5 +205,48 @@ export async function markAllMyNotificationsRead(scope: Scope) {
       scope.workspaceId,
       scope.actorUserId,
     );
+  });
+}
+
+/** F-P2-07: read the workspace rule switches without exposing provider data. */
+export async function getNotificationRuleSettings(
+  scope: Scope,
+): Promise<NotificationRulesSettings> {
+  authorize(scope, "settings", "read");
+  return findNotificationRuleSettings(scope);
+}
+
+/** F-P2-07: persist rule switches and the explicit digest opt-in atomically. */
+export async function updateNotificationRuleSettings(
+  scope: Scope,
+  input: NotificationRulesSettingsInput,
+  reqCtx?: NotificationRulesRequestContext,
+): Promise<NotificationRulesSettings> {
+  authorize(scope, "settings", "write");
+  const requestId = reqCtx?.requestId ?? newRequestId();
+
+  return withScope(scope, async (tx) => {
+    const before = await findNotificationRuleSettingsTx(tx, scope.workspaceId);
+    const after = await upsertNotificationRuleSettingsTx(
+      tx,
+      scope.workspaceId,
+      { ...input.rules, _lastDigestAt: before.rules._lastDigestAt },
+      input.emailDigestEnabled,
+    );
+
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "notification_rule_settings",
+      entityId: scope.workspaceId,
+      action: "notification_rules.updated",
+      diff: { before, after },
+      requestId,
+      ipHash: reqCtx?.ipHash ?? null,
+    });
+
+    return after;
   });
 }

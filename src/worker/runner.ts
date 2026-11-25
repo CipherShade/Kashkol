@@ -1,5 +1,20 @@
 import process from "node:process";
-import { drainMessageOutboxes, drainReportExports, workerPollIntervalMs } from "./drain";
+import {
+  drainMessageOutboxes,
+  drainNotificationRules,
+  drainReportExports,
+  drainWorkspaceArchives,
+  workerPollIntervalMs,
+} from "./drain";
+import { drainNotificationDigests } from "@/modules/notifications/digest";
+
+/** F-P2-07 rules scan every hour, not on every 30-second poll. */
+const NOTIFICATION_RULES_INTERVAL_MS = 60 * 60 * 1000;
+let lastNotificationRulesRunAt = 0;
+
+export function resetNotificationRulesScheduleForTests(): void {
+  lastNotificationRulesRunAt = 0;
+}
 
 /** Never log job ids, guardian data, or message bodies — counts only. */
 function summarize(count: { processed: number; succeeded: number; failedOrDeferred: number }): string {
@@ -37,6 +52,9 @@ async function drainAll(
 ): Promise<{
   report: Awaited<ReturnType<typeof drainReportExports>>;
   outbox: Awaited<ReturnType<typeof drainMessageOutboxes>>;
+  rules: Awaited<ReturnType<typeof drainNotificationRules>> | null;
+  digests: Awaited<ReturnType<typeof drainNotificationDigests>> | null;
+  archive: Awaited<ReturnType<typeof drainWorkspaceArchives>>;
 }> {
   const result = await drainMessageOutboxes(
     maxOutboxWorkspacesPerPass,
@@ -58,7 +76,42 @@ async function drainAll(
     console.error(`[worker] report exports cycle failed: ${error instanceof Error ? error.name : "unknown"}`);
   }
 
-  return { report, outbox: result };
+  let rules: Awaited<ReturnType<typeof drainNotificationRules>> | null = null;
+  const now = Date.now();
+  if (now - lastNotificationRulesRunAt >= NOTIFICATION_RULES_INTERVAL_MS) {
+    lastNotificationRulesRunAt = now;
+    try {
+      rules = await drainNotificationRules();
+    } catch (error) {
+      console.error(`[worker] notification rules cycle failed: ${error instanceof Error ? error.name : "unknown"}`);
+      rules = { processed: 0, created: 0, workspaces: 0 };
+    }
+  }
+
+  let digests: Awaited<ReturnType<typeof drainNotificationDigests>> | null = null;
+  if (rules !== null) {
+    try {
+      digests = await drainNotificationDigests();
+    } catch (error) {
+      console.error(`[worker] email digest cycle failed: ${error instanceof Error ? error.name : "unknown"}`);
+      digests = { workspaces: 0, sent: 0, skipped: 0 };
+    }
+  }
+
+  let archive: Awaited<ReturnType<typeof drainWorkspaceArchives>> = {
+    job: "workspace_archive",
+    processed: 0,
+    succeeded: 0,
+    failedOrDeferred: 0,
+    workspaces: 0,
+  };
+  try {
+    archive = await drainWorkspaceArchives();
+  } catch (error) {
+    console.error(`[worker] archive cycle failed: ${error instanceof Error ? error.name : "unknown"}`);
+  }
+
+  return { report, outbox: result, rules, digests, archive };
 }
 
 /**
@@ -79,13 +132,13 @@ export async function runWorker(options: RunOptions = {}): Promise<void> {
   let cycles = 0;
   while (!shuttingDown) {
     const started = Date.now();
-    const { report, outbox } = await drainAll(maxOutboxWorkspacesPerPass);
+    const { report, outbox, rules, digests, archive } = await drainAll(maxOutboxWorkspacesPerPass);
     cycles += 1;
     // `warn` only because this project's ESLint rule restricts console output to
     // warn/error (no structured logger SDK chosen yet — OI-3). Railway captures
     // both stdout and stderr regardless of level label.
     console.warn(
-      `[worker] cycle ok report=${summarize(report)} outbox=${summarize(outbox)} workspaces=${outbox.workspaces} elapsed_ms=${Date.now() - started}`,
+      `[worker] cycle ok report=${summarize(report)} outbox=${summarize(outbox)} archive=${summarize(archive)} workspaces=${outbox.workspaces} rules_created=${rules?.created ?? 0} digests_sent=${digests?.sent ?? 0} elapsed_ms=${Date.now() - started}`,
     );
     if (shuttingDown) break;
     if (options.maxCycles !== undefined && cycles >= options.maxCycles) break;
