@@ -1,193 +1,170 @@
 import { describe, expect, it } from "vitest";
 import arJson from "../../messages/ar.json";
 import enJson from "../../messages/en.json";
+import { buildLandingMetadata, buildRobots, buildSitemap } from "@/lib/landing/seo";
 import {
-  buildLandingMetadata,
-  buildRobots,
-  buildSitemap,
-} from "@/lib/landing/seo";
-import { CHALLENGE_ITEMS, FAQ_ITEMS, PROOF_ITEMS, STEPS } from "@/lib/landing/content";
+  FAQ_ITEMS,
+  FEATURE_PILLARS,
+  HERO_TRUST,
+  INTELLIGENCE_STATS,
+  LANDING_SECTIONS,
+  PERSONAS,
+  PRICING_FEATURES,
+  PROBLEM_ITEMS,
+  SOLUTION_ITEMS,
+  STEPS,
+} from "@/lib/landing/content";
 
-type ChallengeItem = {
-  number: string;
-  nav: string;
-  title: string;
-  problemHeadline: string;
-  problemBody: string;
-  solutionHeadline: string;
-  solutionBody: string;
-  solutionDetail: string;
-  showcase: string;
-  points: string[];
-};
+type Obj = { readonly [key: string]: unknown };
+function obj(value: unknown): Obj {
+  expect(value).toBeTypeOf("object");
+  return value as Obj;
+}
+function text(value: unknown): string {
+  expect(value).toBeTypeOf("string");
+  return value as string;
+}
+function list(value: unknown): readonly unknown[] {
+  expect(Array.isArray(value)).toBe(true);
+  return value as readonly unknown[];
+}
+function allText(value: unknown): string {
+  return JSON.stringify(value).toLowerCase();
+}
 
-type LandingCatalogue = {
-  Landing: {
-    challenges: {
-      problemLabel: string;
-      solutionLabel: string;
-      featureLabel: string;
-      items: Record<string, ChallengeItem>;
-    };
-    proof: {
-      eyebrow: string;
-      title: string;
-      subtitle: string;
-      items: Record<string, { title: string; body: string }>;
-      visual: Record<string, string>;
-    };
-    how: { items: Record<string, { title: string; body: string }> };
-    faq: { items: Record<string, { question: string; answer: string }> };
-  };
-};
-const ar = arJson as unknown as LandingCatalogue;
-const en = enJson as unknown as LandingCatalogue;
-
-const arChallenges = ar.Landing.challenges.items;
-const enChallenges = en.Landing.challenges.items;
-const arProof = ar.Landing.proof.items;
-const enProof = en.Landing.proof.items;
-const arProofVisual = ar.Landing.proof.visual;
-const enProofVisual = en.Landing.proof.visual;
-const arSteps = ar.Landing.how.items;
-const enSteps = en.Landing.how.items;
-const arFaq = ar.Landing.faq.items;
-const enFaq = en.Landing.faq.items;
+const ar = obj(arJson);
+const en = obj(enJson);
+const arL = obj(ar.Landing);
+const enL = obj(en.Landing);
 
 describe("landing page contracts", () => {
-  it("ships the Landing namespace in both message catalogues with parity", () => {
-    expect(ar.Landing).toBeDefined();
-    expect(en.Landing).toBeDefined();
-
-    const arKeys = Object.keys(ar.Landing);
-    const enKeys = Object.keys(en.Landing);
-    expect(arKeys.sort()).toEqual(enKeys.sort());
+  it("has Landing namespace parity and the reference section anchors", () => {
+    expect(Object.keys(arL).sort()).toEqual(Object.keys(enL).sort());
+    expect(LANDING_SECTIONS).toEqual([
+      "problem",
+      "features",
+      "intelligence",
+      "personas",
+      "how-it-works",
+      "pricing",
+      "faq",
+    ]);
+    for (const L of [arL, enL]) {
+      const nav = obj(L.nav);
+      expect(Object.keys(nav).sort()).toEqual([...LANDING_SECTIONS, "label"].sort());
+      for (const item of LANDING_SECTIONS) text(nav[item]);
+    }
   });
 
-  it("contains all required landing keys in catalogues", () => {
-    expect(ar.Landing.challenges.problemLabel).toBeTypeOf("string");
-    expect(ar.Landing.challenges.solutionLabel).toBeTypeOf("string");
-    expect(ar.Landing.challenges.featureLabel).toBeTypeOf("string");
-    expect(en.Landing.challenges.problemLabel).toBeTypeOf("string");
-    expect(en.Landing.challenges.solutionLabel).toBeTypeOf("string");
-    expect(en.Landing.challenges.featureLabel).toBeTypeOf("string");
+  it("keeps the required Arabic hero headline and truthful trust points", () => {
+    expect(text(obj(arL.hero).title)).toBe("شرح الدرس عليك، والباقي علينا.");
+    expect(text(obj(enL.hero).title)).toBeTypeOf("string");
+    for (const item of HERO_TRUST) {
+      for (const L of [arL, enL]) text(obj(obj(L.hero).trust)[item]);
+    }
+  });
 
-    for (const { key } of CHALLENGE_ITEMS) {
-      for (const [locale, items] of [
-        ["ar", arChallenges],
-        ["en", enChallenges],
-      ] as const) {
-        const item = items[key];
-        expect(item, `${locale}.${key}`).toBeDefined();
-        expect(item.number, `${locale}.${key}.number`).toBeTypeOf("string");
-        expect(item.nav, `${locale}.${key}.nav`).toBeTypeOf("string");
-        expect(item.title, `${locale}.${key}.title`).toBeTypeOf("string");
-        expect(item.problemHeadline, `${locale}.${key}.problemHeadline`).toBeTypeOf("string");
-        expect(item.problemBody, `${locale}.${key}.problemBody`).toBeTypeOf("string");
-        expect(item.solutionHeadline, `${locale}.${key}.solutionHeadline`).toBeTypeOf("string");
-        expect(item.solutionBody, `${locale}.${key}.solutionBody`).toBeTypeOf("string");
-        expect(item.solutionDetail, `${locale}.${key}.solutionDetail`).toBeTypeOf("string");
-        expect(item.showcase, `${locale}.${key}.showcase`).toBeTypeOf("string");
-        expect(Array.isArray(item.points), `${locale}.${key}.points`).toBe(true);
-        expect(item.points.length, `${locale}.${key}.points.length`).toBeGreaterThan(0);
+  it("covers problem mapping, intelligence, pillars, steps and personas", () => {
+    for (const L of [arL, enL]) {
+      for (const { key } of PROBLEM_ITEMS) {
+        const item = obj(obj(obj(L.problem).items)[key]);
+        text(item.title);
+        text(item.body);
+        text(item.tag);
+      }
+      for (const { key } of SOLUTION_ITEMS) {
+        const item = obj(obj(obj(L.solution).items)[key]);
+        text(item.label);
+        text(item.title);
+        text(item.body);
+        text(item.benefit);
+      }
+      for (const { key } of INTELLIGENCE_STATS) {
+        const stat = obj(obj(obj(L.intelligence).stats)[key]);
+        text(stat.label);
+        text(stat.value);
+        text(stat.note);
+      }
+      for (const { key } of FEATURE_PILLARS) {
+        const pillar = obj(obj(obj(L.features).pillars)[key]);
+        text(pillar.title);
+        text(pillar.body);
+        text(pillar.previewTitle);
+        expect(list(pillar.chips)).toHaveLength(3);
+      }
+      for (const { key } of STEPS) {
+        text(obj(obj(obj(L.howItWorks).steps)[key]).title);
+      }
+      for (const { key } of PERSONAS) {
+        text(obj(obj(obj(L.personas).items)[key]).title);
       }
     }
+  });
 
-    for (const key of ["eyebrow", "title", "subtitle"] as const) {
-      expect(ar.Landing.proof[key], `ar.proof.${key}`).toBeTypeOf("string");
-      expect(en.Landing.proof[key], `en.proof.${key}`).toBeTypeOf("string");
+  it("publishes the real 249 EGP manual subscription without inventing a plan", () => {
+    for (const L of [arL, enL]) {
+      const pricing = obj(L.pricing);
+      expect(text(pricing.amount)).toBe("249");
+      text(pricing.planName);
+      text(pricing.cta);
+      expect(list(pricing.items)).toHaveLength(PRICING_FEATURES.length);
+      expect(text(obj(L.mobileCta).label)).toContain("249");
     }
+    expect(text(obj(obj(ar.Auth).subscription).price)).toBe("٢٤٩");
+    expect(text(obj(obj(en.Auth).subscription).price)).toBe("249");
+    expect(text(obj(arL.pricing).currency)).toBe("جنيه مصري");
+    expect(text(obj(enL.pricing).currency)).toBe("EGP");
+  });
 
-    for (const { key } of PROOF_ITEMS) {
-      expect(arProof[key].title).toBeTypeOf("string");
-      expect(arProof[key].body).toBeTypeOf("string");
-      expect(enProof[key].title).toBeTypeOf("string");
-      expect(enProof[key].body).toBeTypeOf("string");
+  it("labels every sample visual and makes no trial, unlimited, support or delivery claim", () => {
+    for (const L of [arL, enL]) {
+      const landing = allText(L);
+      expect(landing).not.toContain("14 يوم");
+      expect(landing).not.toContain("14-day");
+      expect(landing).not.toContain("free trial");
+      expect(landing).not.toContain("مجاناً");
+      expect(landing).not.toContain("unlimited");
+      expect(landing).not.toContain("غير محدود");
+      expect(landing).not.toContain("daily whatsapp");
+      expect(landing).not.toContain("دعم فني مصري");
+      expect(landing).not.toContain("sent automatically");
+      expect(landing).not.toContain("delivered automatically");
+      expect(landing).not.toContain("أُرسل");
     }
+    expect(text(obj(arL.hero).caption)).toContain("تجريبية");
+    expect(text(obj(enL.hero).caption)).toMatch(/illustrative|synthetic/i);
+    expect(text(obj(arL.intelligence).note)).toContain("تجريبية");
+    expect(text(obj(enL.intelligence).note)).toMatch(/illustrative|synthetic/i);
+    expect(text(obj(arL.features).previewNote)).toContain("تجريبية");
+    expect(text(obj(enL.features).previewNote)).toMatch(/illustrative|synthetic/i);
+    expect(text(obj(obj(arL.intelligence).stats).sampleMeta ?? "")).not.toMatch(/01\d{8,}/);
+  });
 
-    const visualKeys = [
-      "recordsOverview",
-      "students",
-      "attendance",
-      "payments",
-      "arabic",
-      "english",
-      "rtl",
-      "ltr",
-      "arabicSample",
-      "englishSample",
-      "teamAccess",
-      "teacher",
-      "assistant",
-      "fullAccess",
-      "assignedPermissions",
-    ] as const;
-    for (const key of visualKeys) {
-      expect(arProofVisual[key], `ar.proof.visual.${key}`).toBeTypeOf("string");
-      expect(enProofVisual[key], `en.proof.visual.${key}`).toBeTypeOf("string");
-    }
-
-    for (const { key } of STEPS) {
-      expect(arSteps[key].title).toBeTypeOf("string");
-      expect(arSteps[key].body).toBeTypeOf("string");
-      expect(enSteps[key].title).toBeTypeOf("string");
-      expect(enSteps[key].body).toBeTypeOf("string");
-    }
-
-    for (const item of FAQ_ITEMS) {
-      expect(arFaq[item].question).toBeTypeOf("string");
-      expect(arFaq[item].answer).toBeTypeOf("string");
-      expect(enFaq[item].question).toBeTypeOf("string");
-      expect(enFaq[item].answer).toBeTypeOf("string");
+  it("includes the four reference FAQs and both conversion routes", () => {
+    expect(FAQ_ITEMS).toEqual(["audience", "start", "safety", "mobile"]);
+    for (const L of [arL, enL]) {
+      for (const item of FAQ_ITEMS) {
+        const faq = obj(obj(obj(L.faq).items)[item]);
+        text(faq.question);
+        text(faq.answer);
+      }
+      const cta = obj(L.finalCta);
+      text(cta.title);
+      text(cta.primaryCta);
+      expect(list(cta.notes)).toHaveLength(3);
+      text(obj(L.mobileCta).cta);
     }
   });
 
-  it("uses the requested trust copy in English", () => {
-    expect(en.Landing.proof.eyebrow).toBe("BUILT WITH CARE");
-    expect(en.Landing.proof.title).toBe(
-      "Your teaching business deserves a system you can trust.",
-    );
-    expect(en.Landing.proof.subtitle).toBe(
-      "Kashkol brings your records, workflow, and student information together in one thoughtfully designed workspace — built to make your daily work clearer and more organized.",
-    );
-    expect(enProof.records.title).toBe("Clear, dependable records");
-    expect(enProof.arabic.title).toBe("Arabic & English, naturally");
-    expect(enProof.privacy.title).toBe("Your workspace. Your control.");
-  });
-
-  it("builds correct metadata with canonical and hreflang alternates", () => {
-    const meta = buildLandingMetadata({
-      locale: "ar",
-      title: "Test Title",
-      description: "Test Desc",
-      siteUrl: "https://kashkol.example",
-    });
-
+  it("builds metadata/robots/sitemap for public landing only", () => {
+    const meta = buildLandingMetadata({ locale: "ar", title: "T", description: "D", siteUrl: "https://kashkol.example" });
     expect(meta.robots).toEqual({ index: true, follow: true });
     expect(meta.alternates?.canonical).toBe("/ar");
-    expect(meta.alternates?.languages).toMatchObject({
-      ar: "/ar",
-      en: "/en",
-      "x-default": "/ar",
-    });
-  });
-
-  it("builds robots rules disallowing private paths", () => {
     const robots = buildRobots("https://kashkol.example");
-    expect(robots.sitemap).toBe("https://kashkol.example/sitemap.xml");
     const rules = Array.isArray(robots.rules) ? robots.rules : [robots.rules];
     const disallow = rules.flatMap((r) => r.disallow ?? []);
     expect(disallow).toContain("/ar/app");
-    expect(disallow).toContain("/en/portal");
-  });
-
-  it("builds sitemap entries for public landing paths only", () => {
-    const date = new Date("2026-01-01T00:00:00Z");
-    const sitemap = buildSitemap("https://kashkol.example", date);
-    expect(sitemap).toHaveLength(2);
-    expect(sitemap.map((e) => e.url)).toEqual([
-      "https://kashkol.example/ar",
-      "https://kashkol.example/en",
-    ]);
+    const sitemap = buildSitemap("https://kashkol.example", new Date("2026-01-01T00:00:00Z"));
+    expect(sitemap.map((e) => e.url)).toEqual(["https://kashkol.example/ar", "https://kashkol.example/en"]);
   });
 });

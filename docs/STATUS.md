@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-25 · **Status:** Owner-only collected session earnings, a private status page, and physical removal of legacy workspace money storage are implemented (`ADR-0041`, `ADR-0042`, `ADR-0043`). The removed tagline is gone from both catalogues, the shell, the landing footer, the agent instructions, and the ADRs. Assistants, parents, students, and public visitors have no money surface; expected revenue, adjustments, fee rules, group default prices, voided receipts, money alerts, and money grants no longer exist in the workspace schema. Platform subscription and billing are unchanged. All gates pass: lint, typecheck, 570 unit + 34 UI tests, 167 integration tests, and the production build. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-27 · **Status:** Owner-only collected session earnings, a private status page, and physical removal of legacy workspace money storage are implemented (`ADR-0041`, `ADR-0042`, `ADR-0043`). The removed tagline is gone from both catalogues, the shell, the landing footer, the agent instructions, and the ADRs. Assistants, parents, students, and public visitors have no money surface; expected revenue, adjustments, fee rules, group default prices, voided receipts, money alerts, and money grants no longer exist in the workspace schema. Platform subscription and billing are unchanged. The public landing now follows the teacher-platform reference with labelled synthetic illustrations and no unverified claims (`ADR-0044`). All gates pass: lint, typecheck, 572 unit + 34 UI tests, 167 integration tests, and the production build. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
 
 ---
 
@@ -1519,6 +1519,45 @@ They were removed from the physical schema, not merely hidden behind product sur
 
 **Not claimed.** No provider snapshot, staging deploy, or old-archive restore was exercised. The
 deletion is irreversible from the application and requires the normal operator backup before deploy.
+
+### 5.25 Teacher-platform landing reference alignment on 2026-11-27 — `ADR-0044`
+
+The product owner asked for `/ar` and `/en` to match the teacher-platform landing reference at
+`stitch_kashkol_teacher_platform_landing_page`. The requested structure was adopted; the reference's
+unverified commercial claims were not.
+
+**What changed**
+
+- Added a slim announcement strip with the existing language switch, a compact sticky header, and a
+  fixed small-screen CTA for signed-out visitors. The header keeps only routes that exist.
+- Rebuilt the page in reference order: hero with a CSS product illustration, problems, mapped
+  solutions, an intelligence spotlight, four capability pillars, three onboarding steps, four
+  teacher personas, one pricing card, four FAQs, and a final CTA.
+- Replaced the old `Landing` catalogue in both locales with the new section copy. Every figure on a
+  mock panel is labelled as synthetic sample data; the sample student has no phone number.
+- Kept the real published price: 249 EGP/month, manual InstaPay transfer, manual confirmation by the
+  Kashkol team. No trial, unlimited-capacity, support-channel, migration, or automatic-delivery claim
+  was published.
+- Added `landing-v2-*` CSS built only from existing tokens and logical properties, with 1100/980/720/
+  640px breakpoints. No dependency, route, tenant query, or finance code changed.
+
+**Verification**
+
+- New unit tests lock section order and anchors, catalogue parity, sample-data labels, the 249 EGP
+  price, the absence of rejected claims, and the responsive CSS hooks. Existing contrast tests still
+  pass.
+- `npm run lint`: passed (ESLint + project rules).
+- `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
+- `npm test`: passed (87 unit files / 572 tests + 4 UI files / 34 tests).
+- `npm run test:integration`: passed (29 files / 167 tests against the pinned embedded PostgreSQL).
+- `npm run build`: passed (Next.js 16 production build, 73 static pages plus dynamic landing).
+- The production standalone server returned HTTP 200 for `/ar` and `/en`; both responses contain every
+  section anchor, the announcement/mobile CTA, a synthetic-data label, `dir="rtl"` / `dir="ltr"`, and
+  the correct `lang`.
+
+**Not claimed.** No real product screenshots were recaptured, no new plan or support promise was
+made, and no hosted/deployed page was checked. The hero remains an illustrative CSS mockup, not a
+live account.
 
 
 ## 6. Implementation plan

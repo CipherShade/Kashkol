@@ -1,480 +1,361 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { Icon, type IconName } from "@/components/ui/icon";
+import { Icon } from "@/components/ui/icon";
 import {
-  CHALLENGE_ITEMS,
   FAQ_ITEMS,
-  FEATURED_CHALLENGE_KEYS,
-  PROOF_ITEMS,
+  FEATURE_PILLARS,
+  INTELLIGENCE_QUIZZES,
+  INTELLIGENCE_STATS,
+  PERSONAS,
+  PRICING_FEATURES,
+  PROBLEM_ITEMS,
+  SOLUTION_ITEMS,
   STEPS,
 } from "@/lib/landing/content";
 
-function ChallengeVisual({ itemKey }: { itemKey: string }) {
-  if (itemKey === "students") {
-    return (
-      <div className="landing-showcase landing-showcase--students" aria-hidden="true">
-        <div className="landing-showcase__topbar">
-          <span className="landing-showcase__pill is-active">Profile</span>
-          <span className="landing-showcase__pill">Attendance</span>
-          <span className="landing-showcase__pill">Grades</span>
-          <span className="landing-showcase__pill">Payments</span>
-        </div>
-        <div className="landing-showcase__profile">
-          <div className="landing-showcase__avatar" />
-          <div>
-            <div className="landing-showcase__line landing-showcase__line--strong" />
-            <div className="landing-showcase__line landing-showcase__line--muted" />
-          </div>
-        </div>
-        <div className="landing-showcase__stats">
-          <div className="landing-showcase__stat"><span>92%</span><small>Attendance</small></div>
-          <div className="landing-showcase__stat"><span>18/20</span><small>Homework</small></div>
-          <div className="landing-showcase__stat"><span>EGP</span><small>Payments</small></div>
-        </div>
-        <div className="landing-showcase__rows">
-          <div className="landing-showcase__row"><span /><span /></div>
-          <div className="landing-showcase__row"><span /><span /></div>
-          <div className="landing-showcase__row"><span /><span /></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (itemKey === "schedule") {
-    return (
-      <div className="landing-showcase landing-showcase--calendar" aria-hidden="true">
-        <div className="landing-showcase__topbar">
-          <span className="landing-showcase__pill is-active">Day</span>
-          <span className="landing-showcase__pill">Week</span>
-          <span className="landing-showcase__pill">Month</span>
-        </div>
-        <div className="landing-showcase__calendar-grid">
-          {["Mon", "Tue", "Wed", "Thu", "Fri"].map((day, i) => (
-            <div key={day} className="landing-showcase__calendar-col">
-              <span className="landing-showcase__calendar-day">{day}</span>
-              <span className={`landing-showcase__event ${i === 1 ? "is-primary" : ""}`} />
-              {i !== 3 ? <span className="landing-showcase__event is-soft" /> : null}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (itemKey === "attendance") {
-    return (
-      <div className="landing-showcase landing-showcase--attendance" aria-hidden="true">
-        <div className="landing-showcase__row-head"><span>Student</span><span>Status</span></div>
-        {["Present", "Late", "Absent", "Present"].map((status, i) => (
-          <div key={`${status}-${i}`} className="landing-showcase__attendance-row">
-            <div className="landing-showcase__name"><span className="landing-showcase__dot" /><span className="landing-showcase__line" /></div>
-            <span className={`landing-showcase__status is-${status.toLowerCase()}`}>{status}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (itemKey === "homework") {
-    return (
-      <div className="landing-showcase landing-showcase--homework" aria-hidden="true">
-        {[
-          ["Submitted", "is-done"],
-          ["Late", "is-late"],
-          ["Pending", "is-pending"],
-        ].map(([label, cls]) => (
-          <div key={label} className="landing-showcase__homework-row">
-            <div>
-              <div className="landing-showcase__line landing-showcase__line--strong" />
-              <div className="landing-showcase__line landing-showcase__line--muted" />
-            </div>
-            <span className={`landing-showcase__status ${cls}`}>{label}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (itemKey === "exams") {
-    return (
-      <div className="landing-showcase landing-showcase--exams" aria-hidden="true">
-        <div className="landing-showcase__exam-card">
-          <div className="landing-showcase__line landing-showcase__line--strong" />
-          <div className="landing-showcase__choice"><span /><span className="landing-showcase__line" /></div>
-          <div className="landing-showcase__choice"><span className="is-selected" /><span className="landing-showcase__line" /></div>
-          <div className="landing-showcase__choice"><span /><span className="landing-showcase__line" /></div>
-        </div>
-        <div className="landing-showcase__exam-meta">
-          <div className="landing-showcase__stat"><span>MCQ</span><small>Auto-graded</small></div>
-          <div className="landing-showcase__stat"><span>Essay</span><small>Review</small></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (itemKey === "performance") {
-    return (
-      <div className="landing-showcase landing-showcase--performance" aria-hidden="true">
-        <div className="landing-showcase__bars">
-          {[40, 56, 72, 64, 82, 76].map((h, i) => (
-            <span key={i} style={{ blockSize: `${h}%` }} />
-          ))}
-        </div>
-        <div className="landing-showcase__legend">
-          <span className="landing-showcase__status is-done">Top</span>
-          <span className="landing-showcase__status is-late">Needs attention</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (itemKey === "payments") {
-    return (
-      <div className="landing-showcase landing-showcase--payments" aria-hidden="true">
-        <div className="landing-showcase__stats">
-          <div className="landing-showcase__stat"><span>Collected</span><small>EGP 12,400</small></div>
-          <div className="landing-showcase__stat"><span>Outstanding</span><small>EGP 2,100</small></div>
-        </div>
-        <div className="landing-showcase__rows">
-          <div className="landing-showcase__row"><span /><strong className="is-good">Paid</strong></div>
-          <div className="landing-showcase__row"><span /><strong className="is-warn">Due</strong></div>
-          <div className="landing-showcase__row"><span /><strong className="is-good">Paid</strong></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (itemKey === "content") {
-    return (
-      <div className="landing-showcase landing-showcase--content" aria-hidden="true">
-        <div className="landing-showcase__folder"><Icon name="folder" size={16} /><span className="landing-showcase__line" /></div>
-        <div className="landing-showcase__folder"><Icon name="file" size={16} /><span className="landing-showcase__line" /></div>
-        <div className="landing-showcase__folder"><Icon name="video" size={16} /><span className="landing-showcase__line" /></div>
-      </div>
-    );
-  }
-
-  if (itemKey === "parents") {
-    return (
-      <div className="landing-showcase landing-showcase--mobile" aria-hidden="true">
-        <div className="landing-showcase__phone">
-          <div className="landing-showcase__phone-notch" />
-          <div className="landing-showcase__line landing-showcase__line--strong" />
-          <div className="landing-showcase__stat"><span>Attendance</span><small>Present today</small></div>
-          <div className="landing-showcase__stat"><span>Homework</span><small>2 pending</small></div>
-          <div className="landing-showcase__stat"><span>Grades</span><small>Latest: 18/20</small></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="landing-showcase landing-showcase--team" aria-hidden="true">
-      {["Owner", "Assistant", "Assistant"].map((role, i) => (
-        <div key={`${role}-${i}`} className="landing-showcase__team-row">
-          <div className="landing-showcase__name"><span className="landing-showcase__dot" /><span className="landing-showcase__line" /></div>
-          <span className={`landing-showcase__status ${i === 0 ? "is-done" : "is-pending"}`}>{role}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export async function LandingChallenges() {
-  const t = await getTranslations("Landing.challenges");
-
-  return (
-    <section className="landing-section landing-challenges" id="challenges" aria-labelledby="challenges-title">
-      <div className="landing-container">
-        <div className="landing-challenges__head">
-          <p className="landing-eyebrow">{t("eyebrow")}</p>
-          <h2 id="challenges-title" className="landing-h2">
-            {t("title")}
-          </h2>
-          <p className="landing-sub">{t("subtitle")}</p>
-        </div>
-
-        <div className="landing-challenges__layout">
-          <nav className="landing-challenges__nav" aria-label={t("eyebrow")}>
-            {CHALLENGE_ITEMS.map(({ key, icon }) => (
-              <a key={key} href={`#challenge-${key}`} className="landing-challenges__nav-link">
-                <span className="landing-challenges__nav-number">{t(`items.${key}.number`)}</span>
-                <Icon name={icon} size={16} aria-hidden="true" />
-                <span>{t(`items.${key}.nav`)}</span>
-              </a>
-            ))}
-          </nav>
-
-          <div className="landing-challenges__list">
-            {CHALLENGE_ITEMS.map(({ key, icon }) => {
-              const featured = FEATURED_CHALLENGE_KEYS.has(key);
-              const points = t.raw(`items.${key}.points`) as string[];
-              return (
-                <article
-                  key={key}
-                  id={`challenge-${key}`}
-                  className={`landing-challenge ${featured ? "is-featured" : ""}`}
-                >
-                  <div className="landing-challenge__copy">
-                    <p className="landing-challenge__kicker">
-                      <span className="landing-challenge__number">{t(`items.${key}.number`)}</span>
-                      <span>{t(`items.${key}.title`)}</span>
-                    </p>
-                    <div className="landing-challenge__block landing-challenge__block--problem">
-                      <p className="landing-challenge__label">
-                        <Icon name="alert" size={14} aria-hidden="true" />
-                        {t("problemLabel")}
-                      </p>
-                      <h3 className="landing-h3">{t(`items.${key}.problemHeadline`)}</h3>
-                      <p>{t(`items.${key}.problemBody`)}</p>
-                    </div>
-                    <div className="landing-challenge__block landing-challenge__block--solution">
-                      <p className="landing-challenge__label">
-                        <Icon name="checkCircle" size={14} aria-hidden="true" />
-                        {t("solutionLabel")}
-                      </p>
-                      <h4 className="landing-challenge__solution-title">{t(`items.${key}.solutionHeadline`)}</h4>
-                      <p>{t(`items.${key}.solutionBody`)}</p>
-                      <p className="landing-challenge__detail">{t(`items.${key}.solutionDetail`)}</p>
-                    </div>
-                    <ul className="landing-challenge__points">
-                      {points.map((point) => (
-                        <li key={point}>
-                          <Icon name="check" size={14} aria-hidden="true" />
-                          <span>{point}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="landing-challenge__visual">
-                    <div className="landing-challenge__visual-head">
-                      <span className="landing-icon" aria-hidden="true"><Icon name={icon} size={18} /></span>
-                      <div>
-                        <p className="landing-challenge__visual-label">{t("featureLabel")}</p>
-                        <p className="landing-challenge__visual-title">{t(`items.${key}.title`)}</p>
-                      </div>
-                    </div>
-                    <ChallengeVisual itemKey={key} />
-                    <p className="landing-challenge__showcase">{t(`items.${key}.showcase`)}</p>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-type ProofVisualLabels = {
-  recordsOverview: string;
-  students: string;
-  attendance: string;
-  payments: string;
-  arabic: string;
-  english: string;
-  rtl: string;
-  ltr: string;
-  arabicSample: string;
-  englishSample: string;
-  teamAccess: string;
-  teacher: string;
-  assistant: string;
-  fullAccess: string;
-  assignedPermissions: string;
-};
-
-/**
- * Small in-product previews for the trust cards. They carry labels only —
- * never invented student names, counts, or results — so the illustration
- * reinforces the product without claiming data that does not exist.
- */
-function ProofVisual({
-  itemKey,
-  icon,
-  labels,
+function SectionHead({
+  eyebrow,
+  title,
+  subtitle,
+  titleId,
+  center = false,
 }: {
-  itemKey: string;
-  icon: IconName;
-  labels: ProofVisualLabels;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  titleId: string;
+  center?: boolean;
 }) {
-  if (itemKey === "records") {
-    return (
-      <div className="landing-truth__visual" aria-hidden="true">
-        <div className="landing-truth__window">
-          <div className="landing-truth__window-head">
-            <span className="landing-truth__window-icon">
-              <Icon name={icon} size={12} />
-            </span>
-            <span>{labels.recordsOverview}</span>
-          </div>
-          <div className="landing-truth__stats">
-            {[
-              { label: labels.students, className: "is-wide" },
-              { label: labels.attendance, className: "is-mid" },
-              { label: labels.payments, className: "is-short" },
-            ].map((stat) => (
-              <div key={stat.label} className="landing-truth__stat">
-                <span className="landing-truth__stat-label">{stat.label}</span>
-                <span className={`landing-truth__stat-bar ${stat.className}`} />
-              </div>
-            ))}
-          </div>
-          <div className="landing-truth__rows">
-            <div className="landing-truth__row">
-              <span className="landing-truth__row-dot" />
-              <span className="landing-truth__row-line" />
-              <span className="landing-truth__row-check">
-                <Icon name="check" size={10} />
-              </span>
-            </div>
-            <div className="landing-truth__row is-short">
-              <span className="landing-truth__row-dot" />
-              <span className="landing-truth__row-line" />
-              <span className="landing-truth__row-check">
-                <Icon name="check" size={10} />
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (itemKey === "arabic") {
-    return (
-      <div className="landing-truth__visual" aria-hidden="true">
-        <div className="landing-truth__window">
-          <div className="landing-truth__switch">
-            <span className="is-active">{labels.arabic}</span>
-            <span>{labels.english}</span>
-          </div>
-          <div className="landing-truth__lang-row" dir="rtl">
-            <span className="landing-truth__lang-tag">{labels.rtl}</span>
-            <span className="landing-truth__lang-text">{labels.arabicSample}</span>
-          </div>
-          <div className="landing-truth__lang-row" dir="ltr">
-            <span className="landing-truth__lang-tag">{labels.ltr}</span>
-            <span className="landing-truth__lang-text">{labels.englishSample}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="landing-truth__visual" aria-hidden="true">
-      <div className="landing-truth__window">
-        <div className="landing-truth__window-head">
-          <span className="landing-truth__window-icon">
-            <Icon name={icon} size={12} />
-          </span>
-          <span>{labels.teamAccess}</span>
-        </div>
-        <div className="landing-truth__access">
-          <div className="landing-truth__access-row is-primary">
-            <span className="landing-truth__access-avatar" />
-            <span className="landing-truth__access-info">
-              <span className="landing-truth__access-name">{labels.teacher}</span>
-              <span className="landing-truth__access-badge is-active">
-                <Icon name="check" size={10} />
-                {labels.fullAccess}
-              </span>
-            </span>
-          </div>
-          <div className="landing-truth__access-row">
-            <span className="landing-truth__access-avatar is-soft" />
-            <span className="landing-truth__access-info">
-              <span className="landing-truth__access-name">{labels.assistant}</span>
-              <span className="landing-truth__access-badge">{labels.assignedPermissions}</span>
-            </span>
-          </div>
-        </div>
-      </div>
+    <div className={`landing-section-head landing-v2-section__head${center ? " landing-v2-section__head--center" : ""}`}>
+      <p className="landing-eyebrow">{eyebrow}</p>
+      <h2 id={titleId} className="landing-h2 landing-v2-heading">{title}</h2>
+      <p className="landing-sub">{subtitle}</p>
     </div>
   );
 }
 
-export async function LandingProof() {
-  const t = await getTranslations("Landing.proof");
-  const visualLabels: ProofVisualLabels = {
-    recordsOverview: t("visual.recordsOverview"),
-    students: t("visual.students"),
-    attendance: t("visual.attendance"),
-    payments: t("visual.payments"),
-    arabic: t("visual.arabic"),
-    english: t("visual.english"),
-    rtl: t("visual.rtl"),
-    ltr: t("visual.ltr"),
-    arabicSample: t("visual.arabicSample"),
-    englishSample: t("visual.englishSample"),
-    teamAccess: t("visual.teamAccess"),
-    teacher: t("visual.teacher"),
-    assistant: t("visual.assistant"),
-    fullAccess: t("visual.fullAccess"),
-    assignedPermissions: t("visual.assignedPermissions"),
-  };
+export async function LandingProblem() {
+  const t = await getTranslations("Landing.problem");
 
   return (
-    <section className="landing-truth" id="proof" aria-labelledby="proof-title">
+    <section className="landing-v2-section landing-v2-section--surface" id="problem" aria-labelledby="problem-title">
       <div className="landing-container">
-        <div className="landing-truth__header">
-          <p className="landing-eyebrow landing-truth__eyebrow">
-            <span className="landing-truth__eyebrow-dot" aria-hidden="true" />
-            {t("eyebrow")}
-          </p>
-          <h2 id="proof-title" className="landing-h2 landing-truth__title">
-            {t("title")}
-          </h2>
-          <p className="landing-sub landing-truth__description">{t("subtitle")}</p>
-        </div>
-
-        <ul className="landing-truth__grid">
-          {PROOF_ITEMS.map(({ key, icon }) => (
-            <li key={key} className="landing-truth__item">
-              <ProofVisual itemKey={key} icon={icon} labels={visualLabels} />
-              <div className="landing-truth__card-body">
-                <h3 className="landing-h3 landing-truth__card-title">
-                  {t(`items.${key}.title`)}
-                </h3>
-                <p className="landing-truth__card-description">{t(`items.${key}.body`)}</p>
-              </div>
-            </li>
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="problem-title"
+        />
+        <div className="landing-v2-grid landing-v2-grid--problems">
+          {PROBLEM_ITEMS.map(({ key, icon }, index) => (
+            <article
+              key={key}
+              className="landing-v2-card"
+              data-tone={index === 1 || index === 3 ? "warn" : index === 4 ? "primary" : "danger"}
+            >
+              <div className="landing-v2-card__icon"><Icon name={icon} size={22} /></div>
+              <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
+              <p className="landing-v2-card__body">{t(`items.${key}.body`)}</p>
+              <p className="landing-v2-card__tag">{t(`items.${key}.tag`)}</p>
+            </article>
           ))}
-        </ul>
+        </div>
       </div>
     </section>
   );
 }
 
-export async function LandingHow() {
-  const t = await getTranslations("Landing.how");
+export async function LandingSolution() {
+  const t = await getTranslations("Landing.solution");
 
   return (
-    <section className="landing-section" aria-labelledby="how-title">
+    <section className="landing-v2-section landing-v2-section--canvas" aria-labelledby="solution-title">
       <div className="landing-container">
-        <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="how-title" className="landing-h2">
-          {t("title")}
-        </h2>
-        <p className="landing-sub">{t("subtitle")}</p>
-
-        <ol className="landing-steps">
-          {STEPS.map(({ key, icon }, index) => (
-            <li key={key} className="landing-step">
-              <span className="landing-step__number" aria-hidden="true">
-                {index + 1}
-              </span>
-              <span className="landing-icon" aria-hidden="true">
-                <Icon name={icon} size={20} />
-              </span>
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="solution-title"
+          center
+        />
+        <div className="landing-v2-grid landing-v2-grid--solutions">
+          {SOLUTION_ITEMS.map(({ key, icon }) => (
+            <article key={key} className="landing-v2-card landing-v2-card--solution">
+              <span className="landing-v2-card__label">{t("problemLabel")}: {t(`items.${key}.label`)}</span>
+              <div className="landing-v2-card__icon"><Icon name={icon} size={22} /></div>
               <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
-              <p>{t(`items.${key}.body`)}</p>
-            </li>
+              <p className="landing-v2-card__body">{t(`items.${key}.body`)}</p>
+              <p className="landing-v2-card__benefit">
+                <Icon name="checkCircle" size={15} />
+                <span>{t(`items.${key}.benefit`)}</span>
+              </p>
+            </article>
           ))}
-        </ol>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export async function LandingIntelligence() {
+  const t = await getTranslations("Landing.intelligence");
+  const quizLabels = t.raw("quizLabels") as string[];
+  const xs = [20, 120, 240, 360, 480, 580];
+  const ys = [24, 26, 28, 54, 74, 84];
+
+  return (
+    <section className="landing-v2-section landing-v2-section--surface" id="intelligence" aria-labelledby="intelligence-title">
+      <div className="landing-container">
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="intelligence-title"
+          center
+        />
+        <p className="landing-v2-sample-note">
+          <Icon name="info" size={14} />
+          {t("note")}
+        </p>
+
+        <div className="landing-v2-spotlight">
+          <div className="landing-v2-spotlight__head">
+            <div className="landing-v2-spotlight__identity">
+              <span className="landing-v2-spotlight__avatar"><Icon name="user" size={24} /></span>
+              <div>
+                <div className="landing-v2-spotlight__name-row">
+                  <h3>{t("sampleName")}</h3>
+                  <span className="landing-v2-spotlight__flag">{t("flag")}</span>
+                </div>
+                <p>{t("sampleMeta")}</p>
+              </div>
+            </div>
+            <span className="landing-v2-spotlight__card-label">{t("cardLabel")}</span>
+          </div>
+
+          <div className="landing-v2-stats">
+            {INTELLIGENCE_STATS.map(({ key, icon }) => (
+              <div key={key} className="landing-v2-stat">
+                <span className="landing-v2-stat__head">
+                  <Icon name={icon} size={14} />
+                  {t(`stats.${key}.label`)}
+                </span>
+                <strong>{t(`stats.${key}.value`)}</strong>
+                <small>{t(`stats.${key}.note`)}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="landing-v2-alert">
+            <Icon name="alert" size={22} />
+            <div>
+              <h4>{t("alertTitle")}</h4>
+              <p>{t("alertBody")}</p>
+            </div>
+          </div>
+
+          <div className="landing-v2-chart">
+            <p className="landing-v2-chart__title">{t("chartTitle")}</p>
+            <svg viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label={t("chartTitle")}>
+              <line className="landing-v2-chart__grid" x1="0" x2="600" y1="20" y2="20" />
+              <line className="landing-v2-chart__grid" x1="0" x2="600" y1="60" y2="60" />
+              <line className="landing-v2-chart__grid" x1="0" x2="600" y1="100" y2="100" />
+              <polyline className="landing-v2-chart__average" points="20,48 120,46 240,45 360,44 480,42 580,40" />
+              <polyline className="landing-v2-chart__line" points={xs.map((x, i) => `${x},${ys[i]}`).join(" ")} />
+              {xs.map((x, i) => (
+                <circle
+                  key={x}
+                  className={i === INTELLIGENCE_QUIZZES.length - 1 ? "landing-v2-chart__dot is-danger" : i === INTELLIGENCE_QUIZZES.length - 2 ? "landing-v2-chart__dot is-warn" : "landing-v2-chart__dot"}
+                  cx={x}
+                  cy={ys[i]}
+                  r={i === INTELLIGENCE_QUIZZES.length - 1 ? 5 : 4}
+                />
+              ))}
+            </svg>
+            <div className="landing-v2-chart__labels">
+              {quizLabels.map((label) => <span key={label}>{label}</span>)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export async function LandingFeatures() {
+  const t = await getTranslations("Landing.features");
+
+  return (
+    <section className="landing-v2-section landing-v2-section--surface" id="features" aria-labelledby="features-title">
+      <div className="landing-container">
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="features-title"
+        />
+        <p className="landing-v2-sample-note">
+          <Icon name="info" size={14} />
+          {t("previewNote")}
+        </p>
+
+        <div className="landing-v2-grid landing-v2-grid--features">
+          {FEATURE_PILLARS.map(({ key, icon }) => {
+            const chips = t.raw(`pillars.${key}.chips`) as string[];
+            return (
+              <article key={key} className="landing-v2-card landing-v2-card--feature">
+                <div className="landing-v2-card__icon"><Icon name={icon} size={22} /></div>
+                <h3 className="landing-h3">{t(`pillars.${key}.title`)}</h3>
+                <p className="landing-v2-card__body">{t(`pillars.${key}.body`)}</p>
+
+                <div className="landing-v2-preview">
+                  <div className="landing-v2-preview__head">
+                    <strong>{t(`pillars.${key}.previewTitle`)}</strong>
+                    <span>{t(`pillars.${key}.previewMeta`)}</span>
+                  </div>
+                  {key === "students" ? (
+                    <div className="landing-v2-preview__chips">
+                      {chips.map((chip) => <span key={chip}>{chip}</span>)}
+                    </div>
+                  ) : null}
+                  {key === "attendance" ? (
+                    <>
+                      <div className="landing-v2-scanner">
+                        <Icon name="qr" size={30} />
+                      </div>
+                      <div className="landing-v2-preview__chips">
+                        {chips.map((chip) => <span key={chip}>{chip}</span>)}
+                      </div>
+                    </>
+                  ) : null}
+                  {key === "exams" ? (
+                    <div className="landing-v2-meter">
+                      <div className="landing-v2-meter__fill" />
+                    </div>
+                  ) : null}
+                  {key === "receipts" ? (
+                    <div className="landing-v2-preview__chips">
+                      {chips.map((chip) => <span key={chip}>{chip}</span>)}
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export async function LandingHowItWorks() {
+  const t = await getTranslations("Landing.howItWorks");
+
+  return (
+    <section className="landing-v2-section landing-v2-section--canvas" id="how-it-works" aria-labelledby="how-title">
+      <div className="landing-container">
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="how-title"
+          center
+        />
+        <div className="landing-v2-grid landing-v2-grid--steps">
+          {STEPS.map(({ key, icon }, index) => (
+            <article key={key} className="landing-v2-step">
+              <div className="landing-v2-step__head">
+                <span className="landing-v2-step__number">{index + 1}</span>
+                <span className="landing-v2-step__icon"><Icon name={icon} size={22} /></span>
+              </div>
+              <h3 className="landing-h3">{t(`steps.${key}.title`)}</h3>
+              <p>{t(`steps.${key}.body`)}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export async function LandingPersonas() {
+  const t = await getTranslations("Landing.personas");
+
+  return (
+    <section className="landing-v2-section landing-v2-section--surface" id="personas" aria-labelledby="personas-title">
+      <div className="landing-container">
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="personas-title"
+          center
+        />
+        <div className="landing-v2-grid landing-v2-grid--personas">
+          {PERSONAS.map(({ key, icon }) => (
+            <article key={key} className="landing-v2-card landing-v2-card--persona">
+              <div className="landing-v2-card__icon"><Icon name={icon} size={22} /></div>
+              <h3 className="landing-h3">{t(`items.${key}.title`)}</h3>
+              <p className="landing-v2-card__body">{t(`items.${key}.body`)}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export async function LandingPricing({ signedIn }: { signedIn: boolean }) {
+  const t = await getTranslations("Landing.pricing");
+  const root = await getTranslations("Landing");
+  const items = t.raw("items") as string[];
+
+  return (
+    <section className="landing-v2-section landing-v2-section--canvas" id="pricing" aria-labelledby="pricing-title">
+      <div className="landing-container">
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="pricing-title"
+          center
+        />
+        <div className="landing-v2-pricing">
+          <div className="landing-v2-pricing__head">
+            <div>
+              <h3>{t("planName")}</h3>
+              <p>{t("planNote")}</p>
+            </div>
+            <span className="landing-v2-pricing__badge">{t("badge")}</span>
+          </div>
+          <div className="landing-v2-pricing__price">
+            <strong>{t("amount")}</strong>
+            <div>
+              <span>{t("currency")}</span>
+              <small>{t("period")}</small>
+            </div>
+          </div>
+          <p className="landing-v2-pricing__clarity">{t("clarity")}</p>
+          <ul className="landing-v2-pricing__features">
+            {PRICING_FEATURES.map((feature, index) => (
+              <li key={feature}>
+                <Icon name="checkCircle" size={18} />
+                <span>{items[index]}</span>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href={signedIn ? "/app" : "/sign-up"}
+            className="ui-button landing-v2-pricing__cta"
+            data-variant="primary"
+          >
+            <span>{signedIn ? root("openApp") : t("cta")}</span>
+            <Icon name="arrowRight" size={17} directional />
+          </Link>
+          <p className="landing-v2-pricing__note">{t("note")}</p>
+          <p className="landing-v2-pricing__payment">{t("paymentNote")}</p>
+        </div>
       </div>
     </section>
   );
@@ -484,15 +365,16 @@ export async function LandingFaq() {
   const t = await getTranslations("Landing.faq");
 
   return (
-    <section className="landing-section" id="faq" aria-labelledby="faq-title">
+    <section className="landing-v2-section landing-v2-section--surface" id="faq" aria-labelledby="faq-title">
       <div className="landing-container landing-container--narrow">
-        <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="faq-title" className="landing-h2">
-          {t("title")}
-        </h2>
-        <p className="landing-sub">{t("subtitle")}</p>
-
-        <div className="landing-faq">
+        <SectionHead
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+          titleId="faq-title"
+          center
+        />
+        <div className="landing-faq landing-v2-faq">
           {FAQ_ITEMS.map((item) => (
             <details key={item} className="landing-faq__item">
               <summary className="landing-faq__question">
@@ -508,92 +390,30 @@ export async function LandingFaq() {
   );
 }
 
-export async function LandingCallToAction({ signedIn }: { signedIn: boolean }) {
-  const t = await getTranslations("Landing");
+export async function LandingFinalCta({ signedIn }: { signedIn: boolean }) {
+  const t = await getTranslations("Landing.finalCta");
+  const root = await getTranslations("Landing");
+  const notes = t.raw("notes") as string[];
 
   return (
-    <section className="landing-section landing-section--last" aria-labelledby="cta-title">
+    <section className="landing-v2-section landing-v2-section--canvas landing-section--last" aria-labelledby="final-cta-title">
       <div className="landing-container">
-        <div className="landing-cta">
-          <p className="landing-eyebrow">{t("cta.eyebrow")}</p>
-          <h2 id="cta-title" className="landing-h2">
-            {t("cta.title")}
-          </h2>
-          <p className="landing-sub">{t("cta.body")}</p>
-          <div className="landing-actions landing-actions--center">
-            <Link
-              href={signedIn ? "/app" : "/sign-up"}
-              className="ui-button"
-              data-variant="primary"
-            >
-              {signedIn ? t("openApp") : t("createAccount")}
+        <div className="landing-v2-cta">
+          <p className="landing-v2-cta__badge">{t("eyebrow")}</p>
+          <h2 id="final-cta-title" className="landing-v2-cta__title">{t("title")}</h2>
+          <p className="landing-v2-cta__body">{t("body")}</p>
+          <div className="landing-v2-cta__actions">
+            <Link href={signedIn ? "/app" : "/sign-up"} className="ui-button" data-variant="primary">
+              <span>{signedIn ? root("openApp") : t("primaryCta")}</span>
+              <Icon name="arrowRight" size={17} directional />
             </Link>
-            {signedIn ? null : (
-              <Link href="/sign-in" className="ui-button" data-variant="secondary">
-                {t("signIn")}
-              </Link>
-            )}
+            <a href="#how-it-works" className="ui-button" data-variant="secondary">
+              {t("secondaryCta")}
+            </a>
           </div>
-          <p className="landing-cta__note">{t("cta.note")}</p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const PRICING_FEATURE_KEYS = [
-  "attendance",
-  "homework",
-  "portal",
-  "files",
-  "team",
-] as const;
-
-export async function LandingPricing() {
-  const t = await getTranslations("Landing.pricing");
-
-  return (
-    <section className="landing-section landing-section--pricing" id="pricing" aria-labelledby="pricing-title">
-      <div className="landing-container">
-        <p className="landing-eyebrow">{t("eyebrow")}</p>
-        <h2 id="pricing-title" className="landing-h2">
-          {t("title")}
-        </h2>
-        <p className="landing-sub">{t("subtitle")}</p>
-
-        <div className="landing-pricing-card">
-          <div className="landing-pricing-card__header">
-            <span className="landing-pricing-card__badge">{t("planName")}</span>
-            <div className="landing-pricing-card__price-row">
-              <span className="landing-pricing-card__amount">{t("price")}</span>
-              <span className="landing-pricing-card__currency">{t("currency")}</span>
-              <span className="landing-pricing-card__period">/ {t("period")}</span>
-            </div>
-            <p className="landing-pricing-card__sub">{t("subtitle")}</p>
-          </div>
-
-          <ul className="landing-pricing-card__features">
-            {PRICING_FEATURE_KEYS.map((key) => (
-              <li key={key} className="landing-pricing-card__feature">
-                <span className="landing-pricing-card__check" aria-hidden="true">
-                  <Icon name="checkCircle" size={16} />
-                </span>
-                <span>{t(`features.${key}`)}</span>
-              </li>
-            ))}
+          <ul className="landing-v2-cta__notes">
+            {notes.map((note) => <li key={note}><Icon name="check" size={14} />{note}</li>)}
           </ul>
-
-          <div className="landing-pricing-card__footer">
-            <Link
-              href="/sign-up"
-              className="ui-button landing-pricing-card__cta"
-              data-variant="primary"
-            >
-              <Icon name="arrowRight" size={16} aria-hidden="true" />
-              {t("ctaButton")}
-            </Link>
-            <p className="landing-pricing-card__note">{t("note")}</p>
-          </div>
         </div>
       </div>
     </section>

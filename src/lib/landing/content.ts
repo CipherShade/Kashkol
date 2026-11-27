@@ -1,81 +1,103 @@
 import type { IconName } from "@/components/ui/icon";
 
 /**
- * The landing page's structure, held in one place so the message catalogue, the
- * icons, and the tests cannot drift apart.
+ * Landing page structure for the public marketing surface.
  *
- * Every entry here describes a real, shipped capability. Do not add fabricated
- * testimonials, fake stats, or claims for capabilities that do not exist.
+ * The visual direction comes from the Stitch teacher-platform reference
+ * (`ADR-0044`). The copy describes shipped behaviour only: every illustrative
+ * number is labelled as synthetic sample data, and no unverified commercial
+ * promise (trial length, migration service, support channel) is published.
  */
 
 export type LandingEntry = {
-  /** Suffix under the section's `items` namespace in both catalogues. */
   readonly key: string;
   readonly icon: IconName;
 };
 
-/** Same-page anchors. The header and the footer both read this list. */
-export const LANDING_SECTIONS = ["challenges", "pricing", "proof", "faq"] as const;
+/** Same-page anchors used by the announcement bar, header, footer and sections. */
+export const LANDING_SECTIONS = [
+  "problem",
+  "features",
+  "intelligence",
+  "personas",
+  "how-it-works",
+  "pricing",
+  "faq",
+] as const;
 export type LandingSection = (typeof LANDING_SECTIONS)[number];
 
-export const NAV_ITEMS: readonly { key: LandingSection }[] = LANDING_SECTIONS.map((key) => ({
-  key,
-}));
+export const NAV_ITEMS: readonly { key: LandingSection }[] = LANDING_SECTIONS.map((key) => ({ key }));
 
-/**
- * The ten problem/solution showcases. Each key maps to a real, shipped or
- * clearly-scoped capability. The order follows the user's requested narrative.
- */
-export const CHALLENGE_ITEMS: readonly LandingEntry[] = [
-  { key: "students", icon: "users" },
-  { key: "schedule", icon: "calendar" },
-  { key: "attendance", icon: "check" },
-  { key: "homework", icon: "book" },
-  { key: "exams", icon: "file" },
-  { key: "performance", icon: "bar" },
-  { key: "payments", icon: "wallet" },
-  { key: "content", icon: "folder" },
-  { key: "parents", icon: "whatsapp" },
-  { key: "team", icon: "staff" },
+/** Hero trust points. All three describe real product behaviour. */
+export const HERO_TRUST = ["records", "bilingual", "isolated"] as const;
+
+/** Five everyday frustrations, ordered as in the reference design. */
+export const PROBLEM_ITEMS: readonly LandingEntry[] = [
+  { key: "scattered", icon: "folder" },
+  { key: "attendance", icon: "clock" },
+  { key: "visibility", icon: "bar" },
+  { key: "groups", icon: "users" },
+  { key: "receipts", icon: "wallet" },
 ];
 
-/** The five items given the largest visual treatment on the landing page. */
-export const FEATURED_CHALLENGE_KEYS = new Set([
+/** Problem-to-solution mapping shown immediately after the problems. */
+export const SOLUTION_ITEMS: readonly LandingEntry[] = [
+  { key: "dossier", icon: "user" },
+  { key: "attendance", icon: "qr" },
+  { key: "attention", icon: "activity" },
+  { key: "schedule", icon: "calendar" },
+  { key: "receipts", icon: "file" },
+];
+
+/** Four metrics on the illustrative student spotlight card. */
+export const INTELLIGENCE_STATS = [
+  { key: "attendance", icon: "checkCircle" },
+  { key: "average", icon: "bar" },
+  { key: "homework", icon: "book" },
+  { key: "rank", icon: "users" },
+] as const satisfies readonly LandingEntry[];
+
+/** Six illustrative quiz points on the spotlight chart. */
+export const INTELLIGENCE_QUIZZES = [1, 2, 3, 4, 5, 6] as const;
+
+/** Four operational pillars. Each preview contains sample data only. */
+export const FEATURE_PILLARS: readonly LandingEntry[] = [
+  { key: "students", icon: "users" },
+  { key: "attendance", icon: "qr" },
+  { key: "exams", icon: "book" },
+  { key: "receipts", icon: "wallet" },
+];
+
+/** The three onboarding steps. */
+export const STEPS: readonly LandingEntry[] = [
+  { key: "account", icon: "plus" },
+  { key: "roster", icon: "users" },
+  { key: "day", icon: "grid" },
+];
+
+/** Four teacher profiles. */
+export const PERSONAS: readonly LandingEntry[] = [
+  { key: "independent", icon: "user" },
+  { key: "multiCenter", icon: "grid" },
+  { key: "highVolume", icon: "bar" },
+  { key: "withAssistants", icon: "staff" },
+];
+
+/**
+ * The single manually-confirmed subscription published on `/subscribe`.
+ * No card is charged, no transfer is detected, and no trial is promised.
+ */
+export const PRICING_FEATURES = [
   "students",
   "attendance",
-  "exams",
-  "performance",
-  "payments",
-]);
+  "learning",
+  "attention",
+  "assistants",
+  "reports",
+  "bilingual",
+] as const;
+export type PricingFeature = (typeof PRICING_FEATURES)[number];
 
-/** Social proof uses real product facts, not fabricated testimonials. */
-export const PROOF_ITEMS: readonly LandingEntry[] = [
-  { key: "records", icon: "bar" },
-  { key: "arabic", icon: "globe" },
-  { key: "privacy", icon: "lock" },
-];
-
-export const STEPS: readonly LandingEntry[] = [
-  { key: "workspace", icon: "plus" },
-  { key: "roster", icon: "users" },
-  { key: "day", icon: "check" },
-];
-
-export const FAQ_ITEMS = ["start", "language", "records", "support"] as const;
+/** Four FAQ entries, matching the reference design's accordion. */
+export const FAQ_ITEMS = ["audience", "start", "safety", "mobile"] as const;
 export type FaqItem = (typeof FAQ_ITEMS)[number];
-
-/** Hero trust chips. */
-export const HERO_TRUST = ["organized", "records", "bilingual"] as const;
-
-/**
- * Demo screenshots are disabled until recaptured from a seeded workspace that
- * shows only M1 capabilities. The previous captures included M2 UI (payments,
- * follow-up, guardian messaging) and cannot be shown as current product truth.
- * While disabled, the hero renders a structural illustration — blocks and rails
- * with labels only, never a fabricated dashboard.
- */
-export const HAS_DEMO_SCREENSHOT = false;
-
-export function demoScreenshotPath(locale: string): string {
-  return `/landing/workspace-${locale === "en" ? "en" : "ar"}.png`;
-}

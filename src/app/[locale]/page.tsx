@@ -1,18 +1,21 @@
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { LandingClassroomTicker } from "@/components/landing/classroom-ticker";
+import { LandingAnnouncement } from "@/components/landing/announcement";
 import { LandingFooter } from "@/components/landing/footer";
 import { LandingHeader } from "@/components/landing/header";
 import { LandingHero } from "@/components/landing/hero";
-import { LandingInteractiveCalculator } from "@/components/landing/interactive-calculator";
+import { LandingMobileCta } from "@/components/landing/mobile-cta";
 import { LandingScrollTop } from "@/components/landing/scroll-top";
 import {
-  LandingCallToAction,
-  LandingChallenges,
   LandingFaq,
-  LandingHow,
+  LandingFeatures,
+  LandingFinalCta,
+  LandingHowItWorks,
+  LandingIntelligence,
+  LandingPersonas,
   LandingPricing,
-  LandingProof,
+  LandingProblem,
+  LandingSolution,
 } from "@/components/landing/sections";
 import { buildLandingMetadata, landingSiteUrl } from "@/lib/landing/seo";
 import type { PreferredTheme } from "@/lib/theme";
@@ -20,15 +23,8 @@ import { getPreferredTheme } from "@/modules/identity/preferences";
 import { getOptionalUser } from "@/modules/identity/session";
 
 /**
- * The public landing page (`/ar`, `/en`).
- *
- * It is the only indexable surface in the product, and the only page that does
- * not require a session. It reads the session only to choose between "Sign in"
- * and "Open app", so it has to render per request.
- *
- * It collects nothing: no form, no analytics, no third-party script, and no
- * cookie of its own. The theme and language switches are the app's own
- * preference controls.
+ * Public landing page (`/ar`, `/en`) — the only indexable surface.
+ * Renders per request only to read session for CTA state.
  */
 export const dynamic = "force-dynamic";
 
@@ -62,8 +58,7 @@ export default async function LandingPage({ params }: LandingPageProps) {
   try {
     initialTheme = await getPreferredTheme();
   } catch {
-    // An expired session or a failed preference read must not break the page;
-    // the client falls back to the cookie, then localStorage, then the system.
+    initialTheme = null;
   }
 
   return (
@@ -72,21 +67,24 @@ export default async function LandingPage({ params }: LandingPageProps) {
         {t("skipToContent")}
       </a>
 
+      <LandingAnnouncement />
       <LandingHeader signedIn={signedIn} initialTheme={initialTheme} />
 
       <main id="main">
-        <LandingHero signedIn={signedIn} locale={appLocale} />
-        <LandingClassroomTicker />
-        <LandingChallenges />
-        <LandingProof />
-        <LandingHow />
-        <LandingInteractiveCalculator signedIn={signedIn} />
-        <LandingPricing />
+        <LandingHero signedIn={signedIn} />
+        <LandingProblem />
+        <LandingSolution />
+        <LandingIntelligence />
+        <LandingFeatures />
+        <LandingHowItWorks />
+        <LandingPersonas />
+        <LandingPricing signedIn={signedIn} />
         <LandingFaq />
-        <LandingCallToAction signedIn={signedIn} />
+        <LandingFinalCta signedIn={signedIn} />
       </main>
 
       <LandingFooter signedIn={signedIn} />
+      <LandingMobileCta signedIn={signedIn} />
       <LandingScrollTop />
     </div>
   );

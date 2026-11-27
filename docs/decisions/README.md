@@ -65,6 +65,7 @@ Every ADR uses the same sections:
 | [0041](0041-owner-only-collected-session-earnings.md) | Owner-only collected session earnings | Accepted (2026-11-25) | M2 |
 | [0042](0042-private-shell-and-no-truth-slogan.md) | Private readiness page and no truth slogan | Accepted (2026-11-25) | M0–M2 |
 | [0043](0043-remove-legacy-money-storage.md) | Physical removal of legacy workspace money storage | Accepted (approved 2026-11-25) | M2 |
+| [0044](0044-teacher-platform-landing-reference.md) | Teacher-platform landing reference with labelled sample visuals | Accepted (approved 2026-11-27) | M0 |
 
 ## Conventions
 

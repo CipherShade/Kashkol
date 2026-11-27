@@ -2,7 +2,6 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Icon } from "@/components/ui/icon";
 import { BrandMark } from "@/components/ui/brand-mark";
-import { LanguageSwitch } from "@/components/ui/language-switch";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import type { PreferredTheme } from "@/lib/theme";
 import { LANDING_SECTIONS } from "@/lib/landing/content";
@@ -11,8 +10,8 @@ import { LANDING_SECTIONS } from "@/lib/landing/content";
  * The public header. The language and theme switches are the same components
  * the signed-in shell uses, so a visitor's choice carries into the app.
  *
- * There is no pricing link because there is no pricing page and no decided
- * price, and no help-centre link because no such page exists.
+ * There is no separate pricing page — the single subscription is stated in the
+ * pricing section — and no help-centre link because no such page exists.
  */
 export async function LandingHeader({
   signedIn,
@@ -45,7 +44,6 @@ export async function LandingHeader({
         </nav>
 
         <div className="landing-header__actions">
-          <LanguageSwitch />
           <ThemeSwitch initialTheme={initialTheme} />
           {signedIn ? (
             <Link

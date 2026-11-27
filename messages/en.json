@@ -5,376 +5,346 @@
   },
   "Landing": {
     "meta": {
-      "title": "Kashkol — the workspace for private teachers",
-      "description": "Kashkol is the workspace for private teachers: students and groups, sessions and attendance, homework and assessments, and files. Every number is computed from your records."
+      "title": "Kashkol | One workspace for independent teachers in Egypt",
+      "description": "Kashkol brings students, groups, sessions, attendance, homework, grades and files into one place. One published subscription of 249 EGP/month, paid by manual transfer and confirmed by the Kashkol team."
     },
-    "brandAria": "Kashkol — home",
+    "brandAria": "Kashkol home",
     "skipToContent": "Skip to content",
     "menuLabel": "Menu",
-    "nav": {
-      "label": "Primary",
-      "challenges": "Challenges & solutions",
-      "proof": "Why Kashkol",
-      "faq": "FAQ",
-      "pricing": "Pricing"
-    },
     "signIn": "Sign in",
-    "openApp": "Open app",
-    "createAccount": "Try Now!",
+    "openApp": "Open workspace",
+    "createAccount": "Start with Kashkol",
     "scrollTop": "Back to top",
+    "topBar": {
+      "badge": "Independent tutoring operations for teachers in Egypt",
+      "note": "Students, sessions, attendance, grades and files in one place"
+    },
+    "nav": {
+      "label": "Main navigation",
+      "problem": "Problem & solution",
+      "features": "Core pillars",
+      "intelligence": "Student intelligence",
+      "personas": "Who is it for?",
+      "how-it-works": "How to start",
+      "pricing": "Pricing",
+      "faq": "FAQ"
+    },
     "hero": {
-      "eyebrow": "For private teachers in Egypt",
-      "title": "You teach the lesson. We handle the rest.",
-      "subtitle": "Kashkol keeps your whole practice in one place: students and groups, sessions and attendance, homework and assessments. Every number you see is computed from your records.",
-      "primaryCta": "Try Now!",
-      "secondaryCta": "Sign in",
+      "pill": "One workspace for independent teachers in Egypt",
+      "title": "Focus on teaching. We handle the rest.",
+      "subtitle": "Focus on your lesson. Kashkol keeps your work in order: students, groups, sessions, attendance, grades and files — all in one place instead of scattered notebooks and chats.",
+      "primaryCta": "Start with Kashkol",
+      "secondaryCta": "See how it works",
+      "note": "One subscription · 249 EGP/month · paid by manual transfer",
       "trust": {
-        "organized": "Everything in one place",
-        "records": "Clear records you can trust",
-        "bilingual": "Arabic and English"
+        "records": "Every number comes from your records",
+        "bilingual": "Arabic and English, correct direction",
+        "isolated": "Your data stays inside your workspace"
       },
-      "previewAria": "Preview of the Kashkol interface",
-      "previewAlt": "A screenshot of a demo workspace in Kashkol",
-      "caption": "Screenshot from a demo workspace with synthetic data.",
-      "illustrationCaption": "A live interactive preview of the Kashkol workspace.",
-      "demoBadge": "Demo",
-      "preview": {
-        "liveBadge": "Live Interactive Demo",
-        "tabAttendance": "Quick Attendance",
-        "tabSessions": "Sessions & Schedule",
-        "tabHomework": "Homework & Grading",
-        "groupTitle": "Senior Secondary Group — Sat 5:00 PM",
-        "attendanceHint": "Click any status to record attendance and update the rate in real time",
-        "student1": "Ahmed Mahmoud",
-        "student2": "Mariam Saeed",
-        "student3": "Omar Khaled",
-        "statusPresent": "Present",
-        "statusAbsent": "Absent",
-        "statusLate": "Late",
-        "statusExcused": "Excused",
-        "rateLabel": "Attendance rate:",
-        "badgeRtl": "100% Native Arabic & RTL",
-        "badgePrivacy": "Strict Tenant Data Isolation",
-        "sessionPhysics": "Physics — El Awail Center",
-        "sessionPhysicsTime": "Today · 4:00 PM",
-        "sessionChem": "Chemistry — Al Tamayoz Hall",
-        "sessionChemTime": "Today · 6:30 PM",
-        "sessionStart": "Start Session Attendance",
-        "hwTitle": "Calculus Homework — p. 45",
-        "hwSubmissions": "18 of 20 students turned in",
-        "hwGradeSample": "Assignment score:",
-        "scoreValue": "9 of 10",
-        "noteScore": "🌟 Monthly Exam: Excellent (29/30)",
-        "noteTime": "⏰ Saturday Session 5:00 PM — Room 1"
+      "caption": "Illustrative preview with synthetic data — not a real workspace.",
+      "mock": {
+        "title": "Teacher workspace — illustrative example",
+        "status": "Sample view",
+        "students": "Total students",
+        "studentsValue": "284",
+        "studentsNote": "8 groups · synthetic data",
+        "sessions": "Today's sessions",
+        "sessionsValue": "4",
+        "sessionsNote": "Center + online · sample",
+        "attendance": "Attendance rate",
+        "attendanceValue": "94.8%",
+        "attendanceNote": "Steady week · sample",
+        "scheduleTitle": "Today's schedule — example",
+        "time": "Sample time",
+        "session1Title": "Senior 3 — Physics (sample center)",
+        "session1Meta": "04:30 PM - 06:30 PM · 42 present of 45 registered",
+        "session2Title": "Senior 2 — General physics (online)",
+        "session2Meta": "07:00 PM - 09:00 PM · 36 students registered",
+        "active": "In progress",
+        "upcoming": "Upcoming",
+        "alertTitle": "Sample alert: 3 students need attention",
+        "alertAction": "Example alert",
+        "alertBody": "A quiz dip and repeated absences — illustrative figures from a sample workspace."
       }
     },
-    "ticker": {
-      "item1": "Instant attendance via list or QR check-in",
-      "item2": "Clean digital workspace for every group",
-      "item3": "Automatic absence alerts and follow-ups",
-      "item4": "Clear performance reports for parents",
-      "item5": "Homework turn-in and grade tracking",
-      "item6": "Secure, private records without notebooks"
-    },
-    "calculator": {
-      "eyebrow": "Calculate your gain",
-      "title": "How many hours will you save every week?",
-      "subtitle": "Slide the controls to see how notebook chaos and chat chasing turn into a peaceful, organized system.",
-      "studentsLabel": "Total students across groups:",
-      "studentsUnit": "students",
-      "sessionsLabel": "Sessions per week:",
-      "sessionsUnit": "sessions / week",
-      "savedHoursLabel": "Hours saved weekly for actual teaching",
-      "savedHoursUnit": "hrs / week",
-      "checkinSpeedLabel": "Average session check-in time",
-      "checkinSpeedVal": "< 40 seconds",
-      "accuracyLabel": "Record and attendance accuracy",
-      "accuracyVal": "Calculated from your records",
-      "breakdownTitle": "Grounded in real teacher routines:",
-      "breakdownSession": "~30 mins saved per session on roll call and records",
-      "breakdownHomework": "2–4 hrs/wk saved on homework grading and WhatsApp follow-ups",
-      "breakdownReports": "~3 hrs/mo automated for monthly student report cards",
-      "ctaPrompt": "Start now and focus your energy on teaching"
-    },
-    "challenges": {
-      "eyebrow": "Problems and solutions",
-      "title": "Every challenge in managing your teaching business. One solution.",
-      "subtitle": "Each part of your teaching workflow gets a clear problem, a practical solution, and a real Kashkol feature behind it.",
-      "problemLabel": "The problem",
-      "solutionLabel": "The solution in Kashkol",
-      "featureLabel": "Feature showcase",
+    "problem": {
+      "eyebrow": "The daily reality of teaching in Egypt",
+      "title": "Your lessons run well, but the work around them piles up.",
+      "subtitle": "Between teaching, attendance, grades and receipts, small details take over your day. As your roster grows, manual follow-up becomes exhausting.",
       "items": {
-        "students": {
-          "number": "01",
-          "nav": "Students",
-          "title": "Student management",
-          "problemHeadline": "Forgetting student details, with their information scattered across more than one place?",
-          "problemBody": "Every student has a number, group, grades, attendance, payments, and notes. As the number grows, it becomes hard to remember every detail and find the information when you need it.",
-          "solutionHeadline": "A complete file for every student. Everything in front of you.",
-          "solutionBody": "Every student has their own file that brings together their details, groups, attendance record, grades, homework, payments, and follow-up history.",
-          "solutionDetail": "Instead of searching for a student's information across paper and chats, open their file and know everything.",
-          "showcase": "A real student profile: tabs, details, grades, attendance, and payments in one place.",
-          "points": [
-            "Student profile with key details",
-            "Attendance, grades, homework, and payments in one record",
-            "Follow-up history when you need context"
-          ]
+        "scattered": {
+          "title": "Fragmented student data",
+          "body": "Grades in a paper booklet, attendance on a laptop sheet, and parent numbers scattered across WhatsApp chats and an assistant's phone.",
+          "tag": "Lost numbers and repeated searching every session"
+        },
+        "attendance": {
+          "title": "Attendance check fatigue",
+          "body": "Losing the first minutes of every lesson calling names manually, while parents do not know whether their child arrived.",
+          "tag": "Time spent on paper roll calls"
+        },
+        "visibility": {
+          "title": "Hard to spot silent drops",
+          "body": "Across hundreds of students, quiet academic slips go unnoticed until a parent complains after midterms.",
+          "tag": "Gradual grade drops hidden in paper sheets"
+        },
+        "groups": {
+          "title": "Center and group scheduling chaos",
+          "body": "Conflicting timetables between centers, complicated student transfers, and confused timetables between online and in-person lessons.",
+          "tag": "Tangled groups and repeated parent questions"
+        },
+        "receipts": {
+          "title": "Manual receipt tracking",
+          "body": "At week's end, hours go into collecting session receipts and the cash actually received into a fragile paper ledger.",
+          "tag": "Unclear records of what was collected"
+        }
+      }
+    },
+    "solution": {
+      "eyebrow": "The direct solution with Kashkol",
+      "title": "Stop juggling every detail. Keep it all in one view.",
+      "subtitle": "Built for the realities of Egyptian private tutoring: neither corporate bloat nor fragile paper notebooks. A direct system for every teaching day.",
+      "problemLabel": "Problem",
+      "items": {
+        "dossier": {
+          "label": "Scattered data",
+          "title": "One student dossier",
+          "body": "Student details, attendance, grades and parent contact in a single screen, with no searching.",
+          "benefit": "Full student history in one place"
+        },
+        "attendance": {
+          "label": "Attendance fatigue",
+          "title": "Fast roster or QR attendance",
+          "body": "Mark attendance from the roster or a QR code, then review corrections and the full history for each student.",
+          "benefit": "Less time calling names, a more accurate record"
+        },
+        "attention": {
+          "label": "Hard to follow up",
+          "title": "Flags for students who need attention",
+          "body": "Review attendance and grade indicators and follow students who need early support.",
+          "benefit": "Spot a decline before it grows"
         },
         "schedule": {
-          "number": "02",
-          "nav": "Schedule",
-          "title": "Sessions and schedule",
-          "problemHeadline": "Is your schedule messy? Do you keep reviewing your session times every day?",
-          "problemBody": "Between groups, sessions, changes, and different times, organizing your schedule can become a daily task on its own.",
-          "solutionHeadline": "Your whole session schedule in one calendar.",
-          "solutionBody": "Organize your groups and sessions, see your daily and weekly schedule, and know the next session and every group's time from one place.",
-          "solutionDetail": "Plan your week in minutes, instead of reviewing your times all day.",
-          "showcase": "An interactive calendar: Day / Week / Month, groups, upcoming sessions, and adding a session.",
-          "points": [
-            "Daily, weekly, and monthly calendar views",
-            "Upcoming sessions and group timing",
-            "Add and manage sessions from one place"
+          "label": "Group overload",
+          "title": "Organized groups and schedules",
+          "body": "Plan sessions and groups, transfer students between groups, and keep the history.",
+          "benefit": "Clearer timetables, fewer questions"
+        },
+        "receipts": {
+          "label": "Manual receipts",
+          "title": "Collected-receipt ledger",
+          "body": "Record the amounts you actually received for each session and review reports built from your records.",
+          "benefit": "A clear record of what was collected"
+        }
+      }
+    },
+    "intelligence": {
+      "eyebrow": "Kashkol academic intelligence",
+      "title": "Not every student needs the same follow-up. Know who needs your attention.",
+      "subtitle": "Instead of checking dozens of notebooks, Kashkol presents attendance, grade and submission indicators from your records so you can focus on the student who needs support.",
+      "note": "Illustrative example with synthetic data — not a real student.",
+      "cardLabel": "Example student card",
+      "sampleName": "Sample student",
+      "sampleMeta": "Senior 3 · synthetic data",
+      "flag": "Attention flag",
+      "stats": {
+        "attendance": {
+          "label": "Attendance rate",
+          "value": "92%",
+          "note": "Missed the last 2 sessions (sample)"
+        },
+        "average": {
+          "label": "Quiz average",
+          "value": "84%",
+          "note": "Down 12% this month (sample)"
+        },
+        "homework": {
+          "label": "Homework done",
+          "value": "8 / 10",
+          "note": "2 missing tasks (sample)"
+        },
+        "rank": {
+          "label": "Group rank",
+          "value": "#14",
+          "note": "Out of 42 students (sample)"
+        }
+      },
+      "alertTitle": "Missed 2 of the last 3 sessions — needs follow-up",
+      "alertBody": "An example alert based on synthetic data. In the app, indicators are produced from your workspace records.",
+      "chartTitle": "Illustrative quiz trend across the last 6 quizzes",
+      "quizLabels": [
+        "Quiz 1",
+        "Quiz 2",
+        "Quiz 3",
+        "Quiz 4",
+        "Quiz 5",
+        "Quiz 6"
+      ]
+    },
+    "features": {
+      "eyebrow": "Core capabilities",
+      "title": "Everything a teacher needs, without complexity",
+      "subtitle": "Four pillars built for Egyptian private tutoring workflows.",
+      "previewNote": "Illustrative previews with synthetic data — not real accounts.",
+      "pillars": {
+        "students": {
+          "title": "Student and roster management",
+          "body": "Group students by grade, center or online classes, with accurate parent contact details you can edit.",
+          "previewTitle": "Active groups — example",
+          "previewMeta": "8 groups · 284 students (synthetic data)",
+          "chips": [
+            "Senior 3 — Al-Ahram center (45)",
+            "Senior 3 — Al-Noor center (38)",
+            "Senior 2 — online (62)"
           ]
         },
         "attendance": {
-          "number": "03",
-          "nav": "Attendance",
-          "title": "Attendance and absence",
-          "problemHeadline": "Who attended? Who was absent? And who has been irregular for a while?",
-          "problemBody": "Recording attendance manually and reviewing absences every time takes time, and a student may miss more than once without you noticing.",
-          "solutionHeadline": "Record attendance. Kashkol keeps every student's record.",
-          "solutionBody": "Record group attendance, track absence and lateness, and review any student's attendance history at any time. Know who is regular and who needs follow-up.",
-          "solutionDetail": "Every session you record builds an attendance history you can return to at any time.",
-          "showcase": "Attendance screen with visual attendance history and absence patterns.",
-          "points": [
-            "Fast attendance recording per session",
-            "Absence and lateness history per student",
-            "Clear patterns for students who need follow-up"
-          ]
-        },
-        "homework": {
-          "number": "04",
-          "nav": "Homework",
-          "title": "Homework",
-          "problemHeadline": "You assign homework and don't know who solved it and who didn't?",
-          "problemBody": "You assign the homework, then you start asking, reviewing, and remembering who submitted and who is late. Following up with every student consumes your time.",
-          "solutionHeadline": "Every homework. Every student. The status is clear.",
-          "solutionBody": "Create the homework, assign it to students or a group, track submissions, and review each student's status from one place instead of random follow-up.",
-          "solutionDetail": "Know who finished, who is late, and who needs a reminder — without asking one by one.",
-          "showcase": "Homework dashboard, completion status, submission list, and overdue indicators.",
-          "points": [
-            "Create and assign homework to groups or students",
-            "Track submission status clearly",
-            "See who is done, late, or needs a reminder"
+          "title": "Fast attendance and scheduling",
+          "body": "Mark attendance on any device, from the roster or a QR code, and review lateness, absence and the correction history.",
+          "previewTitle": "Sample QR scanner",
+          "previewMeta": "34 / 38 present · 2 late · 2 absent (example)",
+          "chips": [
+            "Roster check-in",
+            "QR check-in",
+            "Audited corrections"
           ]
         },
         "exams": {
-          "number": "05",
-          "nav": "Exams",
-          "title": "Exams and grading",
-          "problemHeadline": "Preparing an exam, grading it, and collecting grades... every time from scratch?",
-          "problemBody": "Exams take time to prepare and grade, then you need to collect grades, calculate results, and understand each student's level.",
-          "solutionHeadline": "Create your exams, grade them, and see results in the same system.",
-          "solutionBody": "Prepare tests with varied questions, see student answers, use automatic grading for objective questions, and review essay questions and record their grades.",
-          "solutionDetail": "From creating the exam to seeing the result — every assessment step in one place.",
-          "showcase": "Exam builder: create questions, MCQ and essay, assign exam, review answers, results and grades.",
-          "points": [
-            "Create questions, including MCQ and essay",
-            "Assign exams and review answers",
-            "See results and grades in the same workflow"
+          "title": "Exams and homework ledger",
+          "body": "Record weekly sheets, exams and homework scores. Averages and progress are calculated from the scores you enter.",
+          "previewTitle": "Comprehensive exam — example",
+          "previewMeta": "Group average: 42 / 50 (synthetic data)",
+          "chips": [
+            "Paper assessments",
+            "Online exams",
+            "Homework submissions"
           ]
         },
-        "performance": {
-          "number": "06",
-          "nav": "Performance",
-          "title": "Student performance follow-up",
-          "problemHeadline": "Do you only know a student is weak after the result gets worse?",
-          "problemBody": "Recording grades alone is not enough. You need to know who is improving, who is stable, and who started declining before the problem grows.",
-          "solutionHeadline": "Turn grades into a tool for understanding your students.",
-          "solutionBody": "Follow student grades and exam results, review their progress, and compare results so you know who needs extra attention.",
-          "solutionDetail": "Not just knowing how much a student scored — knowing whether they are improving or declining.",
-          "showcase": "Student performance chart, exam history, group averages, and top and struggling students.",
-          "points": [
-            "Track exam history and progress",
-            "Compare group averages and student results",
-            "Spot students who need attention early"
-          ]
-        },
-        "payments": {
-          "number": "07",
-          "nav": "Payments",
-          "title": "Payments and dues",
-          "problemHeadline": "Can't remember who paid, and who still owes money?",
-          "problemBody": "Following subscriptions and payments across many students can cause missed dues, or force you to review notebooks and chats to be sure.",
-          "solutionHeadline": "Know where your money comes from, and who still has dues.",
-          "solutionBody": "Record payments for each student, review payment history, and track dues and late payments from one dashboard.",
-          "solutionDetail": "Every student has a clear financial record. Every due amount can be reviewed instead of relying on memory.",
-          "showcase": "Financial dashboard: collected, outstanding, payments, and student payment history.",
-          "points": [
-            "Record payments per student",
-            "Review collected and outstanding amounts",
-            "Keep a clear payment history"
-          ]
-        },
-        "content": {
-          "number": "08",
-          "nav": "Content",
-          "title": "Learning content",
-          "problemHeadline": "Your files and videos are lost between phone, Drive, and WhatsApp?",
-          "problemBody": "PDFs, videos, revisions, and recordings get spread across different places, and students may ask you for the same file every time.",
-          "solutionHeadline": "Your whole learning library in one place.",
-          "solutionBody": "Upload and organize your files and learning content, link content to your groups, and share materials with your students easily.",
-          "solutionDetail": "Your content is organized, and your students can reach the material they need.",
-          "showcase": "Content library, folder organization, resource previews, and group access.",
-          "points": [
-            "Organize files and learning materials",
-            "Share content with the right groups",
-            "Keep resources easy to find"
-          ]
-        },
-        "parents": {
-          "number": "09",
-          "nav": "Parents",
-          "title": "Parents",
-          "problemHeadline": "The same questions from parents every day?",
-          "problemBody": "Did they attend? Were they absent? Did they do the homework? What score did they get? When is the session? Individual communication and constant follow-up take your time.",
-          "solutionHeadline": "Make student follow-up clearer, without follow-up consuming your day.",
-          "solutionBody": "Give parents a way to follow their child's attendance, grades, homework, and schedule, and keep important information organized instead of repeating the same questions.",
-          "solutionDetail": "Organized follow-up gives parents more clarity, and gives you more time for teaching.",
-          "showcase": "Parent portal mockup on a mobile device showing child's attendance, results, and homework.",
-          "points": [
-            "Parents can follow attendance, grades, and homework",
-            "Important information stays organized",
-            "Less repeated communication"
-          ]
-        },
-        "team": {
-          "number": "10",
-          "nav": "Team",
-          "title": "Assistants and team",
-          "problemHeadline": "Does everything have to go through you personally?",
-          "problemBody": "If you have an assistant or team, you remain the contact point for every student detail, attendance, exams, and organization, which makes growing your work harder.",
-          "solutionHeadline": "Distribute tasks. Stay in control of your work.",
-          "solutionBody": "Add your assistants, give each one the right permissions, and let your team work on the same system instead of everyone managing work separately.",
-          "solutionDetail": "Your team can help you with administration, and you remain in control of the system.",
-          "showcase": "Team settings, assistant roles, permissions, and activity workflow.",
-          "points": [
-            "Invite assistants with the right permissions",
-            "Keep control over sensitive actions",
-            "Work as one team on the same system"
+        "receipts": {
+          "title": "Collected receipts and reports",
+          "body": "Record the amounts actually received for sessions and review reports built from your records. Kashkol does not collect or move money.",
+          "previewTitle": "Collected — example",
+          "previewMeta": "64,200 EGP (synthetic data)",
+          "chips": [
+            "Session receipts",
+            "Reports from records",
+            "No money transfers"
           ]
         }
       }
     },
-    "proof": {
-      "eyebrow": "BUILT WITH CARE",
-      "title": "Your teaching business deserves a system you can trust.",
-      "subtitle": "Kashkol brings your records, workflow, and student information together in one thoughtfully designed workspace — built to make your daily work clearer and more organized.",
-      "items": {
-        "records": {
-          "title": "Clear, dependable records",
-          "body": "Your students, attendance, grades, and payments organized in one place. Know where your information stands whenever you need it."
-        },
-        "arabic": {
-          "title": "Arabic & English, naturally",
-          "body": "A complete experience in both languages, with the right layout, direction, and interface for each."
-        },
-        "privacy": {
-          "title": "Your workspace. Your control.",
-          "body": "Your teaching workspace stays separate, with access managed according to account roles and permissions."
-        }
-      },
-      "visual": {
-        "recordsOverview": "Records overview",
-        "students": "Students",
-        "attendance": "Attendance",
-        "payments": "Payments",
-        "arabic": "العربية",
-        "english": "English",
-        "rtl": "RTL",
-        "ltr": "LTR",
-        "arabicSample": "الطلاب والحضور",
-        "englishSample": "Students & attendance",
-        "teamAccess": "Team access",
-        "teacher": "Teacher",
-        "assistant": "Assistant",
-        "fullAccess": "Full access",
-        "assignedPermissions": "Assigned permissions"
-      }
-    },
-    "how": {
-      "eyebrow": "How it works",
-      "title": "Three steps to start",
-      "subtitle": "No complex setup, and no mandatory import.",
-      "items": {
-        "workspace": {
-          "title": "Create your workspace",
-          "body": "Your name, subject, timezone, and currency. Isolated from day one."
+    "howItWorks": {
+      "eyebrow": "Frictionless workflow",
+      "title": "Start organizing your classes in 3 simple steps",
+      "subtitle": "No training course required: create an account, add your students, then run your day.",
+      "steps": {
+        "account": {
+          "title": "Create your account",
+          "body": "Register with your email, confirm it, and create your own workspace."
         },
         "roster": {
-          "title": "Add students and groups",
-          "body": "Start from scratch or import your roster, then organise students into groups."
+          "title": "Organize students and groups",
+          "body": "Add students manually or import an Excel sheet, then arrange them into groups and sessions."
         },
         "day": {
-          "title": "Run your day",
-          "body": "Take attendance, assign homework, and review submissions."
+          "title": "Run your teaching day in one place",
+          "body": "Record attendance, homework and grades, and review the amounts you recorded yourself."
         }
       }
     },
-    "faq": {
-      "eyebrow": "Questions",
-      "title": "Everything you need to know",
-      "subtitle": "Clear answers before you get started.",
+    "personas": {
+      "eyebrow": "Tailored for Egyptian educators",
+      "title": "Who is Kashkol built for?",
+      "subtitle": "Designed to fit your teaching style, whatever your group size or format.",
       "items": {
-        "start": {
-          "question": "How fast can I get started?",
-          "answer": "You can create your workspace, add students and groups, and start running your day right away. Start simple and build as you go."
+        "independent": {
+          "title": "Independent tutors (5 - 25 students)",
+          "body": "Leave loose paper notes behind and give parents confidence in your organization from day one."
         },
-        "language": {
-          "question": "Can I use Kashkol in Arabic and English?",
-          "answer": "Yes. Kashkol works in Arabic and English, with the right direction and a great experience in both."
+        "multiCenter": {
+          "title": "Multi-center educators (50 - 200 students)",
+          "body": "Coordinate timetables between centers and review attendance for every group in one place."
         },
-        "records": {
-          "question": "Can I trust the numbers I see?",
-          "answer": "Yes. The dashboard and reports are based on the records you keep in Kashkol, so your information stays clear and consistent."
+        "highVolume": {
+          "title": "High-volume high school teachers (300+ students)",
+          "body": "Check attendance from the roster or QR, follow students who need attention, and review reports built from your records."
         },
-        "support": {
-          "question": "Is Kashkol built for private teachers?",
-          "answer": "Yes. Kashkol is designed around the real daily workflow of private teachers — students, groups, sessions, attendance, homework, and assessments."
+        "withAssistants": {
+          "title": "Teachers with assistant teams",
+          "body": "Add assistants with precise permissions. They record attendance and grades only within the access you grant; earnings stay owner-only."
         }
       }
-    },
-    "cta": {
-      "eyebrow": "Start simple",
-      "title": "Ready to run your teaching practice with confidence?",
-      "body": "Create your workspace and put your students, sessions, and records in one place today.",
-      "note": "Arabic and English · Light and dark · Built for private teachers"
-    },
-    "footer": {
-      "tagline": "Your private teaching workspace",
-      "groups": {
-        "product": "Product",
-        "account": "Account"
-      },
-      "rights": "© {year} Kashkol."
     },
     "pricing": {
-      "eyebrow": "Kashkol Subscription",
-      "title": "One price. Everything included.",
-      "subtitle": "One clear price, no hidden fees or extra charges. Subscribe and run your classes professionally.",
-      "price": "249",
+      "eyebrow": "Transparent pricing",
+      "title": "All your tools for one published price.",
+      "subtitle": "One published subscription in the current stage. Payment is a manual transfer, confirmed by the Kashkol team before activation.",
+      "planName": "Professional Educator Plan",
+      "planNote": "All available features for your students and groups within workspace limits",
+      "badge": "Full suite",
+      "amount": "249",
       "currency": "EGP",
       "period": "per month",
-      "planName": "All-in-One Teacher Plan",
-      "features": {
-        "attendance": "Student attendance tracking & instant QR scanner",
-        "homework": "Homework grading, exams & academic progress",
-        "portal": "Dedicated student & parent mobile portal",
-        "files": "Secure study material & PDF library per group",
-        "team": "Safe role-based permissions for assistants"
+      "clarity": "Payment is a manual InstaPay transfer. Kashkol does not detect transfers automatically and does not activate an account automatically.",
+      "cta": "Start with Kashkol",
+      "note": "No automatic card charge.",
+      "paymentNote": "Payment instructions appear on the subscribe page after you create your account.",
+      "items": [
+        "Students and groups in your workspace",
+        "Roster and QR attendance check-in",
+        "Homework, exams and grade records",
+        "Flags for students who need follow-up",
+        "Assistants with precise permissions",
+        "Reports built from your records",
+        "Arabic and English interface"
+      ]
+    },
+    "faq": {
+      "eyebrow": "Honest answers",
+      "title": "Frequently asked questions",
+      "subtitle": "What you need to know before you start with Kashkol",
+      "items": {
+        "audience": {
+          "question": "Who is Kashkol built for?",
+          "answer": "Kashkol is built for independent Egyptian teachers and private tutors — in a center, a private office or online — whether you teach a small group or a large roster."
+        },
+        "start": {
+          "question": "How do I get started?",
+          "answer": "Create an account with your email, then add students or import an Excel sheet. After sign-up you will see the subscribe page with manual payment instructions; no amount is charged automatically."
+        },
+        "safety": {
+          "question": "Are my data and my students' data secure?",
+          "answer": "Every query runs inside your workspace and permissions are checked on the server. A guardian or assistant sees student data only through an explicit link or granted permission. Data is not sold or used for advertising."
+        },
+        "mobile": {
+          "question": "Can I use Kashkol on my phone?",
+          "answer": "Yes. The interface is responsive on phones, tablets and desktops, and the app can be installed from the browser. No heavy app download is required."
+        }
+      }
+    },
+    "finalCta": {
+      "eyebrow": "One step toward a simpler routine",
+      "title": "Keep your energy for teaching, not paperwork.",
+      "body": "Create your workspace, add your students and run your day from one place.",
+      "primaryCta": "Start with Kashkol",
+      "secondaryCta": "See how it works",
+      "notes": [
+        "Arabic and English",
+        "Numbers from your records",
+        "Workspace-isolated data"
+      ]
+    },
+    "mobileCta": {
+      "label": "249 EGP / month",
+      "sublabel": "Manually confirmed subscription",
+      "cta": "Start now"
+    },
+    "footer": {
+      "tagline": "A workspace for independent teachers in Egypt: students, sessions, attendance, grades and files in one place.",
+      "groups": {
+        "product": "Platform",
+        "account": "Get started"
       },
-      "ctaButton": "Create account & get started",
-      "note": "Payment and subscription activation details appear when creating your account."
+      "rights": "© {year} Kashkol. All rights reserved."
     }
   },
   "Common": {
