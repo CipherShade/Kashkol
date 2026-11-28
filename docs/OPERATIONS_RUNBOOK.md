@@ -11,6 +11,28 @@ is verified today and what is not — it does not claim verification that has no
 > retention) plus a monthly restore drill whose result is recorded. This runbook covers the
 > database side and the drill, and records the gaps that remain on the file-storage side.
 
+> **Billing note (2026-11-28, `ADR-0045`–`ADR-0048`):** the logical backup and restore path below
+> covers the new platform billing tables in the same way as every other tenant table. Five billing
+> migrations extend the migration sequence: `20261127010000_usage_based_platform_billing` (tables,
+> forced RLS, append-only triggers, and grants),
+> `20261127020000_billing_idempotency_and_review_state` (submission/review idempotency and the
+> `under_review` action), `20261128010000_billing_remediation` (signed corrections, invoice credits
+> and reference events), `20261128020000_billing_exemption_revocation_and_review_state`
+> (revocation and review state), and `20261128030000_billing_evidence_file_scope_check` (the
+> readiness marker and `file_scope_check` repair). They must be applied in that order. Append-only
+> billing rows, including `billing_invoice_credit`, are retained by restore rather than overwritten.
+> The versioned, append-only `billing_config` is global data, not a secret environment variable;
+> the active version is chosen by the highest `version`, and a change is a new row, never an in-place
+> update. Billing cycles are triggered by an authenticated platform administrator, so no new worker
+> token or cron credential is introduced. Optional billing evidence files live in the private file
+> store under `file.scope = 'billing_evidence'`; they are scanned, streamed by the authenticated
+> platform-admin evidence route (no bearer URL), and excluded from generic file access. Evidence is
+> review material, never proof of a transfer, and its retention window remains unspecified — no
+> window is invented here. The operational payment instructions, including the designated WhatsApp
+> number `+201004574178`, are recorded in `SUPPORT_RUNBOOK.md` and the teacher billing UI
+> (`ADR-0051`). The dated drill figures below are historical measurements and were taken before the
+> billing migrations.
+
 ---
 
 ## 1. Backup model
@@ -210,7 +232,9 @@ Be precise about what is not done. Deleting items is not resolving them.
   with 35-day retention — a separate concern (`IN-2`), typically S3 replication + lifecycle, not a
   PostgreSQL feature. The recommended configuration is a cross-bucket replication rule with a
   35-day lifecycle on the destination, verified by restoring into a scratch bucket. It has not
-  been configured or tested in this environment.
+  been configured or tested in this environment. This includes optional billing evidence files
+  (`file.scope = 'billing_evidence'`); the approved payment process is recorded in `ADR-0051`, but
+  no evidence retention window was specified and none is decided here.
 - **S3 sink for the logical archive** (`BACKUP_STORE_DRIVER=s3`) is implemented
   (`scripts/backup-db.mjs`; bucket `BACKUP_S3_BUCKET`, prefix `backups/<prefix>/`, AES256 SSE,
   manifest sidecar) but has **not** been exercised against a real bucket here. Before production

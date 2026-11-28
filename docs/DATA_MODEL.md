@@ -115,10 +115,26 @@ erDiagram
     GROUP ||--o{ VIDEO_ASSET : attaches
     WORKSPACE ||--o{ BREAK_GLASS_GRANT : grants
     BREAK_GLASS_GRANT }o--|| PLATFORM_ADMIN : held_by
-    WORKSPACE ||--o| SUBSCRIPTION : has
+    WORKSPACE ||--o| BILLING_STATE : tracks
+    WORKSPACE ||--o{ BILLING_EXEMPTION : exempts
+    WORKSPACE ||--o{ BILLING_USAGE_SNAPSHOT : accumulates
+    BILLING_USAGE_SNAPSHOT ||--o{ BILLING_USAGE_STUDENT : lists
+    WORKSPACE ||--o{ BILLING_LEDGER_ENTRY : records
+    WORKSPACE ||--o{ BILLING_INVOICE : invoices
+    BILLING_INVOICE ||--o{ BILLING_INVOICE_LINE_ITEM : contains
+    BILLING_INVOICE_LINE_ITEM }o--|| BILLING_LEDGER_ENTRY : allocates
+    WORKSPACE ||--o{ BILLING_SUBMISSION : pays
+    BILLING_INVOICE ||--o{ BILLING_SUBMISSION : targets
+    BILLING_SUBMISSION ||--o{ BILLING_REVIEW_EVENT : reviews
     WORKSPACE ||--o{ ACADEMIC_TERM : defines
     STUDENT ||--o| STUDENT_MERGE : tombstone
 ```
+
+The billing entities are **implemented in M3b** (`ADR-0045`, `ADR-0047`), not reserved. Legacy
+workspace subscription billing is superseded and retired: no `subscription` table, provider ids, or
+webhook-driven plan state exists. The legacy `workspace.plan_*` columns remain as platform metadata
+only and never gate access (`ADR-0046`). `billing_config` is global and append-only; every tenant
+billing table is scoped by `workspace_id` and protected by forced RLS.
 
 ---
 
@@ -780,7 +796,7 @@ nullable. The checklist is server-side so it survives devices (`F1` step 7).
 | `online_exam_attempt`, `online_exam_response` | **Implemented (`F-P3-01`)** — Authenticated student attempts (`in_progress` → `submitted` → `graded`, or `in_progress` → `expired` when the deadline passes without submission; expired attempts still count toward `max_attempts`), `auto_score`, `manual_score`, `total_score`, per-question answers, deterministic evaluation, and teacher feedback under forced RLS |
 | `break_glass_grant` | Reserved — Ticket reference, reason, actor, expiry (default 1 h) |
 | `platform_admin`, `platform_audit_event` | Reserved — Platform operators and their own log |
-| `subscription` | Reserved — Plan, state, provider ids — webhook-driven |
+| `billing_config`, `billing_config_idempotency`, `workspace_billing_state`, `billing_exemption`, `billing_usage_snapshot`, `billing_usage_student`, `billing_ledger_entry`, `billing_invoice`, `billing_invoice_line_item`, `billing_invoice_credit`, `billing_payment_submission`, `billing_review_event`, `billing_reference_fingerprint`, `billing_reference_event` | **Implemented (`F-P3-04`, `ADR-0045`, `ADR-0047`, `ADR-0048`, `ADR-0049`)** — usage-based platform billing in migrations `20261127010000_usage_based_platform_billing`, `20261127020000_billing_idempotency_and_review_state`, `20261128010000_billing_remediation`, `20261128020000_billing_exemption_revocation_and_review_state`, `20261128030000_billing_evidence_file_scope_check`, and `20261128040000_billing_second_audit_followup`; see §5.12. The reserved webhook-driven `subscription` table is superseded and retired. |
 | `academic_term` | **Implemented (`F-P3-07` AC-1, terms only)** — `name`, nullable `grade` (null = workspace-wide; a grade-specific term overrides it for that grade), `start_date` and `end_date` with a `>=` check, forced RLS and tenant policy (`ADR-0033`) |
 | `student_merge` | Reserved — Merge record with both original ids (the tombstone on `student.merged_into_id` is the row) |
 
@@ -809,6 +825,42 @@ and forced row-level security. A submission with an identity mismatch against it
 rejected, and an answer to a hidden conditional question is discarded rather than stored. The data
 model deliberately adds **no** parallel student or user table.
 
+### 5.12 Platform billing tables (`F-P3-04`, `ADR-0045`, `ADR-0047`–`ADR-0051`)
+
+These tables implement the approved usage-based platform fee. They are separate from `payment`, the
+owner-only collected session receipt (`ADR-0041`, `ADR-0043`). All amounts are integer piastres in
+`EGP`; there is no floating-point money value and no card, gateway, or provider field.
+
+| Table | Purpose |
+|---|---|
+| `billing_config` | Global, append-only version rows. Columns: `version` (unique, highest version authoritative), `rate_minor`, `minimum_invoice_minor`, `currency`, `billing_timezone` (`Africa/Cairo`), `instapay_handle`, `instapay_link`, nullable `qr_storage_key`, `is_active`, `effective_at`, `created_by`, `created_at`. Defaults: 99 piastres per qualifying student and a 5000-piastre invoice threshold. Read outside tenant transactions; never carries tenant content. Links must be absolute HTTPS URLs. A retried logical change returns the original version via `billing_config_idempotency` instead of appending duplicate rows. |
+| `billing_config_idempotency` | Global append-only replay guard (`ADR-0049`). Columns: `key` (primary key: SHA-256 of the parsed content and coded reason), `config_id` (unique reference to the immutable `billing_config` version), `created_at`. A retry after an ambiguous outcome returns the original immutable version; different content appends a new version. |
+| `workspace_billing_state` | One row per workspace: `activation_month`, `activated_at`, `activated_by`. The first billable Cairo calendar month is never backdated; attendance before it is never charged. |
+| `billing_exemption` | Time-bounded exemption (`ADR-0047`, `ADR-0048`): `reason`, optional internal `notes`, `start_date`, optional `expires_on`, `status` (`scheduled` / `active` / `expired` / `revoked`), nullable `revoked_on`, `created_by_admin_id`, `modified_by_admin_id`. A GiST exclusion constraint prevents overlapping non-revoked periods. An exempt workspace stays fully functional and non-billable; expiry and revocation never bill past months retroactively. A retroactive exemption appends signed compensation instead of rewriting history. |
+| `billing_usage_snapshot` | Immutable monthly usage version: `period_month`, `version`, `rate_minor`, `config_version`, `qualifying_student_count`, `charge_minor`, `billable`, `computed_at`, `created_by`. Unique per `(workspace_id, period_month, version)`. |
+| `billing_usage_student` | One qualifying student per snapshot: `student_id` and the `mark_ids` in the rolling window that established qualification (`ADR-0051`). No student name, phone, or note is copied into billing. Two `present`/`late` marks on non-cancelled sessions must fall within 30 × 24 elapsed hours that include a session in the billed Cairo month; `absent`, `excused`, cancelled sessions, and duplicates do not count. Attendance history is read without filtering student status, so archival or deletion attempts cannot erase an earned charge. Group and independent sessions both count. |
+| `billing_ledger_entry` | Append-only entries: `entry_type`, `direction`, `amount_minor`, `period_month`, `snapshot_version`, opaque `student_id`, `source_type`, `source_id`, `idempotency_key`, `created_by`. Records usage charges, signed adjustments, invoice allocations, `exemption_reversal`, `invoice_credit`, payment credits, and `payment_reversal` entries. |
+| `billing_invoice` | Immutable issued invoice: `number`, `cycle_key`, `total_minor`, `issued_at`, `config_version`, `threshold_minor_at_issue`, `created_by`. Payment and credit state are derived from ledger records, not stored on the invoice. |
+| `billing_invoice_line_item` | Immutable allocation of ledger entries to an invoice: `invoice_id`, `ledger_entry_id`, `amount_minor`, `position`. Corrections produce new ledger entries, never a rewritten invoice. |
+| `billing_invoice_credit` | Immutable application of a signed credit ledger entry to an issued invoice: `invoice_id`, `ledger_entry_id`, `amount_minor`, `reason_code`, `source_type`, `source_id`, `idempotency_key`, `created_by`, `created_at`. Credits are allocated oldest-first; any remainder is available credit. Neither the invoice total nor its line items change. |
+| `billing_payment_submission` | Owner-submitted manual InstaPay transfer: `invoice_id`, `reference_raw`, `reference_fingerprint`, `amount_minor`, `transferred_at`, `status` (`submitted` / `under_review` / `approved` / `rejected` / `flagged`), optional `evidence_file_id`, `submitted_by`, `submitted_at`, `idempotency_key`, action-specific `review_idempotency_key`, `review_action`, reviewer and coded review-note fields, and nullable `reversed_at` / `reversal_reason_code`. Submission never confirms payment; `under_review` grants no credit. |
+| `billing_review_event` | Append-only admin decision history: `submission_id`, `action` (`under_review` / `approved` / `rejected` / `flagged`), `note_code`, actor snapshot, and a link to the platform audit event. The same idempotency key replays only for the same submission and action. |
+| `billing_reference_fingerprint` | Platform-wide current-state registry holding only a SHA-256 fingerprint, `workspace_id`, `submission_id`, `status` (`active` / `revoked`), revocation metadata, and `created_at`. No raw reference or personal data is stored here. A released reference can be reclaimed by a later approved submission. |
+| `billing_reference_event` | Append-only global history of `claimed`, `released`, and `reclaimed` reference transitions. It stores the fingerprint, opaque workspace/submission ids, actor id, coded reason, and timestamp; never the raw reference. |
+
+`billing_config`, `billing_reference_fingerprint`, and `billing_reference_event` are global by
+design: the registry must check duplicates across tenants, and the event log carries no reference
+text or tenant content. The other eleven billing tables are tenant-scoped: non-null `workspace_id`,
+tenant indexes, composite workspace foreign keys where a row references another billing row, forced
+RLS, and application-role grants. Database triggers reject `UPDATE`/`DELETE` on append-only billing
+records; only `billing_exemption` and `billing_payment_submission` have controlled update paths, and
+the reference registry has a narrow release/reclaim path. A signed admin adjustment appends a ledger
+entry; it never rewrites an invoice, snapshot, or previous ledger entry. Optional evidence is
+stored through the existing file-storage adapter with `file.scope = 'billing_evidence'`, scanned,
+streamed by the authenticated platform-admin route, and excluded from generic file access. The
+`file_scope_check` constraint was extended in a forward-only migration so the enum value is usable.
+Evidence is for review, never proof of a transfer, and a view audit event is written only after the
+stored bytes were read successfully (`ADR-0050`).
 
 ---
 
@@ -841,7 +893,9 @@ another request.
 **Tenant table registry.** The registry is the explicit list of tenant tables, used by the CI check,
 the isolation-matrix generator, and the export job. It is a single module
 (`src/lib/db/tenant-tables.ts`) that exports the table names, and the CI check asserts that the
-registry, the Prisma schema, and the database agree.
+registry, the Prisma schema, and the database agree. The eleven tenant billing tables listed in
+§5.12 are in this registry; the global `billing_config`, `billing_reference_fingerprint`, and
+`billing_reference_event` are not.
 
 ---
 
@@ -986,6 +1040,15 @@ or private follow-up notes (`F27`).
 | `portal_login` | `portal_user_id` unique, `(username_phone)` | Sign-in candidate lookup by phone (bounded scan; password disambiguates) |
 | `portal_invitation` | `token_hash` unique, `(workspace_id, student_id, kind)`, `(workspace_id, invited_email)` | Single-use token lookup and student portal-access listing |
 | `portal_push_subscription` | `(workspace_id, user_id, endpoint)` unique, `(workspace_id, user_id, revoked_at)` | Active Web Push device subscriptions per portal user |
+| `billing_usage_snapshot` | `(workspace_id, period_month, version)` unique, `(workspace_id, period_month)` | Immutable monthly usage versions |
+| `billing_usage_student` | `(workspace_id, period_month, version, student_id)` unique, `(workspace_id, snapshot_id)` | One qualifying student per snapshot |
+| `billing_ledger_entry` | `(workspace_id, idempotency_key)` unique, `(workspace_id, entry_type, created_at)`, `(workspace_id, period_month)` | Idempotent append-only ledger and balance projection |
+| `billing_invoice` | `(workspace_id, number)` unique, `(workspace_id, cycle_key)` unique, `(workspace_id, issued_at)` | Immutable invoice lookup and cycle idempotency |
+| `billing_invoice_line_item` | `(invoice_id, ledger_entry_id)` unique, `(workspace_id, invoice_id)` | Immutable invoice-to-ledger allocation |
+| `billing_payment_submission` | `(workspace_id, idempotency_key)` unique, `(workspace_id, review_idempotency_key)` unique, `(workspace_id, invoice_id, reference_fingerprint)` unique, `(workspace_id, status)`, `(workspace_id, invoice_id)`, `(workspace_id, reference_fingerprint)` | Retry-safe submission and review; duplicate transfer-reference detection |
+| `billing_review_event` | `(workspace_id, submission_id)` | Ordered admin review history |
+| `billing_config` | `version` unique, `(version)` | Highest version is authoritative; append-only |
+| `billing_reference_fingerprint` | fingerprint PK, `(workspace_id)` | Platform-wide duplicate-reference check without raw references |
 
 Full-text search for `F-P1-13` is a **M1 scope decision** (`OQ-07` default (b): students + groups).
 Case-insensitive and diacritic-insensitive matching over Arabic names uses `ILIKE` with a
@@ -1020,6 +1083,8 @@ migration; the deploying role must be allowed to install the extension.
 | Session cookies / tokens | Rotated on privilege change; never logged | §9 |
 | File objects | Removed within a bounded window after deletion, verified by `storage.reconcile` | `F-P0-08` AC-5 |
 | Notification records | 12 months | House rule; not specified, recorded here to avoid drift |
+| Platform billing records (snapshots, ledger, invoices, submissions, review events, exemptions) | Append-only where marked; retained with the workspace. Corrections append new entries and never rewrite an invoice, snapshot, or earlier ledger entry. No hard-delete window is invented here. | `ADR-0014`, `ADR-0045`, `ADR-0047` |
+| Billing evidence files | Stored through the file-storage adapter, scanned, and streamed by the authenticated admin route only during review; no bearer URL is issued. A screenshot is evidence, not proof of a transfer. The approved payment process is recorded in `ADR-0051`, but no retention window was specified and none is decided here. | `ADR-0045`, `ADR-0047`, `ADR-0050`, `ADR-0051` |
 
 The hard-delete path is a **job**, not a request handler: it runs in the background, records its
 state in `deletion_request`, and is idempotent on retry (`F-P1-14` AC-4, `F-P0-08` AC-3).
@@ -1107,6 +1172,11 @@ consolidated form rather than one directory per row above:
 | `20261124000000_notification_rule_config` | Adds `workspace_settings.notification_rule_config` (JSONB: five rule switches, cooldown, private digest cursor) and the `payment_overdue` value to `notification_type` (`F-P2-07`, `ADR-0038`). `ADR-0041` superseded the payment rule; `ADR-0043` physically removed the value and keys. |
 | `20261125000000_workspace_archive_jobs` | Adds the tenant-scoped `workspace_archive_job` table with kind/status enums, RLS, grants, and its worker-drain index (`F-P2-11`, `ADR-0039`) |
 | `20261125010000_legacy_money_storage_removal` | Drops `payment_adjustment`, `fee_rule`, `payment_revision`, and their enum; deletes non-session and voided receipts; makes `payment.session_id` non-null; drops legacy payment/group columns and indexes; deletes `payment_overdue` rows and `payments` grants; rewrites the notification/permission enums and the report-export type check (`ADR-0043`) |
+| `20261127010000_usage_based_platform_billing` | Adds the platform billing tables (§5.12), their enums and `billing_evidence` file scope, notification types, forced RLS and tenant policies, append-only triggers, and application-role grants (`ADR-0045`, `ADR-0047`) |
+| `20261127020000_billing_idempotency_and_review_state` | Adds submission and review idempotency columns and indexes, and the `under_review` review action; no credit is granted in this state (`ADR-0045`) |
+| `20261128010000_billing_remediation` | Adds signed correction entry types, `billing_invoice_credit`, action-specific review idempotency, reference status/revocation fields, and the append-only `billing_reference_event` table with RLS, triggers, indexes and grants (`ADR-0048`) |
+| `20261128020000_billing_exemption_revocation_and_review_state` | Adds exemption `revoked_on`, submission `review_action`, forward-only overlap prevention, and the scoped review/readiness state required by the remediation (`ADR-0048`) |
+| `20261128030000_billing_evidence_file_scope_check` | Extends `file_scope_check` so `billing_evidence` files can be stored; the enum value was added earlier but the check constraint still rejected it (`ADR-0048`) |
 
 The current local development database tracks all migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
@@ -1128,7 +1198,10 @@ Run in CI and after every production migration.
 | Phone integrity | Every `phone_e164` matches `^\+[1-9]\d{6,14}$` |
 | No delivery claims | The `message_state` enum has no member matching `sent`, `delivered`, or `read` |
 | Audit integrity | `audit_event` rows exist for every mutating service path exercised by the test suite |
-| Isolation | The generated cross-tenant matrix passes |
+| Billing append-only | `UPDATE`/`DELETE` are refused by trigger on billing config, snapshots, line items, invoices, ledger entries, review events, and the fingerprint registry; exemptions and submissions change only through controlled paths |
+| Billing arithmetic | Every usage charge is `qualifying_student_count * rate_minor` from the referenced config version; every invoice total equals the sum of its line items; balances carry forward below the threshold |
+| Billing idempotency | One submission per `(workspace_id, idempotency_key)` and one review per `(workspace_id, review_idempotency_key)`; a reference fingerprint cannot credit two submissions |
+| Isolation | The generated cross-tenant matrix passes, including the nine tenant billing tables |
 
 ---
 
@@ -1142,3 +1215,5 @@ Run in CI and after every production migration.
 | DMR-4 | Arabic search behaves badly without normalisation | A normalised `search_key` column; a deliberate, conservative fold (`OQ-07`) |
 | DMR-5 | RLS transaction-per-read hurts list performance | Measured in M0 against the 1,000-student fixture before the M1 gate; the fallback is documented in `ARCHITECTURE.md` §23 AR-3 |
 | DMR-6 | `deletion_request` hard-deletes audit rows that a legal hold requires | The audit retention window is a parameter of the deletion job, not a hard-coded constant; the legal review owns the value |
+| DMR-7 | A manual InstaPay reference is duplicated, mistyped, or submitted with evidence that does not prove the transfer | Fingerprint and idempotency constraints, exact amount equality, `under_review` with no credit, append-only review events, and evidence labelled as non-proof (`ADR-0045`, `ADR-0047`) |
+| DMR-8 | Exempt usage becomes billable after an exemption expires or is revoked | Exemption state is checked before every snapshot; billing starts only from the first uncovered Cairo month; historical exempt months are never pulled into a billable period (`ADR-0047`) |

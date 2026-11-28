@@ -100,6 +100,49 @@ describe("tenant isolation against PostgreSQL RLS", () => {
     ).rejects.toThrow();
   });
 
+  it("isolates billing ledger rows and keeps them append-only", async () => {
+    const entryId = randomUUID();
+    const idempotencyKey = `isolation-${entryId}`;
+    await withScope({ workspaceId: NILE }, (tx) =>
+      tx.billingLedgerEntry.create({
+        data: {
+          id: entryId,
+          workspaceId: NILE,
+          entryType: "adjustment",
+          direction: "debit",
+          amountMinor: 99,
+          currency: "EGP",
+          sourceType: "isolation_test",
+          sourceId: entryId,
+          idempotencyKey,
+          createdAt: new Date(),
+          createdBy: "test:isolation",
+        },
+      }),
+    );
+    const crossTenant = await withScope({ workspaceId: DELTA }, (tx) =>
+      tx.billingLedgerEntry.findUnique({
+        where: {
+          workspaceId_idempotencyKey: { workspaceId: NILE, idempotencyKey },
+        },
+        select: { id: true },
+      }),
+    );
+    expect(crossTenant).toBeNull();
+
+    await expect(
+      withScope({ workspaceId: NILE }, async (tx) => {
+        const entry = await tx.billingLedgerEntry.findUniqueOrThrow({
+          where: { workspaceId_id: { workspaceId: NILE, id: entryId } },
+        });
+        await tx.billingLedgerEntry.update({
+          where: { id: entry.id },
+          data: { amountMinor: 100 },
+        });
+      }),
+    ).rejects.toThrow();
+  });
+
   it("reads a workspace through the tenancy service without exposing another", async () => {
     const ownerScope = {
       workspaceId: NILE,

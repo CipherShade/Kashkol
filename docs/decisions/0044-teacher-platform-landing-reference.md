@@ -6,6 +6,14 @@
 - **Scope:** M0 public landing page
 - **Related:** `NF-1`, `NF-11`, `NF-12`, `ADR-0035`, `ADR-0036`, `ADR-0042`, `STATUS.md` § 5.16
 
+> **Annotation (2026-11-27):** Superseded in part by `ADR-0045` and `ADR-0046`. The 249 EGP/month
+> price was a fact when this decision was made; it is no longer current, and `/subscribe` has been
+> removed. The landing now states that teacher accounts are free with unlimited students and that
+> usage billing is 0.99 EGP per qualifying student per Cairo calendar month. **Annotation
+> (2026-11-28):** `ADR-0051` refined qualification to two qualifying sessions inside a rolling
+> 30-day period that includes the billed Cairo month; the per-month charge and the visual direction
+> remain unchanged. The sample-data labelling below remains in force.
+
 ---
 
 ## Context
@@ -22,6 +30,8 @@ delivery language. Publishing those would violate `NF-1` (no fabricated statisti
 placeholder capability), and `NF-12` (no seeded demo content presented as real). The single published
 price of 249 EGP/month is different: it is already rendered by `/subscribe` from
 `Auth.subscription.price` (`ADR-0036`), so it is a fact and may be repeated.
+> Annotation (2026-11-27): superseded in part by `ADR-0045`/`ADR-0046`. This price is no longer a
+> current fact; `/subscribe` is removed and sign-up goes to sign-in or email verification.
 
 `ADR-0035` defines the token layer and RTL-first visual language. No new dependency is needed to
 reproduce the reference: the mock panels are CSS and inline SVG built from existing tokens and
@@ -41,11 +51,16 @@ logical properties.
 3. **Keep the real price and real routes.** The pricing card shows 249 EGP/month, states that payment
    is a manual InstaPay transfer confirmed by the Kashkol team, and links only to the existing
    `/sign-up`, `/sign-in`, and `/app` routes. No card charge or automatic activation is claimed.
+   > Annotation (2026-11-27): superseded in part by `ADR-0045`/`ADR-0046`. The published price is now
+   > 0.99 EGP per qualifying student per Cairo calendar month, with free and unlimited teacher
+   > access; `/subscribe` is removed. No card charge or automatic detection is still claimed.
 4. **Reuse the established design system.** `src/lib/landing/content.ts` owns the section registry;
    `messages/{ar,en}.json` own all visible strings; `src/styles/landing.css` gains a `landing-v2-*`
    layer built only from existing tokens, with no physical direction properties and no new package.
 5. **Lock it with tests.** Unit tests assert section order, catalogue parity, sample-data labels,
-   the 249 EGP price, the absence of rejected claims, and responsive CSS hooks. Existing token
+   the 249 EGP price, the absence of rejected claims, and responsive CSS hooks.
+   Annotation (2026-11-27): superseded in part by `ADR-0045`/`ADR-0046`; the current assertion is the
+   0.99 EGP usage rate and the absence of subscription claims. Existing token
    contrast assertions continue to run unchanged.
 
 ---
@@ -72,6 +87,8 @@ logical properties.
 
 - `/ar` and `/en` remain the only indexable routes; `/{locale}/status` remains private (`ADR-0042`).
 - Platform billing and workspace finance are untouched (`ADR-0036`).
+  Annotation (2026-11-27): superseded in part by `ADR-0045`/`ADR-0046`; platform billing now has its
+  own usage ledger, manual verification, and billing pages.
 
 ---
 

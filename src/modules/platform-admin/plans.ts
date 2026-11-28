@@ -15,6 +15,16 @@ export type WorkspacePlanStatus = (typeof WORKSPACE_PLAN_STATUSES)[number];
 export const WORKSPACE_ACCOUNT_STATUSES = ["active", "suspended", "deleted"] as const;
 export type WorkspaceAccountStatus = (typeof WORKSPACE_ACCOUNT_STATUSES)[number];
 
+/**
+ * Sentinel used by the descriptive plan metadata. It is not a quota: enforcement
+ * ignores plan limits entirely (ADR-0046).
+ */
+export const UNLIMITED_LIMIT = Number.MAX_SAFE_INTEGER;
+
+export function isUnlimitedLimit(limit: number): boolean {
+  return limit >= UNLIMITED_LIMIT;
+}
+
 export type WorkspacePlanLimits = {
   maxActiveStudents: number;
   maxActiveGroups: number;
@@ -33,105 +43,88 @@ export type WorkspacePlanFeatures = {
 
 export type WorkspacePlanDefinition = {
   tier: WorkspacePlanTier;
-  /**
-   * Manual pilot/contract assignment only (`F-P3-04`).
-   * Online card billing and final retail pricing are intentionally not hardcoded.
-   */
-  billingMode: "manual_pilot";
+  /** Platform metadata only; it no longer controls access (ADR-0045/0046). */
+  billingMode: "usage_billing";
   limits: WorkspacePlanLimits;
   features: WorkspacePlanFeatures;
 };
 
-const MB = 1024 * 1024;
-const GB = 1024 * MB;
+const UNLIMITED_FEATURES: WorkspacePlanFeatures = {
+  onlineExamsEnabled: true,
+  recordedVideosEnabled: true,
+  reportExportsEnabled: true,
+};
 
 /**
- * Centralized workspace plan definitions (`F-P3-04`).
+ * Centralized plan metadata (`F-P3-03`, `F-P3-04`).
  *
- * All feature and usage limits live here rather than being scattered across UI
- * components or route handlers. Per-workspace overrides can adjust any limit or
- * feature gate for specific pilot agreements without code changes.
+ * All teacher workspaces are free and unlimited. Legacy tier names, statuses,
+ * and limit overrides are retained for existing platform history and exports,
+ * but they never gate a write or a feature (ADR-0046).
  */
 export const WORKSPACE_PLAN_DEFINITIONS: Record<WorkspacePlanTier, WorkspacePlanDefinition> = {
   pilot: {
     tier: "pilot",
-    billingMode: "manual_pilot",
+    billingMode: "usage_billing",
     limits: {
-      maxActiveStudents: 150,
-      maxActiveGroups: 12,
-      maxAssistants: 3,
-      maxFileStorageBytes: 500 * MB,
-      maxVideoCount: 25,
-      maxVideoStorageBytes: 2 * GB,
-      maxVideoBandwidthBytesPerMonth: 20 * GB,
+      maxActiveStudents: UNLIMITED_LIMIT,
+      maxActiveGroups: UNLIMITED_LIMIT,
+      maxAssistants: UNLIMITED_LIMIT,
+      maxFileStorageBytes: UNLIMITED_LIMIT,
+      maxVideoCount: UNLIMITED_LIMIT,
+      maxVideoStorageBytes: UNLIMITED_LIMIT,
+      maxVideoBandwidthBytesPerMonth: UNLIMITED_LIMIT,
     },
-    features: {
-      onlineExamsEnabled: true,
-      recordedVideosEnabled: true,
-      reportExportsEnabled: true,
-    },
+    features: UNLIMITED_FEATURES,
   },
   standard: {
     tier: "standard",
-    billingMode: "manual_pilot",
+    billingMode: "usage_billing",
     limits: {
-      maxActiveStudents: 400,
-      maxActiveGroups: 25,
-      maxAssistants: 5,
-      maxFileStorageBytes: 2 * GB,
-      maxVideoCount: 50,
-      maxVideoStorageBytes: 5 * GB,
-      maxVideoBandwidthBytesPerMonth: 50 * GB,
+      maxActiveStudents: UNLIMITED_LIMIT,
+      maxActiveGroups: UNLIMITED_LIMIT,
+      maxAssistants: UNLIMITED_LIMIT,
+      maxFileStorageBytes: UNLIMITED_LIMIT,
+      maxVideoCount: UNLIMITED_LIMIT,
+      maxVideoStorageBytes: UNLIMITED_LIMIT,
+      maxVideoBandwidthBytesPerMonth: UNLIMITED_LIMIT,
     },
-    features: {
-      onlineExamsEnabled: true,
-      recordedVideosEnabled: true,
-      reportExportsEnabled: true,
-    },
+    features: UNLIMITED_FEATURES,
   },
   expanded: {
     tier: "expanded",
-    billingMode: "manual_pilot",
+    billingMode: "usage_billing",
     limits: {
-      maxActiveStudents: 1500,
-      maxActiveGroups: 60,
-      maxAssistants: 15,
-      maxFileStorageBytes: 10 * GB,
-      maxVideoCount: 200,
-      maxVideoStorageBytes: 25 * GB,
-      maxVideoBandwidthBytesPerMonth: 250 * GB,
+      maxActiveStudents: UNLIMITED_LIMIT,
+      maxActiveGroups: UNLIMITED_LIMIT,
+      maxAssistants: UNLIMITED_LIMIT,
+      maxFileStorageBytes: UNLIMITED_LIMIT,
+      maxVideoCount: UNLIMITED_LIMIT,
+      maxVideoStorageBytes: UNLIMITED_LIMIT,
+      maxVideoBandwidthBytesPerMonth: UNLIMITED_LIMIT,
     },
-    features: {
-      onlineExamsEnabled: true,
-      recordedVideosEnabled: true,
-      reportExportsEnabled: true,
-    },
+    features: UNLIMITED_FEATURES,
   },
 };
 
+/**
+ * Legacy override schema. The values are still accepted and stored as platform
+ * metadata for historical agreements; `resolveEffectiveWorkspacePlan` does not
+ * apply them to access control (ADR-0046).
+ */
 export const planLimitOverridesSchema = z
   .object({
     maxActiveStudents: z.number().int().min(1).max(10_000).optional(),
     maxActiveGroups: z.number().int().min(1).max(500).optional(),
     maxAssistants: z.number().int().min(0).max(100).optional(),
-    maxFileStorageBytes: z
-      .number()
-      .int()
-      .min(10 * MB)
-      .max(100 * GB)
-      .optional(),
+    maxFileStorageBytes: z.number().int().min(10 * 1024 * 1024).max(100 * 1024 * 1024 * 1024).optional(),
     maxVideoCount: z.number().int().min(0).max(5_000).optional(),
-    maxVideoStorageBytes: z
-      .number()
-      .int()
-      .min(0)
-      .max(500 * GB)
-      .optional(),
+    maxVideoStorageBytes: z.number().int().min(0).max(500 * 1024 * 1024 * 1024).optional(),
     maxVideoBandwidthBytesPerMonth: z
       .number()
       .int()
       .min(0)
-      .max(5_000 * GB)
+      .max(5_000 * 1024 * 1024 * 1024)
       .optional(),
     onlineExamsEnabled: z.boolean().optional(),
     recordedVideosEnabled: z.boolean().optional(),
@@ -145,15 +138,11 @@ export type EffectiveWorkspacePlan = {
   tier: WorkspacePlanTier;
   planStatus: WorkspacePlanStatus;
   accountStatus: WorkspaceAccountStatus;
-  billingMode: "manual_pilot";
+  billingMode: "usage_billing";
+  /** True for every workspace. Kept explicit so the UI cannot imply a quota. */
+  unlimited: true;
   writesAllowed: boolean;
-  writeRestrictionReason:
-    | null
-    | "workspace_suspended"
-    | "workspace_deleted"
-    | "plan_past_due"
-    | "plan_suspended"
-    | "plan_cancelled";
+  writeRestrictionReason: null | "workspace_suspended" | "workspace_deleted";
   limits: WorkspacePlanLimits;
   features: WorkspacePlanFeatures;
   overrides: PlanLimitOverrides;
@@ -194,64 +183,42 @@ export function resolveEffectiveWorkspacePlan(input: {
   const base = WORKSPACE_PLAN_DEFINITIONS[tier];
   const overrides = parsePlanLimitOverrides(input.planLimitOverrides);
 
-  const limits: WorkspacePlanLimits = {
-    maxActiveStudents: overrides.maxActiveStudents ?? base.limits.maxActiveStudents,
-    maxActiveGroups: overrides.maxActiveGroups ?? base.limits.maxActiveGroups,
-    maxAssistants: overrides.maxAssistants ?? base.limits.maxAssistants,
-    maxFileStorageBytes: overrides.maxFileStorageBytes ?? base.limits.maxFileStorageBytes,
-    maxVideoCount: overrides.maxVideoCount ?? base.limits.maxVideoCount,
-    maxVideoStorageBytes: overrides.maxVideoStorageBytes ?? base.limits.maxVideoStorageBytes,
-    maxVideoBandwidthBytesPerMonth:
-      overrides.maxVideoBandwidthBytesPerMonth ?? base.limits.maxVideoBandwidthBytesPerMonth,
-  };
-
-  const features: WorkspacePlanFeatures = {
-    onlineExamsEnabled: overrides.onlineExamsEnabled ?? base.features.onlineExamsEnabled,
-    recordedVideosEnabled: overrides.recordedVideosEnabled ?? base.features.recordedVideosEnabled,
-    reportExportsEnabled: overrides.reportExportsEnabled ?? base.features.reportExportsEnabled,
-  };
-
   let writeRestrictionReason: EffectiveWorkspacePlan["writeRestrictionReason"] = null;
   if (accountStatus === "deleted") {
     writeRestrictionReason = "workspace_deleted";
   } else if (accountStatus === "suspended") {
     writeRestrictionReason = "workspace_suspended";
-  } else if (planStatus === "suspended") {
-    writeRestrictionReason = "plan_suspended";
-  } else if (planStatus === "past_due") {
-    writeRestrictionReason = "plan_past_due";
-  } else if (planStatus === "cancelled") {
-    writeRestrictionReason = "plan_cancelled";
   }
 
   return {
     tier,
     planStatus,
     accountStatus,
-    billingMode: "manual_pilot",
+    billingMode: "usage_billing",
+    unlimited: true,
     writesAllowed: writeRestrictionReason === null,
     writeRestrictionReason,
-    limits,
-    features,
+    // Legacy overrides are preserved as metadata, never applied to access.
+    limits: { ...base.limits },
+    features: { ...base.features },
     overrides,
   };
 }
 
 export type LimitUtilizationItem = {
   used: number;
-  limit: number;
+  /** `null` means unlimited, not zero and not an unknown quota. */
+  limit: number | null;
   percent: number;
-  state: "ok" | "warning" | "exceeded";
+  state: "ok" | "warning" | "exceeded" | "unlimited";
 };
 
 export function computeLimitUtilization(used: number, limit: number): LimitUtilizationItem {
+  if (isUnlimitedLimit(limit)) {
+    return { used, limit: null, percent: 0, state: "unlimited" };
+  }
   if (limit <= 0) {
-    return {
-      used,
-      limit: 0,
-      percent: used > 0 ? 100 : 0,
-      state: used > 0 ? "exceeded" : "ok",
-    };
+    return { used, limit: 0, percent: used > 0 ? 100 : 0, state: "ok" };
   }
   const percent = Math.min(100, Math.round((used / limit) * 100));
   const state = used >= limit ? "exceeded" : percent >= 80 ? "warning" : "ok";

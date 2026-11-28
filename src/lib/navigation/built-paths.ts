@@ -16,6 +16,7 @@ export const BUILT_APP_PATHS = [
   "/app/homework",
   "/app/assessments",
   "/app/payments",
+  "/app/billing",
   "/app/files",
   "/app/reports",
   "/app/follow-ups",

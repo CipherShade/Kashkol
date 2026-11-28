@@ -15,8 +15,8 @@ phone, and nothing in it lies."*
 |---|---|---|---|
 | **M0 — Foundation** | P0 | Tenancy, auth, i18n/RTL, theming, design system, data model, audit, privacy groundwork, infra | Internal build; the app is not usable by a teacher yet |
 | **M1 — First usable release** | P1 | Dashboard, students, groups, schedule, attendance + corrections, homework, paper grades, parent updates, files, basic reports, search | **Private beta** with a small group of real Egyptian teachers |
-| **M2 — Expansion** | P2 | Assistants + enforced permissions, parent portal, student portal, owner-only collected session receipts, QR attendance, progress & follow-up, notifications, exports | **Public beta**, Arabic-first, with a paid pilot cohort |
-| **M3 — Advanced** | P3 | Online exams, recorded video via external provider, admin console, subscription, scale hardening, printable report cards | **General availability** |
+| **M2 — Expansion** | P2 | Assistants + enforced permissions, parent portal, student portal, owner-only collected session receipts, QR attendance, progress & follow-up, notifications, exports | **Public beta**, Arabic-first, with a free, unlimited cohort — no paid tiers or quotas |
+| **M3 — Advanced** | P3 | Online exams, recorded video via external provider, admin console, usage-based platform billing with a manual InstaPay ledger, scale hardening, printable report cards | **General availability** |
 
 **M3 scope note (2026-11-18, ADR-0033):** `F-P3-07` is delivered **"terms only for now"** — AC-1
 (term definitions) and AC-2 (current-term default and previous-term comparison) only. The printable
@@ -72,7 +72,7 @@ exist".
 
 ### 2.4 Explicitly deferred out of M0
 
-Payments, QR, portals, exams, video, exports, subscriptions, and multi-workspace switching. M0
+Payments, QR, portals, exams, video, exports, platform billing, and multi-workspace switching. M0
 contains **no** user-facing data entry beyond the workspace profile.
 
 ---
@@ -114,7 +114,7 @@ Kashkol shows them is derived from what they entered.
 | Progress/follow-up workflow | M2 | Depends on trustworthy history from M1 |
 | Exports (CSV/XLSX/PDF) | M2 | Needs a job runner and a file-delivery flow |
 | Email digest / push notifications | M2 / M3 | Needs a preferences model |
-| Online exams, video, billing, admin console | M3 | Later phase per the brief / external dependencies |
+| Online exams, video, usage-based platform billing, admin console | M3 | Later phase per the brief; only video and push have external contracts (`ADR-0045`) |
 
 ### 3.3 Exit criteria (M1 gate)
 
@@ -225,8 +225,8 @@ money is tracked.
 ## 5. Milestone M3 — Advanced
 
 **Target duration:** 12+ weeks after M2, and **gated** on the external dependencies below.
-**Outcome:** the longer-tail features from the brief, plus the platform capabilities that a paid
-SaaS needs.
+**Outcome:** the longer-tail features from the brief, plus the platform capability to meter real
+usage and reconcile it manually without paid tiers or feature gates (`ADR-0045`, `ADR-0046`).
 
 ### 5.1 Scope
 
@@ -235,7 +235,7 @@ SaaS needs.
 | F-P3-01 | Online quizzes and exams | None (internal) |
 | F-P3-02 | Recorded video via external provider | **Video provider contract + API** |
 | F-P3-03 | Platform administration console | None |
-| F-P3-04 | Subscription, plan, and billing | **Billing provider contract** |
+| F-P3-04 | Usage-based platform billing (manual InstaPay ledger) | None — admin-triggered cycle; no provider contract, webhook, or new worker token (`ADR-0045`) |
 | F-P3-05 | Scale, performance, reliability hardening | None |
 | F-P3-06 | Rich notification channels | Push provider |
 | F-P3-07 | Advanced reporting and academic-year handling — terms only for now (AC-1–2; AC-3–4 deferred) | None |
@@ -251,9 +251,13 @@ without a third party, M3 is split:
 - **M3a — Internal only:** F-P3-01 (online exams), F-P3-03 (admin console), F-P3-05 (scale),
   F-P3-07 (terms only for now — AC-1–2), F-P3-08 (duplicates), F-P3-09 (forms foundation),
   F-P3-10 (computed performance intelligence).
-- **M3b — Gated on contracts:** F-P3-02 (video), F-P3-04 (billing), F-P3-06 (push). Each starts only
-  when its provider contract and sandbox access exist. **If a contract does not land, that feature does
-  not ship in that release** — it is deferred, and no placeholder is released in its place.
+- **M3b — Gated on contracts:** F-P3-02 (video) and F-P3-06 (push). Each starts only when its provider
+  contract and sandbox access exist. **If a contract does not land, that feature does not ship in that
+  release** — it is deferred, and no placeholder is released in its place.
+- **M3b — Not contract-gated:** F-P3-04 (usage-based platform billing). The platform admin triggers
+  the cycle; teachers submit manual InstaPay references and an admin verifies them. No provider,
+  card data, webhook, automatic detection, or new production worker token/config is introduced
+  (`ADR-0045`). Sign-up stays free and `/subscribe` is removed (`ADR-0046`).
 
 ### 5.3 Exit criteria (M3 gate — general availability)
 
@@ -263,8 +267,14 @@ without a third party, M3 is split:
    outage degrades to "unavailable" with no broken player.
 3. Admin console: metadata only by default; break-glass grant is time-boxed, bannered in the tenant
    UI, and visible to the workspace owner in their Activity Log.
-4. Billing: subscription state is webhook-driven and idempotent; limits are communicated before being
-   hit; downgrades restrict writes without deleting data.
+4. Billing: the admin-triggered cycle charges 99 piastres per distinct qualifying student per
+   `Africa/Cairo` calendar month from workspace activation, with two qualifying sessions inside a
+   rolling 30-day window that includes the billed month (`ADR-0051`); invoices and line items are
+   immutable, the ledger is append-only and idempotent, and balances below the versioned
+   `5000`-piastre threshold carry forward. Manual InstaPay submissions reach `under_review` without
+   crediting; the screenshot sent to `+201004574178` is evidence only and explicit administrator
+   approval alone credits the ledger. No paid tier, quota, feature gate, or payment-status write
+   block exists (`ADR-0045`–`ADR-0051`).
 5. Scale: budgets hold at 10× the seed dataset; the load test report is attached to the release.
 6. Restore drill and backup verification passed for the release cycle.
 7. Forms: create → edit draft → publish → submit → read responses verified by an integration test;
@@ -406,7 +416,7 @@ for a P0-severity defect, provided an engineering Arabic-literate reviewer signs
 | **Email provider account** | M0 | Days | Signup is blocked without it. Mitigation: choose a provider with a sandbox that needs no commercial approval. |
 | **SMS/OTP provider (Egypt numbers)** | M2 portals | 2–6 weeks, external | Portals fall back to emailed one-time links only. This is a viable M2 scope reduction. |
 | **Video provider contract** | M3b | 4–12 weeks, external | F-P3-02 is deferred; no placeholder is shipped. |
-| **Billing provider contract** | M3b | 4–8 weeks, external | F-P3-04 is deferred; the platform stays in a manual-subscription pilot. |
+| **Billing decisions** (`OQ-23`, `OQ-24`, `OQ-25`) | M3b / billing GA | Closed 2026-11-28 by the product owner | No provider contract is needed. The payment process, rolling two-in-30-days qualification, and the approved credit/reference policy are recorded in `ADR-0051`. Lawyer approval of the payment process is recorded only as reported by the product owner. Bank-specific reference normalization, legal/tax invoice numbering, evidence retention, and an external accountant remain unspecified details and are not claimed as decided. |
 | **Virus scanning** | M1 files | Days | Files stay blocked pending a scanner; the feature can ship disabled. |
 | **Recruitment of beta teachers** | M1 private beta | 2–4 weeks | M1 gate slips; the engineering work is not blocked by this, only the release. |
 | **Native Arabic reviewer availability** | Every release | Ongoing | Blocks the release gate; budget for it explicitly. |
@@ -496,7 +506,7 @@ A requirement is "done" only when **all** of the following hold:
 | F-P3-01 | F23, F24 | M3a | M3 |
 | F-P3-02 | F25 | M3b | M3 |
 | F-P3-03 | F26 | M3a | M3 |
-| F-P3-04 | — | M3b | M3 |
+| F-P3-04 | F28 | M3b | M3 |
 | F-P3-05 | — | M3a | M3 |
 | F-P3-06 | — | M3b | M3 |
 | F-P3-07 (terms only) | — | M3a | M3 |

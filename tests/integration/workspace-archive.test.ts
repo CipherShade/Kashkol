@@ -46,17 +46,46 @@ describe("F-P2-11 workspace backup and restore against PostgreSQL RLS", () => {
   });
 
   it("previews, confirms and restores the exact archived state with an appended audit", async () => {
-    const scope = fixturesScope("Archive");
+    // A disposable workspace keeps the restore bounded and repeatable; a
+    // shared fixture workspace grows across runs and can time out the job.
     const suffix = randomUUID().slice(0, 8);
+    const workspaceId = randomUUID();
+    await withScope({ workspaceId }, async (tx) => {
+      await tx.workspace.create({
+        data: {
+          id: workspaceId,
+          name: `Archive ${suffix}`,
+          slug: `archive-${suffix}`,
+          teachingName: `Archive ${suffix}`,
+          primarySubject: null,
+          gradesTaught: [],
+          status: "active",
+          planTier: "pilot",
+          planStatus: "pilot_active",
+        },
+      });
+      await tx.workspaceSettings.create({
+        data: {
+          workspaceId,
+          atRiskAfter: 2,
+          inactiveAfter: 4,
+          locale: "en",
+          theme: "system",
+          timezone: "Africa/Cairo",
+          currency: "EGP",
+        },
+      });
+    });
+    const scope = { ...fixturesScope("Archive"), workspaceId };
     const group = await withScope(scope, (tx) =>
       tx.group.create({
-        data: { workspaceId: FIXTURES, name: `Archive ${suffix}`, color: "indigo" },
+        data: { workspaceId, name: `Archive ${suffix}`, color: "indigo" },
       }),
     );
-    await createStudent(FIXTURES, "Archive", suffix);
+    await createStudent(workspaceId, "Archive", suffix);
 
-    const tables = await withScope(scope, (tx) => loadTenantRowsTx(tx, FIXTURES));
-    const buffer = Buffer.from(JSON.stringify(envelope(tables)));
+    const tables = await withScope(scope, (tx) => loadTenantRowsTx(tx, workspaceId));
+    const buffer = Buffer.from(JSON.stringify(envelope(tables, workspaceId)));
     const preview = await previewWorkspaceRestore(scope, buffer);
     expect(preview.applicable).toBe(true);
     expect(preview.uploadId).toBeTruthy();
@@ -81,7 +110,7 @@ describe("F-P2-11 workspace backup and restore against PostgreSQL RLS", () => {
     );
     expect(job.status).toBe("queued");
 
-    const results = await processWorkspaceArchiveBatch(FIXTURES, 5);
+    const results = await processWorkspaceArchiveBatch(workspaceId, 5);
     const result = results.find((entry) => entry.jobId === job.id);
     expect(result, `results: ${JSON.stringify(results)}`).toMatchObject({
       status: "succeeded",
@@ -93,7 +122,7 @@ describe("F-P2-11 workspace backup and restore against PostgreSQL RLS", () => {
     );
     expect(restored?.name).toBe(`Archive ${suffix}`);
     const audits = await withScope(scope, (tx) =>
-      tx.auditEvent.count({ where: { workspaceId: FIXTURES, action: "workspace.restored" } }),
+      tx.auditEvent.count({ where: { workspaceId, action: "workspace.restored" } }),
     );
     expect(audits).toBeGreaterThan(0);
   });

@@ -63,6 +63,7 @@ describe("application navigation", () => {
       "/app/team",
       "/app/audit",
       "/app/payments",
+      "/app/billing",
       "/app/settings",
     ]);
     expect(isDevelopmentBuild("production")).toBe(false);
@@ -152,7 +153,11 @@ describe("application navigation", () => {
         expect(fs.existsSync(path.join(appRoot, "files", "page.tsx"))).toBe(true);
         continue;
       }
-      if (href === "/app/reports" || href === "/app/payments") {
+      if (
+        href === "/app/reports" ||
+        href === "/app/payments" ||
+        href === "/app/billing"
+      ) {
         expect(fs.existsSync(path.join(appRoot, href.replace("/app/", ""), "page.tsx"))).toBe(true);
         continue;
       }

@@ -272,6 +272,10 @@ describe("notification architecture - isolation, security and deduplication", ()
       "assessment_pending_grades",
       "backup_ready",
       "export_ready",
+      "billing_invoice_issued",
+      "billing_submission_approved",
+      "billing_submission_rejected",
+      "billing_submission_flagged",
       "general",
     ];
 
@@ -293,6 +297,10 @@ describe("notification architecture - isolation, security and deduplication", ()
       "attendanceAbsent",
       "attendanceLate",
       "attendanceExcused",
+      "billingInvoiceIssued",
+      "billingSubmissionApproved",
+      "billingSubmissionRejected",
+      "billingSubmissionFlagged",
     ];
 
     for (const msg of expectedMessages) {
@@ -413,7 +421,7 @@ describe("notification architecture - isolation, security and deduplication", ()
     expect(dispatchWebPushNotification).not.toHaveBeenCalled();
   });
 
-  it("has no money notification capability in either catalogue", () => {
+  it("has no overdue or debt-reminder notification capability in either catalogue", () => {
     const ar = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "messages/ar.json"), "utf-8"));
     const en = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "messages/en.json"), "utf-8"));
 

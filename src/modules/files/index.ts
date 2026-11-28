@@ -1,13 +1,17 @@
 export {
   archiveMaterial,
+  createBillingEvidence,
   createMaterial,
   deleteMaterial,
+  deleteStoredFile,
   getMaterialDownloadUrl,
   getPortalMaterialDownloadUrl,
   isScannerConfigured,
   isStorageConfigured,
   listMaterials,
+  readStoredFileForDownload,
   scanMaterial,
+  signStoredFileDownload,
   updateMaterial,
 } from "./service";
 export {

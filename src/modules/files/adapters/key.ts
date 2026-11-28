@@ -3,6 +3,7 @@ const FILE_KEY_PATTERN = new RegExp(
   `^ws/${UUID}/(?:` +
     `${UUID}\\.(?:pdf|png|jpg|jpeg|docx|xlsx|pptx)|` +
     `reports/${UUID}\\.(?:csv|xlsx|pdf)|` +
+    `billing-evidence/${UUID}\\.(?:pdf|png|jpg|jpeg)|` +
     `backups/${UUID}\\.json|` +
     `restore-staging/${UUID}\\.json` +
     `)$`,

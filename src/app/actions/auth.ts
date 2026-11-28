@@ -91,8 +91,8 @@ export async function signUpAction(
   }
 
   const env = getServerEnv();
-  // Sign-up never starts a session. Step two is always the payment page; when a
-  // transport is configured, that page also links to email verification.
+  // Sign-up never starts a session. The account is free and unrestricted; the
+  // destination is sign-in, or email verification when a transport is configured.
   const destination = signUpDestination(locale, isEmailConfigured(env));
   try {
     await getAuth().api.signUpEmail({

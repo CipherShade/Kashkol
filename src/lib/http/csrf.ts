@@ -10,8 +10,16 @@ import { AppError } from "@/lib/http/errors";
  * A missing Origin header is accepted only because non-browser callers (health
  * probes, tests, server-to-server requests) do not send one; they cannot ride a
  * victim's cookies, which is what the cookie SameSite protection covers.
+ *
+ * Additional origins must be exact origins set by the operator in
+ * `BETTER_AUTH_TRUSTED_ORIGINS`. Wildcards and URL paths are rejected: a broad
+ * suffix rule would let any third party host a tunnel and pass the check.
  */
-export function assertTrustedOrigin(headers: Headers, baseUrl: string): void {
+export function assertTrustedOrigin(
+  headers: Headers,
+  baseUrl: string,
+  trustedOrigins: string | readonly string[] = process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "",
+): void {
   const origin = headers.get("origin");
   if (!origin) return;
 
@@ -21,20 +29,33 @@ export function assertTrustedOrigin(headers: Headers, baseUrl: string): void {
   } catch {
     throw new AppError("INTERNAL");
   }
-
   if (origin === allowed) return;
 
-  // Allow Cloudflare quick tunnel origins (*.trycloudflare.com)
-  try {
-    const parsed = new URL(origin);
-    if (parsed.protocol === "https:" && parsed.hostname.endsWith(".trycloudflare.com")) {
-      return;
-    }
-  } catch {
-    // Ignore invalid origin
+  for (const configuredOrigin of exactTrustedOrigins(trustedOrigins)) {
+    if (configuredOrigin === origin) return;
   }
 
   throw new AppError("FORBIDDEN", { messageKey: "errors.originRejected" });
+}
+
+/**
+ * Return only exact origins from an operator-supplied list. Wildcards, paths,
+ * and malformed values are ignored rather than trusted.
+ */
+export function exactTrustedOrigins(values: string | readonly string[]): string[] {
+  const entries = typeof values === "string" ? values.split(",") : values;
+  const output: string[] = [];
+  for (const entry of entries) {
+    const value = entry.trim();
+    if (!value) continue;
+    try {
+      const parsed = new URL(value);
+      if (parsed.origin === value) output.push(parsed.origin);
+    } catch {
+      // An invalid configured origin is never trusted.
+    }
+  }
+  return output;
 }
 
 /**

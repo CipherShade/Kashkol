@@ -234,6 +234,71 @@ enum PaymentMethod {
   @@map("payment_method")
 }
 
+enum BillingEntryType {
+  usage_charge
+  adjustment
+  invoice_allocation
+  payment_credit
+  exemption_reversal
+  invoice_credit
+  payment_reversal
+
+  @@map("billing_entry_type")
+}
+
+enum BillingDirection {
+  debit
+  credit
+
+  @@map("billing_direction")
+}
+
+enum BillingSubmissionStatus {
+  submitted
+  under_review
+  approved
+  rejected
+  flagged
+
+  @@map("billing_submission_status")
+}
+
+enum BillingReviewAction {
+  under_review
+  approved
+  rejected
+  flagged
+
+  @@map("billing_review_action")
+}
+
+enum BillingExemptionReason {
+  internal_testing
+  beta_tester
+  testimonial
+  promotional
+  partner
+  custom
+
+  @@map("billing_exemption_reason")
+}
+
+enum BillingExemptionStatus {
+  scheduled
+  active
+  expired
+  revoked
+
+  @@map("billing_exemption_status")
+}
+
+enum BillingReferenceStatus {
+  active
+  revoked
+
+  @@map("billing_reference_status")
+}
+
 enum ReportExportStatus {
   queued
   processing
@@ -265,6 +330,7 @@ enum FileScope {
   students
   form_upload
   homework_submission
+  billing_evidence
 
   @@map("file_scope")
 }
@@ -324,6 +390,10 @@ enum NotificationType {
   assessment_pending_grades
   backup_ready
   export_ready
+  billing_invoice_issued
+  billing_submission_approved
+  billing_submission_rejected
+  billing_submission_flagged
   general
 
   @@map("notification_type")
@@ -705,6 +775,16 @@ model Workspace {
   formAnswerFiles     FormAnswerFile[]
   formUploads         FormUpload[]
   academicTerms       AcademicTerm[]
+  billingState        WorkspaceBillingState?
+  billingExemptions   BillingExemption[]
+  billingUsageSnapshots BillingUsageSnapshot[]
+  billingUsageStudents BillingUsageStudent[]
+  billingLedgerEntries BillingLedgerEntry[]
+  billingInvoices     BillingInvoice[]
+  billingInvoiceLineItems BillingInvoiceLineItem[]
+  billingInvoiceCredits BillingInvoiceCredit[]
+  billingSubmissions  BillingPaymentSubmission[]
+  billingReviewEvents BillingReviewEvent[]
 
   @@map("workspace")
 }
@@ -1692,6 +1772,317 @@ model Payment {
   @@index([workspaceId])
   @@index([workspaceId, sessionId])
   @@map("payment")
+}
+
+// ---------------------------------------------------------------------------
+// Platform billing (ADR-0045, ADR-0047). Separate from collected session receipts.
+// ---------------------------------------------------------------------------
+
+/// Versioned, platform-admin-controlled billing configuration. Append-only.
+model BillingConfig {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  version              Int      @unique
+  rateMinor            Int      @map("rate_minor")
+  minimumInvoiceMinor  Int      @map("minimum_invoice_minor")
+  currency             String   @default("EGP")
+  billingTimezone      String   @default("Africa/Cairo") @map("billing_timezone")
+  instapayHandle       String   @map("instapay_handle")
+  instapayLink         String   @map("instapay_link")
+  qrStorageKey         String?  @map("qr_storage_key")
+  isActive             Boolean  @default(false) @map("is_active")
+  effectiveAt          DateTime @map("effective_at") @db.Timestamptz(6)
+  createdBy            String   @map("created_by")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  idempotency BillingConfigIdempotency?
+
+  @@index([version])
+  @@map("billing_config")
+}
+
+/// Server-derived replay key for one logical config append. Append-only.
+model BillingConfigIdempotency {
+  key       String   @id
+  configId  String   @unique @map("config_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  config BillingConfig @relation(fields: [configId], references: [id], onDelete: Restrict)
+
+  @@map("billing_config_idempotency")
+}
+
+/// A workspace's first billable Cairo month. Created lazily; never backdated.
+model WorkspaceBillingState {
+  workspaceId     String   @id @map("workspace_id") @db.Uuid
+  activationMonth String   @map("activation_month")
+  activatedAt     DateTime @map("activated_at") @db.Timestamptz(6)
+  activatedBy     String   @map("activated_by")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@map("workspace_billing_state")
+}
+
+/// A time-bounded, audited exemption from platform billing (ADR-0047).
+model BillingExemption {
+  id                String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId       String                 @map("workspace_id") @db.Uuid
+  reason            BillingExemptionReason
+  notes             String?
+  startDate         String                 @map("start_date")
+  expiresOn         String?                @map("expires_on")
+  status            BillingExemptionStatus @default(scheduled)
+  revokedOn         DateTime?              @map("revoked_on") @db.Timestamptz(6)
+  createdByAdminId  String                 @map("created_by_admin_id")
+  modifiedByAdminId String                 @map("modified_by_admin_id")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, status, startDate])
+  @@map("billing_exemption")
+}
+
+/// Immutable monthly usage version for one workspace.
+model BillingUsageSnapshot {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  workspaceId           String   @map("workspace_id") @db.Uuid
+  periodMonth           String   @map("period_month")
+  version               Int
+  rateMinor             Int      @map("rate_minor")
+  configVersion         Int      @map("config_version")
+  qualifyingStudentCount Int     @map("qualifying_student_count")
+  chargeMinor           Int      @map("charge_minor")
+  billable              Boolean  @default(true)
+  computedAt            DateTime @map("computed_at") @db.Timestamptz(6)
+  createdBy             String   @map("created_by")
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  students  BillingUsageStudent[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, periodMonth, version])
+  @@index([workspaceId, periodMonth])
+  @@map("billing_usage_snapshot")
+}
+
+/// One qualifying student in one immutable usage snapshot. No personal data copied.
+model BillingUsageStudent {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  snapshotId    String   @map("snapshot_id") @db.Uuid
+  periodMonth   String   @map("period_month")
+  version       Int
+  studentId     String   @map("student_id") @db.Uuid
+  markIds       String[] @map("mark_ids")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  snapshot  BillingUsageSnapshot @relation(fields: [workspaceId, snapshotId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, periodMonth, version, studentId])
+  @@index([workspaceId, snapshotId])
+  @@map("billing_usage_student")
+}
+
+/// Append-only, integer-piastre billing ledger.
+model BillingLedgerEntry {
+  id              String          @id @default(uuid(7)) @db.Uuid
+  workspaceId     String          @map("workspace_id") @db.Uuid
+  entryType       BillingEntryType @map("entry_type")
+  direction       BillingDirection
+  amountMinor     Int             @map("amount_minor")
+  currency        String          @default("EGP")
+  periodMonth     String?         @map("period_month")
+  snapshotVersion Int?            @map("snapshot_version")
+  studentId       String?         @map("student_id") @db.Uuid
+  sourceType      String          @map("source_type")
+  sourceId        String          @map("source_id")
+  idempotencyKey  String          @map("idempotency_key")
+  descriptionKey  String?         @map("description_key")
+  createdAt       DateTime        @map("created_at") @db.Timestamptz(6)
+  createdBy       String          @map("created_by")
+
+  workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invoiceLines   BillingInvoiceLineItem[]
+  invoiceCredits BillingInvoiceCredit[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, entryType, createdAt])
+  @@index([workspaceId, periodMonth])
+  @@index([workspaceId, studentId, periodMonth])
+  @@map("billing_ledger_entry")
+}
+
+/// Immutable issued invoice. Payment state is derived from ledger credits.
+model BillingInvoice {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  workspaceId           String   @map("workspace_id") @db.Uuid
+  number                String
+  cycleKey              String   @map("cycle_key")
+  totalMinor            Int      @map("total_minor")
+  currency              String   @default("EGP")
+  issuedAt              DateTime @map("issued_at") @db.Timestamptz(6)
+  configVersion         Int      @map("config_version")
+  thresholdMinorAtIssue Int      @map("threshold_minor_at_issue")
+  createdBy             String   @map("created_by")
+
+  workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  lineItems      BillingInvoiceLineItem[]
+  invoiceCredits BillingInvoiceCredit[]
+  submissions    BillingPaymentSubmission[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, number])
+  @@unique([workspaceId, cycleKey])
+  @@index([workspaceId, issuedAt])
+  @@map("billing_invoice")
+}
+
+/// Immutable link between an invoice and the ledger entries it consumed.
+model BillingInvoiceLineItem {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  invoiceId      String   @map("invoice_id") @db.Uuid
+  ledgerEntryId  String   @map("ledger_entry_id") @db.Uuid
+  amountMinor    Int      @map("amount_minor")
+  position       Int
+  descriptionKey String?  @map("description_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invoice     BillingInvoice       @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Restrict)
+  ledgerEntry BillingLedgerEntry   @relation(fields: [workspaceId, ledgerEntryId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([invoiceId, ledgerEntryId])
+  @@index([workspaceId, invoiceId])
+  @@map("billing_invoice_line_item")
+}
+
+/// Append-only application of a ledger credit to an issued invoice. The invoice
+/// itself stays immutable; outstanding is reduced by these records.
+model BillingInvoiceCredit {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  invoiceId      String   @map("invoice_id") @db.Uuid
+  ledgerEntryId  String   @map("ledger_entry_id") @db.Uuid
+  amountMinor    Int      @map("amount_minor")
+  reasonCode     String   @map("reason_code")
+  sourceType     String   @map("source_type")
+  sourceId       String   @map("source_id")
+  idempotencyKey String   @map("idempotency_key")
+  createdAt      DateTime @map("created_at") @db.Timestamptz(6)
+  createdBy      String   @map("created_by")
+
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invoice     BillingInvoice     @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Restrict)
+  ledgerEntry BillingLedgerEntry @relation(fields: [workspaceId, ledgerEntryId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([invoiceId, ledgerEntryId])
+  @@index([workspaceId, invoiceId])
+  @@map("billing_invoice_credit")
+}
+
+/// Teacher-submitted manual InstaPay proof. Submission never confirms payment.
+model BillingPaymentSubmission {
+  id                   String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId          String                 @map("workspace_id") @db.Uuid
+  invoiceId            String                 @map("invoice_id") @db.Uuid
+  referenceRaw         String                 @map("reference_raw")
+  referenceFingerprint String                 @map("reference_fingerprint")
+  amountMinor          Int                    @map("amount_minor")
+  currency             String                 @default("EGP")
+  transferredAt        DateTime               @map("transferred_at") @db.Timestamptz(6)
+  status               BillingSubmissionStatus @default(submitted)
+  evidenceFileId       String?                @map("evidence_file_id") @db.Uuid
+  submittedBy          String                 @map("submitted_by")
+  submittedAt          DateTime               @map("submitted_at") @db.Timestamptz(6)
+  /** Stable client key: a retry returns the original submission. */
+  idempotencyKey       String                 @map("idempotency_key")
+  reviewedBy           String?                @map("reviewed_by")
+  reviewedAt           DateTime?              @map("reviewed_at") @db.Timestamptz(6)
+  reviewNoteCode       String?                @map("review_note_code")
+  reviewIdempotencyKey String?                @map("review_idempotency_key")
+  reviewAction         BillingReviewAction?   @map("review_action")
+  reversedAt           DateTime?              @map("reversed_at") @db.Timestamptz(6)
+  reversalReasonCode   String?                @map("reversal_reason_code")
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  invoice      BillingInvoice           @relation(fields: [workspaceId, invoiceId], references: [workspaceId, id], onDelete: Restrict)
+  reviewEvents BillingReviewEvent[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, invoiceId, referenceFingerprint])
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([workspaceId, id, reviewIdempotencyKey, reviewAction], map: "billing_submission_review_idem_action_key")
+  @@index([workspaceId, status])
+  @@index([workspaceId, invoiceId])
+  @@index([workspaceId, referenceFingerprint])
+  @@map("billing_payment_submission")
+}
+
+/// Append-only admin decision history for a payment submission.
+model BillingReviewEvent {
+  id                  String            @id @default(uuid(7)) @db.Uuid
+  workspaceId         String            @map("workspace_id") @db.Uuid
+  submissionId        String            @map("submission_id") @db.Uuid
+  action              BillingReviewAction
+  noteCode            String?           @map("note_code")
+  actorUserId         String            @map("actor_user_id")
+  actorDisplayName    String            @map("actor_display_name")
+  actorType           String            @map("actor_type")
+  platformAuditEventId String?          @map("platform_audit_event_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace  Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  submission BillingPaymentSubmission @relation(fields: [workspaceId, submissionId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, submissionId])
+  @@map("billing_review_event")
+}
+
+/// Platform-wide fingerprint registry. Contains no raw reference or PII.
+model BillingReferenceFingerprint {
+  fingerprint       String                 @id
+  workspaceId       String                 @map("workspace_id") @db.Uuid
+  submissionId      String                 @map("submission_id") @db.Uuid
+  status            BillingReferenceStatus @default(active)
+  revokedAt         DateTime?              @map("revoked_at") @db.Timestamptz(6)
+  revokedBy         String?                @map("revoked_by")
+  revokeReasonCode  String?                @map("revoke_reason_code")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("billing_reference_fingerprint")
+}
+
+/// Append-only global history for a reference fingerprint. It contains only a
+/// keyed hash, workspace and submission IDs, and coded reasons — never a raw
+/// bank reference or personal data.
+model BillingReferenceEvent {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  fingerprint  String   @map("fingerprint")
+  eventType    String   @map("event_type")
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  submissionId String  @map("submission_id") @db.Uuid
+  actorUserId  String?  @map("actor_user_id")
+  reasonCode   String?  @map("reason_code")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([fingerprint, createdAt])
+  @@map("billing_reference_event")
 }
 
 model ReportExport {

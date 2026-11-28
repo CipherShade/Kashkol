@@ -10,8 +10,9 @@ import { LANDING_SECTIONS } from "@/lib/landing/content";
  * The public header. The language and theme switches are the same components
  * the signed-in shell uses, so a visitor's choice carries into the app.
  *
- * There is no separate pricing page — the single subscription is stated in the
- * pricing section — and no help-centre link because no such page exists.
+ * There is no separate pricing or subscription page — free access and the
+ * usage-based fee are stated in the pricing section — and no help-centre link
+ * because no such page exists.
  */
 export async function LandingHeader({
   signedIn,

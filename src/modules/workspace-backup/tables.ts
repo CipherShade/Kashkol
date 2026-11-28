@@ -19,6 +19,19 @@ export const RETAINED_TABLES: ReadonlySet<string> = new Set<string>([
   "assessment",
   "assessment_score",
   "workspace_archive_job",
+  // Platform billing is a separate append-only money domain (ADR-0045/0047).
+  // A workspace restore must never rewrite activation, exemptions, usage,
+  // ledger, invoices, submissions, or review decisions.
+  "workspace_billing_state",
+  "billing_exemption",
+  "billing_usage_snapshot",
+  "billing_usage_student",
+  "billing_ledger_entry",
+  "billing_invoice",
+  "billing_invoice_line_item",
+  "billing_invoice_credit",
+  "billing_payment_submission",
+  "billing_review_event",
 ]);
 
 /** Tables a restore deletes and re-inserts from the archive. */

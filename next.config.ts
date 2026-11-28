@@ -33,13 +33,20 @@ const devOrigins = (() => {
   return origins;
 })();
 
+// Optional build-only override for memory-constrained hosts. It does not change
+// the runtime or the generated application; CI may leave it unset.
+const buildWorkers = Number(process.env.NEXT_BUILD_WORKERS);
+
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
   outputFileTracingRoot: process.cwd(),
   allowedDevOrigins: devOrigins,
-  experimental: { agentUpgrade: "security" },
+  experimental: {
+    agentUpgrade: "security",
+    ...(Number.isInteger(buildWorkers) && buildWorkers > 0 ? { cpus: buildWorkers } : {}),
+  },
   async headers() {
     return [
       {

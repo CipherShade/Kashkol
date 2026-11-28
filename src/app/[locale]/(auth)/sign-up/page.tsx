@@ -11,8 +11,8 @@ import { getStaffGate } from "@/modules/identity/session";
 type PageProps = { params: Promise<{ locale: string }> };
 
 /**
- * Step one of teacher registration. The payment instructions are a separate
- * route (ADR-0036), reached only after this form has created the account.
+ * Teacher registration creates a free, unrestricted account (ADR-0046). No
+ * payment step gates access; usage billing is managed later in /app/billing.
  */
 export default async function SignUpPage({ params }: PageProps) {
   const { locale } = await params;
@@ -38,7 +38,6 @@ export default async function SignUpPage({ params }: PageProps) {
   };
   return (
     <section className="auth-card" aria-labelledby="sign-up-title">
-      <p className="auth-eyebrow">{t("step1Of2")}</p>
       <h2 id="sign-up-title" className="auth-title">
         {t("signUpTitle")}
       </h2>

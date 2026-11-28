@@ -20,6 +20,7 @@ export type AuditInput = {
   diff?: unknown;
   requestId: string;
   ipHash?: string | null;
+  createdAt?: Date;
 };
 
 /**
@@ -40,6 +41,7 @@ export async function writeAuditEvent(tx: AuditTransaction, input: AuditInput): 
     action: input.action,
     requestId: input.requestId,
     ipHash: input.ipHash ?? null,
+    ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt }),
     ...(redacted === undefined ? {} : { diff: redacted }),
   });
 }

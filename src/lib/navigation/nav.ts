@@ -228,6 +228,16 @@ export const NAV_GROUPS: NavGroup[] = [
         ownerOnly: true,
         flow: "F-P2-04",
       },
+      {
+        key: "platformBilling",
+        href: "/app/billing",
+        labelKey: "items.platformBilling",
+        icon: "creditCard",
+        status: "available",
+        milestone: "M3",
+        ownerOnly: true,
+        flow: "F-P3-04",
+      },
     ],
   },
   {

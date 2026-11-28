@@ -38,7 +38,9 @@
 | Follow-up task notes and outcomes | Sensitive | `student_follow_up`, `student_follow_up_event` |
 | Teacher notes | **Highly sensitive** — free text, may contain health or behaviour observations | `note` (a `student` sub-entity) |
 | Files (worksheets, answer keys) | Confidential | `file` metadata plus private object storage; teacher-only answer keys are never shared |
-| Payment records | Sensitive financial | `payment` |
+| Payment records | Sensitive financial | `payment` (owner-only collected session receipts) |
+| Platform billing records | Sensitive financial and metadata | `billing_*` tables; submission references and review state are never logged |
+| Billing evidence files | Sensitive; evidence is not proof | Private file storage, `file.scope = 'billing_evidence'`, excluded from generic file access |
 | Message drafts | Personal | `message_draft` |
 | Audit log | Sensitive | `audit_event` |
 | Platform administrative credentials | Secret | Platform identity provider, not the tenant database |
@@ -87,6 +89,8 @@ flowchart TB
     worker --> mail
     worker --> scan
     admin -.->|"metadata only;<br/>content only via break-glass grant"| db
+    admin -.->|"narrow billing verification metadata only"| billing["billing domain"]
+    billing --> db
 ```
 
 Trust boundaries that matter:
@@ -98,6 +102,7 @@ Trust boundaries that matter:
 | Application → storage | Download | Short-lived signed URL issued after a fresh authorisation check |
 | Application → third party | Email; private scanner service | Server-side only, credentials never in the client; file bytes go only to private-network ClamAV |
 | Platform operator → tenant data | Support access | Break-glass grant: ticket, reason, time-boxed, bannered in the tenant UI, audited |
+| Platform operator → billing | Manual verification and exemption management | Narrow metadata projection, active-admin assertion, scoped transaction, and audit event; no student names, phones, notes, grades, or session receipts (`ADR-0047`) |
 | Tenant → tenant | Any cross-workspace attempt | `404`/`403`, never a row in the body |
 
 ### 2.3 Principal threats and mitigations
@@ -109,7 +114,7 @@ Trust boundaries that matter:
 | Credential stuffing | Rate limiting (5 failed sign-ins / 15 min → lockout), breached-password list, generic error messages | Auth tests |
 | Session theft via XSS | `HttpOnly` + `Secure` + `SameSite=Lax` cookies, `__Host-` prefix, no token in `localStorage` or a URL, strict CSP | Header assertions in tests |
 | Session fixation | Server-side sessions; the session id is regenerated on sign-in | Auth test |
-| Cross-site request forgery | `SameSite=Lax` cookies plus an origin check on every mutating request | CSRF test |
+| Cross-site request forgery | `SameSite=Lax` cookies plus an origin check on every mutating request; only exact configured origins are trusted (`ADR-0050`) | CSRF test |
 | SQL injection | Parameterised queries only; Prisma parameterises; no string-built SQL. The one deliberate raw statement (`set_config`) is parameterised | Lint rule banning template SQL **[CI]** |
 | IDOR by guessing an id | UUIDv7 ids are not sequential; foreign ids return `404` | Isolation matrix |
 | Path traversal in file upload | Storage key is server-generated (`ws/{workspace_id}/{uuid}.{ext}`); the client filename is never used as a path | Upload test |
@@ -121,6 +126,11 @@ Trust boundaries that matter:
 | Denial of service via the attendance write path | Payload limits, rate limits, bounded queries, transaction timeouts | Load test |
 | Teacher-to-teacher harassment through support tooling | No bulk tenant export; break-glass is per-workspace, time-boxed, and bannered | Admin console test |
 | Insider access to a workspace | Metadata-only console; every content read during a grant is logged and visible to the owner | Audit assertion |
+| Billing data visible to an assistant or portal actor | Owner-only `assertOwner(scope)` on every teacher billing read or submission; permission matrix denies assistants, parents, and students | **[TEST]** billing access test |
+| Admin billing access turns into tenant content access | Metadata-only projection: workspace id, invoice number/amount, submission reference, submitted amount, transfer time, evidence status, review state. Evidence download is narrow, scoped, and audited (`ADR-0047`) | **[TEST]** admin projection allowlist |
+| Billing reference or review note reaches a log or error report | References, note codes, evidence bytes, and personal data are excluded from the logging allowlist; fingerprints are stored instead of raw references where possible | **[TEST]** redaction test |
+| Duplicate submission, duplicate review, or concurrent credit | Idempotency keys, reference fingerprint uniqueness, atomic transactions, and append-only ledger entries; `under_review` grants no credit (`ADR-0045`) | **[TEST]** concurrency and idempotency tests |
+| Screenshot treated as proof of payment | Evidence is scanned and signed for review only; approval requires exact amount equality and a unique reference; no transfer detection exists (`NF-5`) | **[TEST]** truthful-label and review tests |
 
 ---
 
@@ -251,12 +261,18 @@ the security intent that drives them.
 | T-6 | A parent can never see another child, a group aggregate, or a teacher note. Portal queries are scoped to the linked student ids and exclude `note` entirely. |
 | T-7 | A student can never reach a teacher endpoint. |
 | T-8 | A platform administrator sees operational metadata only. Content access requires a break-glass grant that is ticket-referenced, time-boxed (default 1 h), bannered in the tenant UI, and visible in the owner's Activity Log. There is no bulk tenant export. |
+| T-9 | Teacher billing data is owner-only. An assistant denied by `assertOwner(scope)` receives `403`; parents and students have no billing surface. Session-receipt payments at `/app/payments` remain a separate owner-only domain (`ADR-0041`, `ADR-0043`). |
+| T-10 | Platform-admin billing verification reads only the metadata listed in `ADR-0047`; it never receives student names, phones, notes, grades, or session receipts. Optional evidence is streamed by the authenticated app route and audited after a successful read; no bearer URL is issued (`ADR-0050`). |
+| T-11 | A payment submission never credits an invoice. Only an admin approval with exact amount equality, a unique reference, an unpaid invoice, and no prior credit writes an append-only ledger entry. |
+| T-12 | Unpaid platform invoices never restrict educational writes. Only genuine workspace `suspended` or `deleted` account states block writes (`ADR-0046`). |
 
-**File downloads** deserve a specific statement because signed URLs are a common leak vector. The
-flow is: authorised request → server re-checks scope and permission → server issues a short-lived
-signed URL for that exact object key → the browser fetches it directly from storage. The signed URL
-is never issued for a key the caller is not entitled to, and a key is workspace-prefixed so a
-workspace A cannot address a workspace B object even with a leaked URL.
+**File downloads** deserve a specific statement because signed URLs are a common leak vector. For
+generic material, the flow is: authorised request → server re-checks scope and permission → server
+issues a short-lived signed URL for that exact object key → the browser fetches it directly from
+storage. The signed URL is never issued for a key the caller is not entitled to, and a key is
+workspace-prefixed so workspace A cannot address a workspace B object even with a leaked URL.
+Billing evidence is the deliberate exception: the admin route re-authenticates and streams the
+object itself, so no bearer URL exists (`ADR-0050`).
 
 ---
 
@@ -291,9 +307,10 @@ name is never used as a filesystem path.
 | Archive bombs | DOCX/XLSX/PPTX central directories are checked for traversal, executable entries, entry-count, and expansion-ratio limits before ClamAV. | Hardening |
 | PDF active content | PDFs are served with `Content-Disposition: attachment` unless rendered in the in-app viewer, which uses a sandboxed iframe with no script permission. | Hardening |
 | Upload path | A multipart upload goes through an authorised route; the browser does not receive storage credentials. | Hardening |
-| Visibility | Exactly three scopes: teacher-only, selected groups, and selected students. Portal access requires a live explicit parent/student grant and an assigned target. | `F-P1-11` |
+| Visibility | Generic teacher files have exactly three visibility scopes: teacher-only, selected groups, and selected students. Internal scopes (`form_upload`, `homework_submission`, `billing_evidence`) are excluded from generic file access. Portal access requires a live explicit parent/student grant and an assigned target. | `F-P1-11` |
 | Retention | Delete revokes metadata access transactionally and removes the private object; bucket lifecycle rules are the backstop. | `F-P0-08` AC-5 |
 | Sharing | No public share links. | `OQ-12` default (a) |
+| Billing evidence scope | `billing_evidence` is a distinct file scope stored through the existing file-storage adapter, excluded from generic file access and listed. Only an active platform administrator can request evidence for a specific submission, inside that workspace's scoped transaction; the app route streams the bytes and issues no bearer URL. The view audit event is appended only after the read succeeds. Scanned evidence is review material, never proof of a transfer. | `ADR-0045`, `ADR-0047`, `ADR-0048`, `ADR-0050` |
 
 ---
 
@@ -353,6 +370,7 @@ someone adds a field.
 | L-6 | Request/response bodies are never logged. A malformed body is logged as a length and an error code. |
 | L-7 | A redaction test runs against a seeded fixture containing known student names, phones, note bodies, and message bodies, and asserts that none of them appear in the captured log output, error report, or analytics payload. **[TEST]** |
 | L-8 | The audit log is **not** a log. It is a product record, tenant-visible, and is handled by the rules in §9. |
+| L-9 | Billing transaction references, review note codes, evidence bytes, and evidence file contents are outside the logging allowlist. Audit diffs use ids and stable codes; a raw InstaPay reference is never printed in a log, an error report, or an analytics event (`ADR-0045`, `ADR-0047`). |
 
 ---
 
@@ -367,7 +385,8 @@ someone adds a field.
 | Coverage | The required action list lives in one constant; CI asserts every action is produced by at least one service. (`F-P0-07` AC-3) |
 | Visibility | Owner always; an assistant only with the `audit` read permission. (`OQ-18` default (a)) |
 | Retention | Retained for the workspace lifetime, included in a workspace export, and purged only after the workspace deletion window. |
-| Platform access | Break-glass reads are logged in a platform-level log **and** surface in the tenant's Activity Log. |
+| Platform access | Break-glass reads are logged in a platform-level log **and** surface in the tenant's Activity Log. Platform-admin structured diffs pass through the same redactor as tenant diffs, so typed reasons and personal identifiers are not stored (`ADR-0050`). |
+| Billing events | Config versions, usage snapshots, exemption creation/modification/expiration/revocation, submissions, reviews, adjustments, invoice issue, and evidence downloads write tenant and/or platform audit events in the same transaction. Diffs carry ids, amounts, and stable codes only — never raw references, notes, or evidence (`ADR-0045`, `ADR-0047`, `ADR-0050`). |
 
 ---
 
@@ -400,6 +419,8 @@ and the schema check fails the build for an undocumented column.
 | IP addresses / device ids | 90 days | §9 of `PRODUCT_REQUIREMENTS.md` |
 | Notifications | 12 months | House rule, `DATA_MODEL.md` §9 |
 | Signed download URLs | Minutes | `FS-2` |
+| Platform billing records | Append-only records retained with the workspace; corrections append entries and never rewrite history (`ADR-0045`). No hard-delete window is invented here. | `ADR-0045`, §10.2 note |
+| Billing evidence files | Scanned and streamed by the authenticated admin route during review; no bearer URL is issued. A screenshot is evidence, not proof of transfer. The payment process was approved as reported by the product owner in `ADR-0051`, but a retention window was not specified and is **not** invented by engineering. | `ADR-0047`, `ADR-0045`, `ADR-0050`, `ADR-0051` |
 
 ### 10.3 Data subject rights
 
@@ -471,6 +492,13 @@ One row per acceptance criterion that carries a security obligation.
 | `F-P2-05` AC-2/4 | Tokens stored hashed; expiry, rotation, session, and enrolment checked server-side | **[TEST]** |
 | `F-P2-10` AC-4 | Exports read through the tenant-scoped layer | **[TEST]** two-workspace export assertion |
 | `F-P3-03` AC-1..5 | Admin console metadata-only; break-glass time-boxed, bannered, audited | **[TEST]** |
+| `F-P3-03` billing console | Active-admin assertion; metadata-only verification and exemption projection; evidence download scoped and audited (`ADR-0047`) | **[TEST]** admin projection and audit assertions |
+| `F-P3-04` usage billing | Qualifying attendance computed from stored marks; append-only ledger; immutable invoices; exact amount and unique reference before approval (`ADR-0045`) | **[TEST]** billing arithmetic and review tests |
+| `F-P3-04` owner-only access | `assertOwner(scope)` on teacher billing routes; assistants, parents, and students denied; `/app/billing` separate from `/app/payments` | **[TEST]** billing access test |
+| `F-P3-04` free access | No quota, feature-gate, or payment-status write block; only workspace `suspended`/`deleted` blocks writes (`ADR-0046`) | **[TEST]** free/unlimited enforcement test |
+| `F-P3-04` tenant isolation | Forced RLS on all nine tenant billing tables; global config and fingerprint registry never contain tenant content | **[TEST]** generated isolation matrix |
+| `F-P3-04` idempotency and concurrency | Submission and review idempotency keys, unique reference fingerprints, transactional credits, append-only adjustments (`ADR-0045`) | **[TEST]** concurrency and retry tests |
+| `NF-5` billing truthfulness | Submission statuses `submitted`/`under_review`/`approved`/`rejected`/`flagged`; no detection or delivery claim; evidence is never proof | **[TEST]** truthful-label assertions |
 
 ---
 
@@ -521,6 +549,8 @@ The break-glass mechanism is used during an incident only with a ticket, and eve
 | SR-6 | Better Auth session defaults do not match the product requirement | Overridden explicitly in `auth.ts`; covered by a session-policy test. |
 | SR-7 | Penetration test | Scheduled before the public beta; not yet performed. |
 | SR-8 | CSP strictness with the in-app PDF viewer | The viewer uses a sandboxed iframe; the CSP is tightened once the viewer ships. |
+| SR-9 | Retention of billing evidence and exemption notes | **Unspecified detail.** Evidence is non-proof review material; the payment process was approved as reported by the product owner, but no retention window was supplied and none is asserted here (`ADR-0045`, `ADR-0051`). |
+| SR-10 | Manual InstaPay verification can miscredit an invoice | Exact amount, unique normalized reference, `under_review` with no credit, append-only review events, and signed ledger adjustments; screenshots are never proof. |
 
 ---
 
@@ -540,3 +570,11 @@ These are the security-specific items on top of the general prohibitions in
 9. Do not let a platform administrator read tenant content outside a break-glass grant.
 10. Do not add a public-facing route that is not in the route registry, because the isolation matrix
     is generated from that registry.
+11. Do not expose teacher billing to an assistant, a portal actor, or a platform administrator beyond
+    the narrow billing metadata projection (`ADR-0045`, `ADR-0047`).
+12. Do not log a billing reference, a review note code, or evidence bytes; do not treat a screenshot
+    as proof of a transfer.
+13. Do not block educational writes because an invoice is unpaid; only a genuine workspace
+    `suspended` or `deleted` state may do that (`ADR-0046`).
+14. Do not rewrite a billing snapshot, invoice, line item, or ledger entry; append a signed
+    adjustment instead.

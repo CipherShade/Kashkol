@@ -16,6 +16,7 @@ describe("production app-path guard", () => {
     expect(isBuiltAppPath("/ar/app/account?tab=1")).toBe(true);
     expect(isBuiltAppPath("/en/app/students")).toBe(true);
     expect(isBuiltAppPath("/ar/app/groups")).toBe(true);
+    expect(isBuiltAppPath("/en/app/billing")).toBe(true);
   });
 
   it("recognises a built detail path but not a nested planned one", () => {
@@ -64,6 +65,7 @@ describe("production app-path guard", () => {
       "/app/homework",
       "/app/assessments",
       "/app/payments",
+      "/app/billing",
       "/app/files",
       "/app/reports",
       "/app/follow-ups",

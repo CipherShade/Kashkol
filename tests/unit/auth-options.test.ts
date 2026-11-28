@@ -95,6 +95,23 @@ describe("Better Auth configuration", () => {
     expect(options.advanced?.disableCSRFCheck).toBe(false);
     expect(options.advanced?.disableOriginCheck).toBe(false);
   });
+
+  it("ignores wildcard and path entries in the trusted-origin list", () => {
+    const options = buildAuthOptions(
+      parseServerEnv({
+        ...base,
+        APP_ENV: "local",
+        BETTER_AUTH_URL: "http://localhost:3000",
+        EMAIL_TRANSPORT: "console",
+        BETTER_AUTH_TRUSTED_ORIGINS:
+          "*.trycloudflare.com,https://tunnel.trycloudflare.com/path,https://tunnel.trycloudflare.com",
+      }),
+    );
+    expect(options.trustedOrigins).toEqual([
+      "http://localhost:3000",
+      "https://tunnel.trycloudflare.com",
+    ]);
+  });
 });
 
 describe("production configuration guards", () => {

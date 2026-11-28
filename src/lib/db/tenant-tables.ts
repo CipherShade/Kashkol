@@ -70,6 +70,16 @@ export const TENANT_TABLES = [
   "form_upload",
   "homework_completion_mark",
   "academic_term",
+  "workspace_billing_state",
+  "billing_exemption",
+  "billing_usage_snapshot",
+  "billing_usage_student",
+  "billing_ledger_entry",
+  "billing_invoice",
+  "billing_invoice_line_item",
+  "billing_invoice_credit",
+  "billing_payment_submission",
+  "billing_review_event",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];
@@ -86,11 +96,23 @@ export type TenantTable = (typeof TENANT_TABLES)[number];
  * tenant-scoped repository once the job is claimed (`DATA_MODEL.md` §
  * `report_export` and `report_export_queue`).
  *
+ * `billing_reference_fingerprint` is a platform-wide duplicate-reference index.
+ * It stores only a SHA-256 fingerprint, the owning workspace id, the submission
+ * id, and a timestamp. The raw reference stays in the RLS-protected
+ * `billing_payment_submission` row, so a global uniqueness check never exposes
+ * tenant content (ADR-0045).
+ *
  * `scripts/check-project-rules.mjs` subtracts this list from the tenant-table
  * heuristic, so the table is not required to carry an RLS policy it would have
  * to fake.
  */
-export const NON_TENANT_WORKSPACE_TABLES = ["report_export_queue"] as const;
+export const NON_TENANT_WORKSPACE_TABLES = [
+  "report_export_queue",
+  "billing_reference_fingerprint",
+  // Append-only global history for the reference registry. It carries only a
+  // keyed hash, opaque ids, and coded reasons; no raw reference or PII.
+  "billing_reference_event",
+] as const;
 
 export const TENANT_ROOT_TABLE = "workspace" as const;
 

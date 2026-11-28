@@ -7,6 +7,12 @@
 - **Supersedes:** `ADR-0041` clause 6 (legacy preservation), the legacy money parts of `ADR-0025`, `ADR-0028`, `ADR-0038`, and `ADR-0039`
 - **Related:** `D-14`, `F-P2-04`, `F-P2-11`, `NF-1`, `NF-5`, `NF-7`, `NF-13`, `ADR-0014`, `ADR-0041`
 
+> **Annotation (2026-11-27):** Superseded in part by `ADR-0045` and `ADR-0046` for platform billing
+> only. The workspace-money removal below remains in force. The exclusion of platform subscription
+> and billing is historical: platform billing is now a separate usage-based ledger with manual
+> InstaPay verification (`ADR-0045`), and no paid tier restricts teacher access (`ADR-0046`). The
+> historical reasoning below is retained.
+
 ---
 
 ## Context
@@ -55,6 +61,9 @@ financial actions in redacted form.
 7. **Reconcile every registry.** The tenant table registry, workspace-backup retained tables,
    permission grant script, route registry, message catalogues, specification documents, and tests
    are updated in the same change. Platform subscription and billing are untouched.
+   Annotation (2026-11-27): superseded in part by `ADR-0045` and `ADR-0046`; the new
+   `src/modules/billing` domain, its routes, and its tables are separate from the removed
+   workspace-money storage.
 
 ---
 
@@ -80,6 +89,9 @@ financial actions in redacted form.
 **Neutral**
 
 - `ADR-0036` platform billing and `/api/workspace/subscription` are unchanged.
+  Annotation (2026-11-27): superseded in part by `ADR-0045`/`ADR-0046`. Platform billing now lives in
+  `src/modules/billing` with `/app/billing` and `/api/platform-admin/billing*`.
+  `/api/workspace/subscription` remains a truthful plan-and-support status endpoint only.
 - EGP integer-piastre storage and timezone handling for receipts are unchanged.
 
 ---

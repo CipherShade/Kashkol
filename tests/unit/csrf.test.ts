@@ -10,9 +10,24 @@ describe("same-origin guard", () => {
     expect(() => assertTrustedOrigin(headers, BASE)).not.toThrow();
   });
 
-  it("accepts a Cloudflare quick tunnel origin", () => {
+  it("accepts an explicitly configured origin, including a configured tunnel", () => {
     const headers = new Headers({ origin: "https://my-tunnel.trycloudflare.com" });
-    expect(() => assertTrustedOrigin(headers, BASE)).not.toThrow();
+    expect(() =>
+      assertTrustedOrigin(headers, BASE, ["https://my-tunnel.trycloudflare.com"]),
+    ).not.toThrow();
+  });
+
+  it("does not trust an unconfigured cloudflare tunnel origin", () => {
+    const headers = new Headers({ origin: "https://my-tunnel.trycloudflare.com" });
+    expect(() => assertTrustedOrigin(headers, BASE)).toThrow(AppError);
+  });
+
+  it("rejects wildcard and path origins in the configuration", () => {
+    const headers = new Headers({ origin: "https://attacker.trycloudflare.com" });
+    expect(() => assertTrustedOrigin(headers, BASE, ["*.trycloudflare.com"])).toThrow(AppError);
+    expect(() => assertTrustedOrigin(headers, BASE, ["https://app.kashkol.test/path"])).toThrow(
+      AppError,
+    );
   });
 
   it("rejects another origin", () => {

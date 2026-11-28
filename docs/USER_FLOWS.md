@@ -48,7 +48,7 @@ not navigation sketches.
 | F25 | Attach a recorded lesson (external provider) | Teacher | P3 |
 | F26 | Platform support access (break-glass) | Platform admin | P3 |
 | F27 | Review performance intelligence and share a parent report | Teacher | P3 |
-| F28 | Pay the manual subscription after account creation | New teacher | P0 |
+| F28 | Sign up free and pay platform usage by manual InstaPay | New teacher / teacher owner | P0 + P3 |
 
 ---
 
@@ -56,8 +56,10 @@ not navigation sketches.
 
 **Actor:** New teacher · **Tier:** P0 · **Preconditions:** none
 
-**Sequence note:** account creation is step one of sign-up. On success the teacher is redirected to the
-manual payment page (F28) before email verification and workspace creation continue below.
+**Sequence note:** account creation is step one of sign-up. On success the teacher is sent to
+sign-in / verify-email; there is no payment step in sign-up, no paid tier, and no `/subscribe` page
+(`ADR-0046`). Platform usage billing is a later, separate flow (F28) that begins only after the
+workspace is activated.
 
 1. Teacher opens the app. The **sign-in** screen is shown with the Arabic/English switch in the corner
    (top-right in LTR, top-left in RTL — matching the prototype's `inset-inline-end` placement).
@@ -1107,31 +1109,74 @@ homework history
 
 ---
 
-## F28 — Pay the manual subscription after account creation
+## F28 — Sign up free and pay platform usage by manual InstaPay
 
-**Actor:** New teacher · **Tier:** P0 · **Preconditions:** the account form on `/{locale}/sign-up`
-has succeeded (F1 step 3)
+**Actor:** New teacher, then teacher owner and platform admin · **Tier:** P0 sign-up + P3 billing
+**Preconditions:** F1 account creation has succeeded; the workspace is activated and has real
+attendance. **Supersedes `ADR-0036`** (the `/subscribe` page and subscription panel are removed).
 
-1. The server redirects to `/{locale}/subscribe?registered=1`; when outbound email is configured it
-   also sets `verify=1`. These query values only select which notices and links are shown.
-2. The teacher sees **step 2 of 2**: the real monthly-subscription amount, the real InstaPay QR, the
-   InstaPay handle, and the real direct payment link. The link opens InstaPay in a new tab; Kashkol
-   never submits a payment and never claims one was sent.
-3. The teacher transfers the amount in InstaPay and keeps the receipt. The page states that Kashkol
-   does not detect transfers and that the receipt is confirmed manually.
-4. The page links to email verification when it is required, and always links to sign-in. Workspace
-   creation resumes after verification (F1 steps 5–8).
+1. Sign-up is free. The teacher is sent to sign-in / verify-email, then creates a workspace and uses
+   every feature with unlimited students, groups, assistants, files, videos, exams, reports, and
+   forms. There is no paid tier, quota, feature gate, or payment-status write block; only a genuinely
+   suspended or deleted workspace blocks writes (`ADR-0046`).
+2. A platform admin triggers the monthly billing cycle; no new production worker token or config is
+   introduced. For each `Africa/Cairo` calendar month, the system counts distinct students with at
+   least two qualifying `present`/`late` marks on non-cancelled sessions inside a rolling 30-day
+   window (30 × 24 elapsed hours) that includes a session in that billed month (`ADR-0051`).
+   The preceding 30 days may establish the pair; `absent`, `excused`, cancelled-session marks, and
+   duplicates are excluded; no pre-activation attendance is billed. Archiving or deleting a student
+   never removes earned qualification. The charge is `qualifying students × 99` piastres; balances
+   carry forward and an invoice is cut once the versioned, admin-configurable default threshold of
+   `5000` piastres is reached (`ADR-0045`).
+3. **[WRITE]** Usage charges, signed adjustments, invoice allocations, payment credits, reversals,
+   and invoice credits go to an append-only ledger in a scoped, transactional, idempotent write with
+   an audit event. Invoices and line items are immutable snapshots; a correction adds a new ledger
+   entry and never rewrites an invoice or a past charge. Credits apply oldest-first; a remainder is
+   available credit, never a verified payment (`ADR-0048`).
+4. An exempt workspace stays fully functional and unlimited but is non-billable. Exemptions carry a
+   reason (`internal_testing`, `beta_tester`, `testimonial`, `promotional`, `partner`, `custom`),
+   optional internal notes, a start date, optional expiration, a status, and the creating/modifying
+   admin. Expiration or revocation never bills earlier months retroactively. A retroactive exemption
+   that overlaps issued usage appends a signed reversal or invoice credit naming the affected
+   invoice; it never rewrites that invoice. Every lifecycle event is audited (`ADR-0047`,
+   `ADR-0048`).
+5. **[BOUNDARY]** The teacher owner opens `/app/billing`, sees the internal invoice, makes a manual
+   InstaPay transfer, sends the transaction screenshot to the designated WhatsApp number
+   **`+201004574178`**, then submits the reference, exact amount, and transfer date/time with
+   optional evidence upload (`ADR-0051`). **[WRITE]** The submission starts at `submitted` and
+   changes to `under_review`; neither state credits the invoice. The UI never claims a transfer was
+   detected, sent, delivered, or settled. Assistants are denied server-side.
+6. **[BOUNDARY]** The platform admin opens `/platform-admin/billing` for versioned config, exemptions,
+   submission review, evidence download, signed balance adjustments, reference release, and the
+   cycle trigger. **[WRITE]** Approval requires an exact amount match, a unique current fingerprint,
+   an unpaid invoice, and no prior credit; it credits the ledger exactly once. Rejection and
+   `flagged` keep the invoice intact. Releasing a disputed reference revokes its fingerprint and
+   cancels the linked payment credit with a signed reversal; a later approved submission may reclaim
+   it, with both transitions recorded in append-only events. Screenshots are supporting evidence,
+   never proof without transaction verification; the authenticated route streams the bytes and the
+   view audit event is appended only after a successful read (`ADR-0050`). The admin sees billing
+   metadata only — no student names, phones, notes,
+   message bodies, or session receipts. Balance adjustments append signed, audited ledger entries;
+   they never rewrite an invoice (`ADR-0048`).
+7. The teacher session-receipt screen `/app/payments` (F19) remains owner-only and separate. It
+   records money the teacher collected from students, not platform usage or InstaPay submissions.
 
 **Error / edge cases**
 
 | Case | Behaviour |
 |---|---|
-| Teacher opens `/subscribe` directly | The payment instructions render; no account or payment state is implied. |
-| Teacher refreshes the page | The same static instructions render; no duplicate payment state is possible. |
-| InstaPay link is unavailable | The teacher still has the QR and the handle; Kashkol does not claim a retry succeeded. |
-| Payment is made but not confirmed | Nothing is activated automatically; the teacher keeps the receipt for manual confirmation. |
+| Sign-up completed with no payment | Nothing is owed or blocked at sign-up; verification and workspace creation proceed normally. |
+| No qualifying attendance or balance below threshold | No invoice is issued; the computed balance carries forward. No number is fabricated. |
+| Duplicate reference or concurrent submission | Idempotency and current-fingerprint checks produce one credit at most; a retry reports the existing state. |
+| Disputed reference released | The fingerprint is revoked, the linked payment credit is cancelled by a signed reversal, and a later approved submission may reclaim it; no raw reference enters the global registry. |
+| Partial payment, overpayment, or missing amount | Not allocated; the submission cannot be approved as an exact match. |
+| Screenshot supplied without a verified transfer | Evidence only; status stays `submitted` / `under_review` until admin verification. |
+| Invoice corrected after issue | A signed ledger adjustment or an `billing_invoice_credit` is appended; the invoice and line items are unchanged. |
+| Assistant opens `/app/billing` | `403` from the server, not merely a hidden menu item. |
+| Exemption active or newly expired | Active: no billable usage, invoices, or payment obligation. Expired/revoked: billing starts with the next uncovered Cairo month; earlier months are never invoiced retroactively. |
+| Provider or webhook suggested | No provider contract, API, webhook, automatic detection, or new worker token exists or is claimed (`NF-5`). |
 
-**AC:** F-P0-02, NF-5, NF-10
+**AC:** F-P3-04, F-P3-03, F1, F19, `ADR-0045`, `ADR-0046`, `ADR-0047`, `ADR-0048`, NF-5, NF-10
 
 ---
 
@@ -1154,3 +1199,21 @@ These hold across every flow and are the most likely things to get wrong.
 9. **Every asynchronous job is visible** with a state (queued / running / ready / failed) and is
    idempotent on retry.
 10. **Every screen works at 320 px** and with the keyboard, in both directions and both themes.
+11. **There is no paid tier.** All teacher accounts are free and unlimited; an unpaid platform
+    invoice never blocks educational writes, and only a genuinely suspended or deleted workspace does
+    (`ADR-0046`). There is no `/subscribe` page or subscription panel.
+12. **No pre-activation attendance is billed and no earned qualification is lost.** Usage is
+    computed from `startsAt` in `Africa/Cairo` months from workspace activation, from distinct
+    students with two qualifying `present`/`late` marks in a rolling 30-day window that includes the
+    billed month; absent, excused, cancelled, and duplicate marks are excluded. Archiving or deleting
+    a student never removes historical attendance or an earned charge, and earlier invoices are
+    never rewritten (`ADR-0051`).
+13. **Manual verification is the only payment confirmation.** An InstaPay submission is `submitted`
+    or `under_review` until a platform admin verifies the reference and exact amount; the screenshot
+    sent to `+201004574178` is supporting evidence, never proof or automatic approval. No API,
+    webhook, automatic detection, or settlement is claimed (`NF-5`, `ADR-0051`). Teacher session
+    receipts at `/app/payments` remain a separate domain.
+14. **Billing exemptions are first-class and auditable.** Exempt workspaces remain fully functional
+    and non-billable; expiration or revocation never triggers retroactive billing. Platform-admin
+    billing access is limited to verification and exemption metadata and never exposes tenant
+    content (`ADR-0047`).

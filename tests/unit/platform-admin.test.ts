@@ -493,6 +493,7 @@ vi.mock("@/modules/platform-admin/repository", () => ({
 }));
 
 import {
+  UNLIMITED_LIMIT,
   WORKSPACE_PLAN_DEFINITIONS,
   assertPlatformAdminContext,
   assertWorkspaceWriteAllowedTx,
@@ -790,7 +791,7 @@ describe("Platform Administration & SaaS Plan Limits (F-P3-03 & F-P3-04)", () =>
       );
 
       expect(detailAfterPlan.workspace.plan.tier).toBe("standard");
-      expect(detailAfterPlan.workspace.plan.limits.maxActiveStudents).toBe(180);
+      expect(detailAfterPlan.workspace.plan.limits.maxActiveStudents).toBe(UNLIMITED_LIMIT);
       expect(state.platformAudits).toHaveLength(1);
       expect(state.platformAudits[0]?.action).toBe("platform.workspace.plan_updated");
       expect(state.workspaceAudits).toHaveLength(1);
@@ -874,38 +875,31 @@ describe("Platform Administration & SaaS Plan Limits (F-P3-03 & F-P3-04)", () =>
   describe("4. Centralized plan definitions & server-side limit enforcement (F-P3-04 AC-1..5)", () => {
     const fakeTx = {} as unknown as DbTransactionClient;
 
-    it("centralizes plan tiers in manual_pilot billing mode without hardcoded prices", () => {
+    it("centralizes every plan tier as free, unlimited usage billing without hardcoded prices", () => {
       for (const tier of ["pilot", "standard", "expanded"] as const) {
         const def = WORKSPACE_PLAN_DEFINITIONS[tier];
-        expect(def.billingMode).toBe("manual_pilot");
+        expect(def.billingMode).toBe("usage_billing");
         expect("price" in def).toBe(false);
-        expect(def.limits.maxActiveStudents).toBeGreaterThan(0);
+        expect(def.limits.maxActiveStudents).toBe(UNLIMITED_LIMIT);
+        expect(def.features.onlineExamsEnabled).toBe(true);
       }
     });
 
-    it("blocks all workspace mutations when account status is suspended or planStatus is past_due/cancelled", async () => {
+    it("never restricts writes for legacy plan status, quotas, or unpaid invoices", async () => {
       const ws = state.workspaces.get(WORKSPACE_ID)!;
 
-      // Past due plan restricts writes
       ws.planStatus = "past_due";
       await expect(
         assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, { kind: "students" }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planWriteRestricted",
-      });
+      ).resolves.toMatchObject({ unlimited: true, writesAllowed: true });
 
-      // Cancelled plan restricts writes
       ws.planStatus = "cancelled";
       await expect(
         assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
           kind: "students",
           additionalCount: 1,
         }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planWriteRestricted",
-      });
+      ).resolves.toMatchObject({ unlimited: true, writesAllowed: true });
 
       // Suspended workspace account blocks access
       ws.status = "suspended";
@@ -917,78 +911,36 @@ describe("Platform Administration & SaaS Plan Limits (F-P3-03 & F-P3-04)", () =>
       });
     });
 
-    it("enforces student, group, assistant seat, file storage, and video quotas on the server", async () => {
+    it("does not enforce legacy student, group, assistant, storage, or video quotas", async () => {
       const ws = state.workspaces.get(WORKSPACE_ID)!;
-      // Pilot tier defaults: maxActiveStudents=150, maxActiveGroups=12, maxAssistants=3, maxFileStorageBytes=500MB, maxVideoCount=25
       expect(ws.planTier).toBe("pilot");
 
-      // 1. Student cap: 149 active + 2 imported = 151 > 150 -> rejected
       state.counts.activeStudents = 149;
-      await expect(
-        assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
-          kind: "students",
-          additionalCount: 2,
-        }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planStudentLimitReached",
-      });
-
-      // Single student creation at 149 succeeds (149 + 1 <= 150)
-      await expect(
-        assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
-          kind: "students",
-          additionalCount: 1,
-        }),
-      ).resolves.toBeDefined();
-
-      // 2. Group cap: 12 active -> creating another fails
       state.counts.activeGroups = 12;
-      await expect(
-        assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, { kind: "groups" }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planGroupLimitReached",
-      });
-
-      // 3. Assistant seats: 2 active assistants + 1 pending invite = 3 == limit(3) -> inviting another fails
       state.counts.activeAssistants = 2;
       state.counts.pendingInvites = 1;
-      await expect(
-        assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, { kind: "assistants" }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planAssistantLimitReached",
-      });
-
-      // 4. File storage bytes: 495 MB used + 10 MB upload > 500 MB -> fails
       state.counts.fileStorageBytes = 495 * 1024 * 1024;
-      await expect(
-        assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
-          kind: "files",
-          additionalBytes: 10 * 1024 * 1024,
-        }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planFileStorageLimitReached",
-      });
 
-      // 5. Video count: 25 active videos -> creating 26th fails
-      await expect(
-        assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
+      for (const resource of [
+        { kind: "students", additionalCount: 2 },
+        { kind: "groups" },
+        { kind: "assistants" },
+        { kind: "files", additionalBytes: 10 * 1024 * 1024 },
+        {
           kind: "videos",
           currentVideoCount: 25,
           currentStorageBytes: 100 * 1024 * 1024,
           currentBandwidthBytes: 200 * 1024 * 1024,
           additionalSizeBytes: 5 * 1024 * 1024,
-        }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.videoCountLimitReached",
-      });
+        },
+      ] as const) {
+        await expect(
+          assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, resource),
+        ).resolves.toMatchObject({ unlimited: true, writesAllowed: true });
+      }
     });
 
-    it("enforces feature flags for online exams and recorded videos and preserves existing data on downgrade (F-P3-04 AC-3)", async () => {
+    it("keeps legacy overrides as metadata but never gates features or writes", async () => {
       const ws = state.workspaces.get(WORKSPACE_ID)!;
       ws.planLimitOverrides = {
         maxActiveStudents: 10,
@@ -996,29 +948,21 @@ describe("Platform Administration & SaaS Plan Limits (F-P3-03 & F-P3-04)", () =>
         recordedVideosEnabled: false,
       };
 
-      // Workspace already has 12 active students (> 10 override cap). Reading effective plan preserves data,
-      // and blocks only new student additions.
       const effective = resolveEffectiveWorkspacePlan(ws);
-      expect(effective.limits.maxActiveStudents).toBe(10);
-      expect(state.counts.activeStudents).toBe(12);
+      expect(effective.overrides.maxActiveStudents).toBe(10);
+      expect(effective.limits.maxActiveStudents).toBe(UNLIMITED_LIMIT);
+      expect(effective.features.onlineExamsEnabled).toBe(true);
+      expect(effective.features.recordedVideosEnabled).toBe(true);
 
       await expect(
         assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
           kind: "students",
           additionalCount: 1,
         }),
-      ).rejects.toMatchObject({
-        code: "CONFLICT",
-        messageKey: "errors.planStudentLimitReached",
-      });
-
+      ).resolves.toMatchObject({ unlimited: true, writesAllowed: true });
       await expect(
         assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, { kind: "online_exams" }),
-      ).rejects.toMatchObject({
-        code: "FORBIDDEN",
-        messageKey: "errors.planFeatureDisabled",
-      });
-
+      ).resolves.toMatchObject({ unlimited: true, writesAllowed: true });
       await expect(
         assertWorkspaceWriteAllowedTx(fakeTx, WORKSPACE_ID, {
           kind: "videos",
@@ -1027,10 +971,7 @@ describe("Platform Administration & SaaS Plan Limits (F-P3-03 & F-P3-04)", () =>
           currentBandwidthBytes: 1024,
           additionalSizeBytes: 1024,
         }),
-      ).rejects.toMatchObject({
-        code: "FORBIDDEN",
-        messageKey: "errors.planFeatureDisabled",
-      });
+      ).resolves.toMatchObject({ unlimited: true, writesAllowed: true });
     });
   });
 });

@@ -19,7 +19,7 @@
 |---|---|
 | Runtime, framework, and pinned dependency versions | §3 |
 | System context and deployment topology | §4, §5 |
-| Module decomposition and dependency rules | §6, §7 |
+| Module decomposition and dependency rules (including `billing`) | §6, §7 |
 | Request lifecycle: auth → scope → authorise → validate → transact → audit | §8 |
 | Tenant isolation enforcement | §9 |
 | Authorisation and permission model | §10 |
@@ -187,7 +187,9 @@ flowchart LR
 ```
 
 **The only outbound integrations in M0/M1 are the email provider and object storage.** WhatsApp is
-a client-side deep link, not a server integration (`D-16`, `NF-2`).
+a client-side deep link, not a server integration (`D-16`, `NF-2`). Platform billing adds **no**
+provider: the teacher submits a manual InstaPay reference and a platform administrator verifies it.
+Optional evidence uses the existing private file-storage adapter (`ADR-0045`).
 
 ---
 
@@ -236,20 +238,36 @@ a client-side deep link, not a server integration (`D-16`, `NF-2`).
 │  ├─ app/
 │  │  ├─ [locale]/               locale-prefixed route tree
 │  │  │  ├─ (auth)/              sign-in, sign-up, verify, reset
-│  │  │  ├─ (teacher)/           the teacher workspace application
+│  │  │  ├─ app/                 the teacher workspace application
+│  │  │  │  └─ billing/          owner-only usage billing (M3b)
+│  │  │  ├─ platform-admin/      platform console
+│  │  │  │  └─ billing/          config, exemptions, review, adjustments, cycle (M3b)
 │  │  │  └─ (portal)/            parent + student portals (M2)
 │  │  ├─ api/
 │  │  │  ├─ auth/[...all]/       Better Auth handler
+│  │  │  ├─ billing/             owner-only billing view and payment submission
+│  │  │  ├─ platform-admin/billing*  admin billing metadata and mutations
 │  │  │  └─ v1/...               route handlers for non-page interactions
 │  │  └─ layout.tsx
 │  ├─ modules/                   business modules (§7)
-│  │  └─ <module>/
-│  │     ├─ service.ts           use cases, transactions, audit
-│  │     ├─ repository.ts        the ONLY place Prisma queries live
+│  │  ├─ <module>/
+│  │  │  ├─ service.ts           use cases, transactions, audit
+│  │  │  ├─ repository.ts        the ONLY place Prisma queries live
+│  │  │  ├─ schemas.ts           zod input schemas (shared with the client)
+│  │  │  ├─ queries.ts           read-only projections (computed metrics)
+│  │  │  ├─ audit.ts             the module's audit actions and payload shapes
+│  │  │  └─ types.ts
+│  │  └─ billing/                usage billing, invoices, submissions, exemptions (M3b)
+│  │     ├─ service.ts           owner and platform-admin use cases
+│  │     ├─ repository.ts        scoped billing reads and append-only writes
+│  │     ├─ qualification.ts     Cairo-month attendance qualification
+│  │     ├─ ledger.ts            balance and invoice projections
+│  │     ├─ reference.ts         InstaPay reference normalisation and fingerprints
+│  │     ├─ exemption.ts         billing-exemption state transitions
+│  │     ├─ time.ts              Africa/Cairo month boundaries
 │  │     ├─ schemas.ts           zod input schemas (shared with the client)
-│  │     ├─ queries.ts           read-only projections (computed metrics)
-│  │     ├─ audit.ts             the module's audit actions and payload shapes
-│  │     └─ types.ts
+│  │     ├─ audit.ts             billing audit actions and payload shapes
+│  │     └─ http.ts              billing response envelope and validation mapping
 │  ├─ lib/
 │  │  ├─ db/                     prisma client, scoped client, transaction helper
 │  │  ├─ routes/registry.ts      the declarative route registry (ADR-0012)
@@ -316,6 +334,7 @@ a client-side deep link, not a server integration (`D-16`, `NF-2`).
 | `notifications` | Notification entity, rule engine, in-app delivery, read state | P0 |
 | `audit` | Append-only audit events, redaction, retention | P0 |
 | `platform` | Admin console, break-glass grants, platform-level log | P3 |
+| `billing` | Usage snapshots, append-only ledger, immutable invoices, owner-only InstaPay submissions, exemptions, signed credits/reversals, reference release/recovery, admin verification, and the admin-triggered cycle (`ADR-0045`–`ADR-0048`) | P3b |
 | `performance` | Computed student/class intelligence, evidence-backed topics and risks, transactional bulk grades, and parent report projection (`F-P3-10`, `F27`) | P3 |
 
 ### 6.4 Module dependency rules
@@ -337,6 +356,7 @@ flowchart TD
     reporting["reporting"]
     notifications["notifications"]
     platform["platform"]
+    billing["billing"]
     portals["portals"]
     performance["performance"]
 
@@ -373,6 +393,11 @@ flowchart TD
     notifications --> tenancy
     platform --> tenancy
     platform --> audit
+    billing --> attendance
+    billing --> files
+    billing --> platform
+    billing --> tenancy
+    billing --> audit
     performance --> audit
     performance --> identity
     performance --> portals
@@ -394,6 +419,12 @@ Arrows point **from consumer to dependency**. Rules:
 - `performance` recomputes figures from source rows in its own scoped repository. It calls `identity`
   and `portals` only to authorise parent actors, uses `reports` adapters for exports, and persists only
   teacher actions, explicitly shareable notes, and bulk grade rows (`F-P3-10`, `ADR-0034`).
+- `billing` reads attendance marks in its own scoped repository to derive qualifying students; it
+  does not write attendance, student, or session rows. It uses `files` for scanned evidence,
+  `platform-admin` for the active-admin assertion, and `audit` for every lifecycle event. Global
+  billing configuration is versioned in `billing_config` and read outside a tenant transaction;
+  every tenant billing row is read and written inside `withScope` (`ADR-0045`, `ADR-0047`). No new
+  external billing provider or dependency was added.
 - No cycles. A cycle is a module-boundary violation and is rejected in review. **[CI]** A dependency
   check over `src/modules/*/service.ts` imports fails the build on a cycle.
 
@@ -502,6 +533,13 @@ flowchart TD
 5. CI verifies that every table in `information_schema.columns` whose name matches the tenant table
    registry has a `workspace_id` column, an index, and an RLS policy. **[CI]**
    (This is `F-P0-01` AC-1, expressed as a migration check.)
+6. Billing rows are no exception. `workspace_billing_state`, `billing_exemption`,
+   `billing_usage_snapshot`, `billing_usage_student`, `billing_ledger_entry`, `billing_invoice`,
+   `billing_invoice_line_item`, `billing_invoice_credit`, `billing_payment_submission`, and
+   `billing_review_event` carry forced RLS and are read or written only inside `withScope`. The
+   append-only global `billing_config`, the reference-state `billing_reference_fingerprint`, and
+   its append-only `billing_reference_event` are not tenant-scoped reads; none carries a raw
+   reference or tenant content (`ADR-0045`, `ADR-0047`, `ADR-0048`).
 
 ### 8.2 What is *not* tenant-scoped
 
@@ -511,6 +549,9 @@ flowchart TD
 | `session`, `account`, `verification` | Better Auth owns them | Better Auth's own scoping |
 | `platform_admin`, `break_glass_grant`, `platform_audit_event` | Platform-level, not tenant data | Not reachable from a teacher session |
 | `job` | Worker-owned | Jobs carry their own `workspace_id` where applicable |
+| `billing_config` | Global, append-only version rows; the highest version is authoritative | Read outside a tenant transaction by the billing service; never carries tenant content |
+| `billing_reference_fingerprint` | Global current reference state for duplicate checks and release/reclaim | Stores only a SHA-256 fingerprint, opaque ids, status and revocation metadata; no raw reference and no personal data |
+| `billing_reference_event` | Append-only global reference history | Stores the fingerprint, opaque ids, actor, coded reason and timestamp; no raw reference and no tenant content |
 
 ### 8.3 Isolation test matrix (generated, not hand-written)
 
@@ -539,7 +580,7 @@ Assertions per case:
 | `assistant` | `workspace_member.role` | The workspace. Explicit grant set. |
 | `parent` | `portal_grant` (M2) | One workspace, one or more linked students. |
 | `student` | `portal_grant` (M2) | One workspace, own record only. |
-| `platform_admin` | `platform_admin` table | Metadata only; content only through a break-glass grant. |
+| `platform_admin` | `platform_admin` table | Metadata only; content only through a break-glass grant. Billing verification and exemption management use a narrow metadata projection (`ADR-0047`). |
 
 Permission set (from `F-P2-01` AC-2), each with `read` and `write`:
 
@@ -553,7 +594,7 @@ students · grades · attendance · homework · files · messages · settings ·
 |---|---|---|
 | AU-1 | Deny by default. A missing grant is a denial. There is no wildcard except for `owner`. | `authorize()` returns `false` for anything not explicitly granted. **[TEST]** |
 | AU-2 | `owner` always holds every permission. The UI may disable the checkboxes; the server ignores the request body for an owner. | `authorize()` short-circuits on role. **[TEST]** |
-| AU-3 | An assistant can never invite members, alter an owner's permissions, delete the workspace, or change billing — regardless of grants. | Hard-coded denials evaluated before grant lookup. **[TEST]** |
+| AU-3 | An assistant can never invite members, alter an owner's permissions, delete the workspace, or change billing — regardless of grants. Teacher billing at `/app/billing` is owner-only; the platform-admin billing console serves verification metadata only. | Hard-coded denials and `assertOwner(scope)` evaluated before any billing query; no payment-status write block exists (`ADR-0045`, `ADR-0046`, `ADR-0047`). **[TEST]** |
 | AU-4 | Permission checks happen server-side on every mutating and every sensitive read. A hidden control is not a permission. | `NF-8`. **[TEST]** full permission × endpoint matrix. |
 | AU-5 | Parent and student sessions can never reach a teacher endpoint. | Route groups are separated; a shared `requireStaff()` guard rejects portal actors with `403`. **[TEST]** |
 | AU-6 | A parent can only ever read their own linked students. Group-level aggregates are never exposed to a parent. | Portal queries are scoped to the linked student ids; the reporting module exposes no group aggregate to a portal actor. **[TEST]** |
@@ -650,8 +691,11 @@ Domain rules that belong in the database, not in application code:
 - `0 <= score <= max_score` → `CHECK` on `assessment_score`.
 - Threshold validity `1 <= at_risk_after < inactive_after <= 10` → `CHECK` on `workspace_settings`.
 - Attendance marks are exactly four values → PostgreSQL `enum`.
-- Amounts are positive → `CHECK (amount > 0)`.
+- Amounts are positive → `CHECK (amount > 0)`. Billing amounts are integer piastres; the charge is
+  `qualifying_students * rate_minor` from the active config version (`ADR-0045`).
 - `excused` is excluded from the denominator → enforced in the query, and the query is unit-tested.
+- Billing references are normalised and fingerprinted; a submission requires a stable idempotency
+  key and a review idempotency key. Snapshots, invoices, and line items are append-only (`ADR-0045`).
 
 **Rule:** validation errors are returned as `fields` in the error envelope and rendered inline in
 the active locale. A server error never renders as a raw English sentence. **[TEST]**
@@ -829,8 +873,9 @@ Structured JSON, one object per line:
 
 **PII redaction is a hard rule** (`F-P0-08` AC-6). The logger has a field allowlist per event
 type; anything not on the allowlist is dropped, not truncated. Names, phone numbers, note bodies,
-message bodies, tokens, and file contents never reach a log. **[TEST]** a redaction test runs
-against a seeded fixture and asserts none of the seeded PII strings appear in the captured output.
+message bodies, tokens, file contents, billing transaction references, and evidence bytes never reach
+a log. **[TEST]** a redaction test runs against a seeded fixture and asserts none of the seeded PII
+strings or billing references appear in the captured output (`ADR-0045`).
 
 ### 17.2 Health and metrics
 
@@ -875,8 +920,10 @@ error rate, queue age beyond threshold, and `/readyz` failure. (`F-P0-09` AC-5)
 3. Every requirement in `PRODUCT_REQUIREMENTS.md` has at least one test that names it in its title,
    so the traceability is greppable: `test('F-P1-06 AC-6: saving attendance persists all marks in one transaction')`.
 4. A test asserting a **truthful label** exists for every state in the product: "opened in
-   WhatsApp" is never "sent"; a preview is never "portal"; a recorded payment is never "settled".
-   **[TEST]** (mitigates `R-03`, `NF-2`)
+   WhatsApp" is never "sent"; a preview is never "portal"; a recorded payment is never "settled"; a
+   billing submission is `submitted`, `under_review`, `approved`, `rejected`, or `flagged` and is
+   never "transfer detected" or "payment confirmed"; screenshot evidence is never proof of a
+   transfer. **[TEST]** (mitigates `R-03`, `NF-2`, `NF-5`)
 
 ---
 
@@ -898,6 +945,14 @@ error rate, queue age beyond threshold, and `/readyz` failure. (`F-P0-09` AC-5)
    them fails CI. **[CI]** (`F-P0-01` AC-1)
 6. Migrations are applied to staging, then a data-integrity check runs before the production step.
 7. `prisma generate` is run explicitly after `prisma migrate deploy` in CI and in the deploy image.
+8. Billing ships in five forward-only migrations: `20261127010000_usage_based_platform_billing`
+   (tables, forced RLS, append-only triggers and grants),
+   `20261127020000_billing_idempotency_and_review_state` (idempotency columns and indexes, and the
+   `under_review` action), `20261128010000_billing_remediation` (signed corrections, invoice credits
+   and reference events), `20261128020000_billing_exemption_revocation_and_review_state`
+   (revocation and review state), and `20261128030000_billing_evidence_file_scope_check` (the
+   `file_scope_check` repair and readiness marker). The order matters; no historical migration is
+   rewritten (`ADR-0045`, `ADR-0048`).
 
 ---
 
@@ -957,8 +1012,8 @@ These are measured on a representative mid-range Android device profile, not on 
 |---|---|
 | **M0** | Repository, CI, Prisma 7 + migrations + RLS, scoped data layer, isolation matrix generator, Better Auth + sessions, workspace + settings, i18n/RTL, theme tokens, design system, audit substrate, notification substrate, app shell with URL routing, observability, Railway deployment, backups |
 | **M1** | Student/group/session/attendance/homework/assessment/messaging/files/reporting modules, import pipeline, notification rules, file scan pipeline, reports, accessibility gate |
-| **M2** | Assistant membership and permission grants, portal authentication (parent, student), owner-only collected session receipts, QR token lifecycle, export/restore jobs, multi-workspace active selection, notification digest |
-| **M3** | Exam authoring and attempt lifecycle, video attachment, admin console, break-glass grants, billing webhooks, scale hardening |
+| **M2** | Assistant membership and permission grants, portal authentication (parent, student), owner-only collected session receipts, QR token lifecycle, export/restore jobs, multi-workspace active selection, notification digest; all teacher access is free and unlimited (`ADR-0046`) |
+| **M3** | Exam authoring and attempt lifecycle, video attachment, admin console, break-glass grants, usage-based platform billing with a manual InstaPay ledger and admin verification (`ADR-0045`, `ADR-0047`), scale hardening. No billing provider webhook or quota engine is introduced. |
 
 **M0 contains no user-facing data entry beyond the workspace profile** (`RELEASE_PLAN.md` §2.4). The
 architecture therefore front-loads the substrate and adds no feature scaffolding that anticipates
@@ -981,6 +1036,7 @@ M2/M3 behaviour, except the interface seams that let M2 features slip without re
 | AR-8 | Route registry and isolation matrix diverge | A new route is untested | The matrix is generated from the registry, and CI fails when a route is missing from the registry |
 | AR-9 | Prisma 8 reaches stable mid-project and the team is tempted to upgrade | Unplanned breaking change | Upgrade requires a new ADR plus a check of the Prisma release-status page; it is not a routine dependency bump |
 | AR-10 | A single template deploy to Railway cannot run the worker and the web service from one image | Deployment friction | Both processes are the same image with different start commands; documented in `INTEGRATIONS.md` |
+| AR-11 | Manual InstaPay verification records a wrong credit, or a screenshot is treated as proof | Untruthful financial state (`NF-5`) | Exact amount and unique-reference checks, `under_review` state with no credit, append-only review events and ledger adjustments, evidence marked as non-proof (`ADR-0045`, `ADR-0047`) |
 
 ---
 

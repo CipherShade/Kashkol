@@ -84,8 +84,9 @@ export const PERSONAS: readonly LandingEntry[] = [
 ];
 
 /**
- * The single manually-confirmed subscription published on `/subscribe`.
- * No card is charged, no transfer is detected, and no trial is promised.
+ * Features included with the free teacher account. Usage billing is described
+ * in the pricing copy; `/subscribe` no longer exists. No card is charged, no
+ * transfer is detected, and no trial is promised.
  */
 export const PRICING_FEATURES = [
   "students",

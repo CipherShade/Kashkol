@@ -6,7 +6,7 @@
   "Landing": {
     "meta": {
       "title": "Kashkol | One workspace for independent teachers in Egypt",
-      "description": "Kashkol brings students, groups, sessions, attendance, homework, grades and files into one place. One published subscription of 249 EGP/month, paid by manual transfer and confirmed by the Kashkol team."
+      "description": "Kashkol brings students, groups, sessions, attendance, homework, grades and files into one place. Teacher accounts are free with unlimited students; usage billing is 0.99 EGP per qualifying student per Cairo calendar month and payments are verified manually after an InstaPay transfer."
     },
     "brandAria": "Kashkol home",
     "skipToContent": "Skip to content",
@@ -35,7 +35,7 @@
       "subtitle": "Focus on your lesson. Kashkol keeps your work in order: students, groups, sessions, attendance, grades and files — all in one place instead of scattered notebooks and chats.",
       "primaryCta": "Start with Kashkol",
       "secondaryCta": "See how it works",
-      "note": "One subscription · 249 EGP/month · paid by manual transfer",
+      "note": "Free account · unlimited students · 0.99 EGP per qualifying student",
       "trust": {
         "records": "Every number comes from your records",
         "bilingual": "Arabic and English, correct direction",
@@ -276,18 +276,18 @@
     },
     "pricing": {
       "eyebrow": "Transparent pricing",
-      "title": "All your tools for one published price.",
-      "subtitle": "One published subscription in the current stage. Payment is a manual transfer, confirmed by the Kashkol team before activation.",
-      "planName": "Professional Educator Plan",
-      "planNote": "All available features for your students and groups within workspace limits",
-      "badge": "Full suite",
-      "amount": "249",
+      "title": "All your tools, with honest usage billing.",
+      "subtitle": "Your account is free with unlimited students. A student is charged 0.99 EGP in a Cairo calendar month only after at least two valid present or late marks. Payments are manual InstaPay transfers verified by the Kashkol team.",
+      "planName": "Free Teacher Account",
+      "planNote": "Every feature and unlimited students. Charges come only from qualifying monthly attendance.",
+      "badge": "Free account",
+      "amount": "0.99",
       "currency": "EGP",
-      "period": "per month",
-      "clarity": "Payment is a manual InstaPay transfer. Kashkol does not detect transfers automatically and does not activate an account automatically.",
+      "period": "per qualifying student / month",
+      "clarity": "Payment is a manual InstaPay transfer. Kashkol never claims to detect, send, or settle a transfer automatically.",
       "cta": "Start with Kashkol",
       "note": "No automatic card charge.",
-      "paymentNote": "Payment instructions appear on the subscribe page after you create your account.",
+      "paymentNote": "Payment details and submission appear in Billing after you sign in.",
       "items": [
         "Students and groups in your workspace",
         "Roster and QR attendance check-in",
@@ -309,7 +309,7 @@
         },
         "start": {
           "question": "How do I get started?",
-          "answer": "Create an account with your email, then add students or import an Excel sheet. After sign-up you will see the subscribe page with manual payment instructions; no amount is charged automatically."
+          "answer": "Create an account with your email, then add students or import an Excel sheet. Your account is free and unlimited. Usage billing and manual InstaPay verification are available in Billing after you sign in."
         },
         "safety": {
           "question": "Are my data and my students' data secure?",
@@ -334,8 +334,8 @@
       ]
     },
     "mobileCta": {
-      "label": "249 EGP / month",
-      "sublabel": "Manually confirmed subscription",
+      "label": "0.99 EGP / qualifying student",
+      "sublabel": "Free account · manual verification",
       "cta": "Start now"
     },
     "footer": {
@@ -411,11 +411,7 @@
     "signInTitle": "Sign in",
     "signInSubtitle": "Enter your account details to continue.",
     "signUpTitle": "Create an account",
-    "signUpSubtitle": "Create your account first. You will continue to payment on the next screen.",
-    "step1Of2": "Step 1 of 2 — Account",
-    "step2Of2": "Step 2 of 2 — Payment",
-    "paymentTitle": "Complete your subscription payment",
-    "paymentSubtitle": "Your account is created. Transfer the monthly subscription with InstaPay and keep the receipt for manual confirmation.",
+    "signUpSubtitle": "Create your free account. Unlimited students and every feature are available immediately.",
     "name": "Name",
     "email": "Email",
     "password": "Password",
@@ -450,20 +446,7 @@
     "socialDivider": "Or continue with",
     "continueWithGoogle": "Continue with Google",
     "continueWithFacebook": "Continue with Facebook",
-    "subscription": {
-      "title": "How to Subscribe & Activate",
-      "planTitle": "Monthly Kashkol Subscription",
-      "price": "249",
-      "currency": "EGP",
-      "period": "per month",
-      "step1": "Create your account with your name, email, and password.",
-      "step2": "Pay 249 EGP via InstaPay using the QR code or the direct payment link.",
-      "step3": "Keep the transfer receipt. The team confirms it manually before activating the subscription.",
-      "instapayId": "youssefahmed.telda@instapay",
-      "payButton": "Pay via direct InstaPay link",
-      "qrAlt": "InstaPay QR Code — youssefahmed.telda@instapay",
-      "note": "Kashkol does not detect transfers or activate accounts automatically. The receipt is confirmed manually."
-    }
+    "accountCreatedNeedsVerification": "Your account was created. Confirm your email to continue."
   },
   "auth": {
     "errors": {
@@ -810,7 +793,11 @@
       "assessment_pending_grades": "Pending grades",
       "backup_ready": "Backup ready",
       "export_ready": "Export ready",
-      "general": "General notification"
+      "general": "General notification",
+      "billing_invoice_issued": "Billing invoice issued",
+      "billing_submission_approved": "Payment submission approved",
+      "billing_submission_rejected": "Payment submission rejected",
+      "billing_submission_flagged": "Payment submission flagged for review"
     },
     "messages": {
       "studentAtRisk": "Attendance dropped to {rate}% after {streak} consecutive absences.",
@@ -822,7 +809,11 @@
       "attendancePresent": "Attendance marked Present for {studentName} in {groupName}.",
       "attendanceAbsent": "Attendance marked Absent for {studentName} in {groupName}.",
       "attendanceLate": "Attendance marked Late for {studentName} in {groupName}.",
-      "attendanceExcused": "Attendance marked Excused for {studentName} in {groupName}."
+      "attendanceExcused": "Attendance marked Excused for {studentName} in {groupName}.",
+      "billingInvoiceIssued": "Invoice {month} was issued. Payment is not required for educational access.",
+      "billingSubmissionApproved": "Payment for invoice {invoiceNumber} was verified and recorded.",
+      "billingSubmissionRejected": "Payment submission for invoice {invoiceNumber} was rejected. Review the reference and try again.",
+      "billingSubmissionFlagged": "Payment submission for invoice {invoiceNumber} was flagged for further review. It is not approved."
     }
   },
   "NotificationRules": {
@@ -912,7 +903,8 @@
       "audit": "Activity log",
       "payments": "Session receipts",
       "settings": "Settings",
-      "performance": "Performance"
+      "performance": "Performance",
+      "platformBilling": "Billing"
     }
   },
   "Language": {
@@ -1941,7 +1933,25 @@
     "portalGrantRevoked": "The portal grant for this student was revoked.",
     "portalPhoneUpdateNeedsPortalAccess": "Only someone who manages portal access can change this student's phone number.",
     "notParentPortalActor": "This account is not linked to a parent portal record.",
-    "notStudentPortalActor": "This account is not linked to a student portal record."
+    "notStudentPortalActor": "This account is not linked to a student portal record.",
+    "invalidBillingMonth": "Enter a valid Cairo billing month.",
+    "invalidBillingDate": "Enter a valid Cairo date.",
+    "invalidTransferDate": "Enter a valid transfer date and time.",
+    "invalidExemptionPeriod": "The expiration date cannot be before the start date.",
+    "exemptionOverlap": "This exemption overlaps an existing active or scheduled exemption.",
+    "billingSubmissionFinal": "This submission has already reached a final state.",
+    "billingAmountMismatch": "The submitted amount must exactly match the invoice total.",
+    "billingReferenceUsed": "This transaction reference has already been approved.",
+    "billingInvoicePaid": "This invoice is already paid.",
+    "platformAdminRequired": "An active platform administrator session is required.",
+    "billingReviewConflict": "This review was already recorded by another administrator. Reload and try again.",
+    "billingCycleRange": "The billing cycle spans too many months. Contact platform support before continuing.",
+    "billingAdjustmentFailed": "The adjustment could not be recorded. Check the workspace, amount, and reason.",
+    "noRetroactiveExpiration": "An exemption expiration cannot reach into a past month that is already covered.",
+    "billingReferenceReleased": "This transaction reference was released and must be reclaimed by an administrator before approval.",
+    "billingReferenceNotActive": "This transaction reference is not active for approval.",
+    "billingReferenceOwnerMismatch": "This transaction reference belongs to another submitted payment.",
+    "invalidBillingUrl": "Enter an absolute HTTPS link or leave it empty."
   },
   "Sessions": {
     "eyebrow": "Sessions",
@@ -2399,8 +2409,8 @@
   "PlatformAdmin": {
     "eyebrow": "SaaS Platform Operations",
     "title": "Platform Administration Console",
-    "subtitle": "Operational metadata, integration readiness, manual pilot plan assignment, and support usage summaries. Private student notes, grades, and guardian contact details are never exposed by default.",
-    "privacyBoundaryBanner": "Privacy boundary enforced: This console projects only workspace metadata, aggregate counts, and integration readiness. Student names, private teacher notes, grades, guardian phones, and financial ledgers are excluded.",
+    "subtitle": "Operational metadata, integration readiness, free/unlimited plan metadata, and support usage summaries. Private student notes, grades, and guardian contact details are never exposed by default.",
+    "privacyBoundaryBanner": "Privacy boundary enforced: this console projects workspace metadata, aggregate counts, and integration readiness. Student names, notes, grades, guardian phones, and session receipts are excluded; billing verification metadata is isolated in the dedicated billing console.",
     "forbiddenTitle": "Platform administrator access required",
     "forbiddenBody": "This area is restricted to provisioned SaaS platform operators. Workspace teachers, assistants, parents, and students cannot access platform administration.",
     "backToApp": "Return to workspace",
@@ -2444,7 +2454,7 @@
         "videoProvider": "External video streaming adapter; bandwidth figures are estimates unless provider telemetry is linked.",
         "webPush": "Opt-in browser push notifications with generic lock-screen payloads by default.",
         "whatsappMessaging": "Prepared wa.me deep links only; Kashkol never claims message delivery.",
-        "saasBilling": "Manual pilot plan assignment active; no online card charging or hardcoded retail prices."
+        "saasBilling": "Usage-based billing with a manual InstaPay verification ledger; no card charging or provider webhook is assumed."
       }
     },
     "filters": {
@@ -2467,9 +2477,9 @@
     "planStatus": {
       "pilot_active": "Pilot Active",
       "active": "Active",
-      "past_due": "Past Due (Writes Restricted)",
+      "past_due": "Past Due (metadata only)",
       "suspended": "Plan Suspended",
-      "cancelled": "Cancelled (Read-Only)"
+      "cancelled": "Cancelled (metadata only)"
     },
     "workspaces": {
       "title": "Workspaces Directory",
@@ -2505,8 +2515,8 @@
       "videosBreakdown": "Videos: {count} · Duration: {minutes} min · Playbacks: {playbacks} · Est. bandwidth: {bandwidth}",
       "messagesBreakdown": "Outbox total: {total} · Pending: {pending} · Sent/Processed: {sent} · Failed: {failed} · In-app notifications: {inApp}",
       "examsBreakdown": "Online exams: {total} total · {published} published",
-      "planSection": "Manual Plan, Status & Quota Configuration",
-      "planBillingNotice": "Manual pilot management only: no credit cards are charged and no final prices are hardcoded. Downgrading or setting Past Due/Cancelled preserves all existing data and restricts new writes on the server.",
+      "planSection": "Free Access & Usage Billing",
+      "planBillingNotice": "Every teacher workspace is free and unlimited. Plan status is metadata only; an unpaid platform invoice never restricts educational writes.",
       "overrideStudents": "Override max active students",
       "overrideGroups": "Override max active groups",
       "overrideAssistants": "Override max assistant seats",
@@ -2535,7 +2545,8 @@
       "diagnosticsRecentAudit": "Recent Workspace Audit Action Codes",
       "diagnosticsFailedExports": "Recent Failed Report Exports",
       "diagnosticsFailedOutbox": "Recent Failed Outbox Deliveries",
-      "noFailures": "No failed records in this category."
+      "noFailures": "No failed records in this category.",
+      "freeUnlimitedNotice": "To manage the 0.99 EGP per qualifying student rule, payment submissions, or billing exemptions, open the dedicated billing console."
     },
     "audit": {
       "title": "Platform Administration Audit Log",
@@ -2548,6 +2559,10 @@
         "workspace": "Target Workspace",
         "reason": "Reason"
       }
+    },
+    "billingConsole": "Billing console",
+    "labels": {
+      "unlimited": "Unlimited"
     }
   },
   "forms": {
@@ -3034,5 +3049,228 @@
       "generatedAt": "Generated at"
     },
     "needWritePermission": "You need grade-write permission to make this change."
+  },
+  "TeacherBilling": {
+    "title": "Billing",
+    "submit": {
+      "note": "Submit the exact invoice total after making a manual InstaPay transfer and sending the transaction screenshot to +201004574178 on WhatsApp. A submission is only a claim until a platform administrator verifies it."
+    },
+    "subtitle": "Usage-based fees computed from real attendance. Your account is free and never loses educational access.",
+    "labels": {
+      "account": "Account",
+      "currentMonth": "Cairo month",
+      "qualifyingStudents": "Qualifying students",
+      "estimatedCharge": "Estimated charge",
+      "instapay": "InstaPay details",
+      "unbilled": "Carried balance",
+      "availableCredit": "Available credit",
+      "paid": "Paid",
+      "credited": "Invoice credits",
+      "outstanding": "Outstanding",
+      "invoice": "Invoice",
+      "total": "Total",
+      "state": "State",
+      "reference": "Transaction reference",
+      "amountEgp": "Amount (EGP)",
+      "transferredAt": "Transfer date/time",
+      "amount": "Amount",
+      "date": "Date",
+      "entry": "Entry",
+      "evidence": "Payment screenshot (optional)"
+    },
+    "sections": {
+      "rule": "Billing rule",
+      "summary": "Summary",
+      "submit": "Submit a manual transfer",
+      "history": "Payment submissions",
+      "ledger": "Ledger history"
+    },
+    "rule": {
+      "description": "Kashkol charges 0.99 EGP for each student with two qualifying sessions inside a rolling 30-day period that includes a session in the billed Cairo month.",
+      "rate": "Rate: {rate} piastres per qualifying student",
+      "qualification": "Present and late marks on non-cancelled sessions count; absent, excused, and cancelled sessions do not.",
+      "manual": "Payments are manual InstaPay transfers and are never treated as confirmed until a platform administrator verifies the transaction reference.",
+      "evidence": "A screenshot is only supporting evidence. It is never accepted as proof without transaction verification.",
+      "whatsapp": "Send the transaction screenshot to +201004574178 on WhatsApp for manual review. No gateway or automatic approval is used."
+    },
+    "values": {
+      "freeUnlimited": "Free account · unlimited students",
+      "notConfigured": "InstaPay details have not been configured yet. Do not transfer until they appear here.",
+      "exempt": "Billing exemption: {reason} from {start} to {end}. No charges are generated while it applies.",
+      "openEnded": "no end date",
+      "evidenceAttached": "Attached",
+      "noEvidence": "—"
+    },
+    "actions": {
+      "openLink": "Open InstaPay link",
+      "submit": "Record transfer",
+      "submitting": "Recording…",
+      "uploading": "Uploading…"
+    },
+    "empty": {
+      "invoices": "No invoices have been issued yet.",
+      "invoicesForSubmission": "There is no invoice to attach a transfer to yet.",
+      "submissions": "No payment submissions recorded.",
+      "ledger": "No ledger entries recorded."
+    },
+    "states": {
+      "paid": "Paid",
+      "credited": "Settled by credit",
+      "awaiting_verification": "Awaiting manual verification",
+      "unpaid": "Unpaid",
+      "submitted": "Submitted — not confirmed",
+      "under_review": "Under review",
+      "approved": "Verified",
+      "rejected": "Rejected",
+      "flagged": "Flagged for review"
+    },
+    "entries": {
+      "usage_charge": "Usage charge",
+      "adjustment": "Audited adjustment",
+      "invoice_allocation": "Allocated to invoice",
+      "payment_credit": "Verified payment",
+      "exemption_reversal": "Exemption reversal",
+      "invoice_credit": "Invoice credit",
+      "payment_reversal": "Payment reversal"
+    },
+    "billing": {
+      "submissionRecorded": "Submission recorded. This is not payment confirmation."
+    },
+    "errors": {
+      "billingSubmissionFailed": "The submission could not be recorded. Check the reference, amount, and invoice."
+    },
+    "exemptionReasons": {
+      "internal_testing": "Internal testing",
+      "beta_tester": "Beta tester",
+      "testimonial": "Testimonial",
+      "promotional": "Promotional",
+      "partner": "Partner",
+      "custom": "Custom"
+    }
+  },
+  "PlatformBilling": {
+    "title": "Platform billing",
+    "subtitle": "Narrow, audited verification of usage billing, exemptions, and manual InstaPay submissions.",
+    "actions": {
+      "runCycle": "Run monthly cycle",
+      "back": "Back to platform",
+      "saveVersion": "Save config version",
+      "createExemption": "Create exemption",
+      "revoke": "Revoke",
+      "review": "Record decision",
+      "openEvidence": "Open evidence",
+      "releaseReference": "Release reference"
+    },
+    "sections": {
+      "config": "Versioned billing configuration",
+      "exemption": "Billing exemptions",
+      "submissions": "Payment submissions awaiting review",
+      "adjustment": "Audited balance adjustment"
+    },
+    "config": {
+      "note": "The rate is fixed at 99 piastres by ADR-0045. Changes below append a new audited version containing the supplied InstaPay details; earlier versions remain immutable.",
+      "active": "Current version {version} · rate {rate} piastres"
+    },
+    "exemption": {
+      "note": "Exempt workspaces keep all features and usage analytics but generate no charges, balances, invoices, or payment obligations. Expiry starts billing from the first uncovered Cairo month."
+    },
+    "labels": {
+      "thresholdEgp": "Invoice threshold (EGP)",
+      "instapayHandle": "InstaPay handle",
+      "instapayLink": "InstaPay link",
+      "reason": "Audit reason",
+      "workspaceId": "Workspace ID",
+      "workspace": "Workspace",
+      "selectWorkspace": "Select a workspace",
+      "reasonType": "Exemption reason",
+      "startDate": "Start date",
+      "expiresOn": "Expiration date",
+      "internalNotes": "Internal notes",
+      "auditReason": "Reason for audit",
+      "action": "Decision",
+      "noteCode": "Note code",
+      "note": "Review note",
+      "evidence": "Evidence",
+      "evidenceAttached": "Attached",
+      "noEvidence": "None",
+      "referenceReleased": "Reference released",
+      "listTruncated": "Showing the first records only. Older records exist outside this view."
+    },
+    "auditReasons": {
+      "config_change": "Config change",
+      "exemption_created": "Exemption created",
+      "exemption_updated": "Exemption updated",
+      "exemption_revoked": "Exemption revoked",
+      "manual_adjustment": "Manual adjustment",
+      "review_decision": "Review decision",
+      "reference_release": "Reference release"
+    },
+    "confirmations": {
+      "saveConfig": "Save a new configuration version?",
+      "createExemption": "Create the exemption and apply any retroactive settlement for {workspace}?",
+      "revokeExemption": "Revoke this exemption for {workspace}?",
+      "reviewSubmission": "Record {action} for invoice {invoice} in {workspace}?",
+      "releaseReference": "Release the reference for invoice {invoice} in {workspace} and reverse its payment credit?",
+      "adjustBalance": "Record this balance adjustment for {workspace}?"
+    },
+    "reasonTypes": {
+      "internal_testing": "Internal testing",
+      "beta_tester": "Beta tester",
+      "testimonial": "Testimonial",
+      "promotional": "Promotional",
+      "partner": "Partner",
+      "custom": "Custom"
+    },
+    "exemptionStates": {
+      "scheduled": "Scheduled",
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "submissionStates": {
+      "submitted": "Submitted",
+      "under_review": "Under review",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "flagged": "Flagged"
+    },
+    "reviewActions": {
+      "approved": "Approve",
+      "rejected": "Reject",
+      "flagged": "Flag",
+      "under_review": "Mark under review"
+    },
+    "noteCodes": {
+      "amount_mismatch": "Amount mismatch",
+      "reference_not_found": "Reference not found",
+      "duplicate_reference": "Duplicate reference",
+      "other": "Other"
+    },
+    "empty": {
+      "exemptions": "No billing exemptions recorded.",
+      "submissions": "No submissions are awaiting review."
+    },
+    "notices": {
+      "configSaved": "Configuration version saved.",
+      "exemptionCreated": "Exemption created.",
+      "exemptionRevoked": "Exemption revoked.",
+      "exemptionRevokedReason": "Administrator revoked this exemption",
+      "reviewSaved": "Review decision recorded.",
+      "referenceReleased": "The reference was released and its payment credit reversed.",
+      "cycleCompleted": "Billing cycle completed."
+    },
+    "errors": {
+      "adminActionFailed": "The billing action could not be completed. Check the fields and your platform-admin session.",
+      "workspaceRequired": "Select a workspace from the list."
+    },
+    "adjustment": {
+      "note": "Adjustments append a ledger entry. They never rewrite an invoice or a past charge.",
+      "amount": "Amount (EGP)",
+      "direction": "Direction",
+      "debit": "Increase balance",
+      "credit": "Reduce balance",
+      "submit": "Record adjustment",
+      "success": "Adjustment recorded."
+    }
   }
 }

@@ -1,6 +1,7 @@
 # Architecture Decision Records
 
-This directory holds the Architecture Decision Records (ADRs) for Kashkol.
+This directory holds the Architecture Decision Records (ADRs) for Kashkol. As of 2026-11-28 it
+contains 51 ADRs plus this index.
 
 An ADR captures a decision that is **expensive to reverse** and that a future engineer would
 otherwise have to re-derive from the code. Anything that can be changed in an afternoon without
@@ -57,15 +58,22 @@ Every ADR uses the same sections:
 | [0033](0033-academic-terms-only.md) | Academic-year handling ships terms only | Accepted (approved 2026-11-18) | M3a |
 | [0034](0034-computed-performance-intelligence.md) | Performance intelligence is computed, evidence-backed, and rule-based | Accepted (approved 2026-11-19) | M3b |
 | [0035](0035-evergreen-parchment-interface.md) | Evergreen-and-parchment interface language (supersedes ADR-0023 visual values) | Accepted (approved 2026-11-21) | M0–M3 |
-| [0036](0036-two-step-signup-payment-page.md) | Two-step teacher sign-up with a separate payment page | Accepted (approved 2026-11-23) | M0 |
+| [0036](0036-two-step-signup-payment-page.md) | Two-step teacher sign-up with a separate payment page | Accepted (superseded in part by ADR-0045/0046, 2026-11-27) | M0 |
 | [0037](0037-arabic-kaf-brand-mark.md) | Arabic ك brand mark and theme-aware icon | Accepted (approved 2026-11-23) | M0 |
 | [0038](0038-workspace-notification-rules.md) | Workspace notification rules and a session-scoped overdue alert | Accepted (2026-11-24) | M2 |
 | [0039](0039-workspace-archive-backup-and-restore.md) | Workspace JSON backup and validated in-app restore | Accepted (2026-11-24) | M2 |
 | [0040](0040-computed-progress-series.md) | Computed per-student progress series | Accepted (2026-11-25) | M2 |
-| [0041](0041-owner-only-collected-session-earnings.md) | Owner-only collected session earnings | Accepted (2026-11-25) | M2 |
+| [0041](0041-owner-only-collected-session-earnings.md) | Owner-only collected session earnings | Superseded in part by ADR-0043 and by ADR-0045/0046 for platform billing (2026-11-27) | M2 |
 | [0042](0042-private-shell-and-no-truth-slogan.md) | Private readiness page and no truth slogan | Accepted (2026-11-25) | M0–M2 |
-| [0043](0043-remove-legacy-money-storage.md) | Physical removal of legacy workspace money storage | Accepted (approved 2026-11-25) | M2 |
-| [0044](0044-teacher-platform-landing-reference.md) | Teacher-platform landing reference with labelled sample visuals | Accepted (approved 2026-11-27) | M0 |
+| [0043](0043-remove-legacy-money-storage.md) | Physical removal of legacy workspace money storage | Accepted (superseded in part by ADR-0045/0046 for platform billing, 2026-11-27) | M2 |
+| [0044](0044-teacher-platform-landing-reference.md) | Teacher-platform landing reference with labelled sample visuals | Accepted (superseded in part by ADR-0045/0046 for pricing and routes, 2026-11-27) | M0 |
+| [0045](0045-usage-based-platform-billing.md) | Usage-based platform billing with a manual InstaPay ledger | Accepted (approved 2026-11-27) | M3b |
+| [0046](0046-free-unlimited-teacher-access.md) | Free, unlimited teacher access | Accepted (approved 2026-11-27) | M1–M3 |
+| [0047](0047-billing-exemptions-and-admin-verification.md) | Billing exemptions and narrow platform-admin billing access | Accepted (approved 2026-11-27; superseded in part by ADR-0048 for retroactive credits) | M3b |
+| [0048](0048-billing-remediation-credits-and-reference-recovery.md) | Billing remediation credits and reference recovery | Accepted (remediation decision, 2026-11-28) | M3b |
+| [0049](0049-second-audit-billing-followup.md) | Second-audit billing follow-up | Accepted (follow-up remediation decision, 2026-11-28) | M3b |
+| [0050](0050-residual-hardening.md) | Residual hardening after the second audit | Accepted (hardening decision, 2026-11-28) | M3b |
+| [0051](0051-final-billing-decisions.md) | Final billing decisions for OQ-23, OQ-24 and OQ-25 | Accepted (final product-owner decisions, 2026-11-28) | M3b |
 
 ## Conventions
 
@@ -123,3 +131,9 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0041 | `F-P2-04`, `D-14`, `OQ-17`, `NF-1`, `ADR-0028`, `ADR-0038` |
 | 0042 | `F-P0-04`, `NF-1`–`NF-13` |
 | 0043 | `F-P2-04`, `F-P2-11`, `D-14`, `NF-1`, `NF-7`, `ADR-0041`, `ADR-0014` |
+| 0045 | `F-P3-04`, `A-04`, `OQ-04`, `NF-1`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `ADR-0006`, `ADR-0014` |
+| 0046 | `F-P2-01`, `F-P3-03`, `F-P3-04`, `R-15`, `NF-8`, `ADR-0045` |
+| 0047 | `F-P3-03`, `F-P3-04`, `R-01`, `A-12`, `NF-5`, `NF-8`, `NF-9`, `ADR-0045`, `ADR-0046` |
+| 0048 | `F-P3-04`, `F28`, `R-01`, `R-15`, `NF-1`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `ADR-0045`, `ADR-0047` |
+| 0049 | `F-P3-04`, `F28`, `R-01`, `R-15`, `NF-1`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `NF-13`, `ADR-0045`, `ADR-0047`, `ADR-0048` |
+| 0050 | `F-P0-07`, `F-P3-03`, `F-P3-04`, `F28`, `R-01`, `R-08`, `R-15`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `ADR-0014`, `ADR-0045`, `ADR-0047`, `ADR-0048`, `ADR-0049` |

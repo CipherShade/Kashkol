@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/icon";
 
 /**
  * Small-screen conversion bar. It links to the real sign-up route; it does not
- * charge, start a trial, or imply that a subscription is already active.
+ * charge, start a trial, or imply that a paid subscription is required.
  */
 export async function LandingMobileCta({ signedIn }: { signedIn: boolean }) {
   if (signedIn) return null;

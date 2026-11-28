@@ -1,11 +1,12 @@
 /**
- * Where a teacher lands after the account part of sign-up (ADR-0036).
+ * Where a teacher lands after account creation (ADR-0046).
  *
- * The destination is kept in a pure helper so a unit test can lock the two-step
- * sequence without constructing Better Auth or a session.
+ * Accounts are free and active without a payment step. Sign-up never starts a
+ * session, so the destination is the existing sign-in surface; when outbound
+ * email is configured the verification surface is shown first. The helper is
+ * pure so a unit test can lock the sequence without Better Auth or a session.
  */
 export function signUpDestination(locale: string, emailConfigured: boolean): string {
-  const params = new URLSearchParams({ registered: "1" });
-  if (emailConfigured) params.set("verify", "1");
-  return `/${locale}/subscribe?${params.toString()}`;
+  if (emailConfigured) return `/${locale}/verify-email?registered=1`;
+  return `/${locale}/sign-in?registered=1`;
 }

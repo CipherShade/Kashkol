@@ -1,18 +1,129 @@
 # Kashkol — Status
 
-**Date:** 2026-11-27 · **Status:** Owner-only collected session earnings, a private status page, and physical removal of legacy workspace money storage are implemented (`ADR-0041`, `ADR-0042`, `ADR-0043`). The removed tagline is gone from both catalogues, the shell, the landing footer, the agent instructions, and the ADRs. Assistants, parents, students, and public visitors have no money surface; expected revenue, adjustments, fee rules, group default prices, voided receipts, money alerts, and money grants no longer exist in the workspace schema. Platform subscription and billing are unchanged. The public landing now follows the teacher-platform reference with labelled synthetic illustrations and no unverified claims (`ADR-0044`). All gates pass: lint, typecheck, 572 unit + 34 UI tests, 167 integration tests, and the production build. Phase: M1/M2 core + P3 learning media, online assessments, forms, & operational workflows
+**Date:** 2026-11-28 · **Status:** Usage-based platform billing, free/unlimited teacher access, first-class billing exemptions, the audited remediation of F1–F21, the second-audit follow-up, the residual hardening, and the owner's final billing decisions are implemented (`ADR-0045`–`ADR-0051`). Teacher accounts are free with unlimited students and all features; 99 piastres per distinct qualifying student whose two qualifying sessions fall within a rolling 30-day period that includes a session in the billed `Africa/Cairo` month, from workspace activation, is recorded in an append-only ledger with immutable invoices and a manual InstaPay submission/review flow. Teachers send transaction screenshots to `+201004574178` for explicit administrator approval. Corrections are signed credits and reversals; invoices are never rewritten. `/app/billing` is teacher owner-only, `/platform-admin/billing` provides narrow verification, exemptions, evidence, adjustments, release/recovery and the admin-triggered cycle, and `/subscribe` plus the subscription panel are removed; `/app/payments` remains the separate owner-only session-receipt surface. Owner-only collected session earnings, the private status page and physical removal of legacy workspace money storage remain in force (`ADR-0041`–`ADR-0044`). Gate results from this run: lint, typecheck, `npm test` (620 unit tests across 90 files plus 32 UI tests across 4 files), `npm run test:ui` (32/4), `npm run test:integration` (184 across 32 files), build with `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (58 migrations, current), and `git diff --check` all pass. Passing gates are not approval or production readiness. Phase: M1/M2 core + P3 learning media, online assessments, forms, billing, and operational workflows
 
 ---
 
 ## 1. Where the project stands
 
 The **specification phase** and the **architecture phase** are complete. The application foundation
-now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and
-thirty-nine migrations, PostgreSQL row-level security, the scoped-tenancy helper, the guarded local
-seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation and settings,
-the server-enforced role and permission model, the portal-link authorization design, audit
-infrastructure, the core domain schema with Arabic search indexes, the bilingual shell,
+now exists on top of them: the Next.js scaffold, the pinned toolchain, the Prisma 7 schema and 58
+migrations found/applied locally, PostgreSQL row-level security, the scoped-tenancy helper, the
+guarded local seed, Better Auth with the sign-up/sign-in/verification/recovery UI, workspace creation
+and settings, the server-enforced role and permission model, the portal-link authorization design,
+audit infrastructure, the core domain schema with Arabic search indexes, the bilingual shell,
 health/readiness probes, the route registry, and the project-rule checks.
+
+### 1.1 Completed on 2026-11-27 — usage-based billing and free access (`ADR-0045`, `ADR-0046`, `ADR-0047`)
+
+- **Surfaces:** `/app/billing` is owner-only (assistants denied) and `/platform-admin/billing`
+  provides versioned config, exemptions, submission review, evidence, signed balance adjustments,
+  and the cycle trigger. Optional evidence upload/download is implemented. Teacher session receipts
+  stay separate at `/app/payments`. `/subscribe` and the subscription panel are removed; sign-up
+  leads to sign-in/verify-email.
+- **Rules:** all accounts are free and unlimited with no paid tiers, quotas, feature gates, or
+  payment-status write blocks; only a genuine `suspended`/`deleted` workspace blocks writes. Usage is
+  99 piastres per distinct qualifying student per `Africa/Cairo` month from activation; `ADR-0051`
+  refined qualification to two qualifying `present`/`late` marks inside a rolling 30-day window that
+  includes a session in the billed month (no absent, excused, cancelled, duplicate, or pre-activation
+  attendance). Archival or deletion never removes earned qualification. The default `5000`-piastre
+  threshold is versioned and admin-configurable; balances carry forward. The ledger is append-only,
+  invoices and line items immutable, and writes are transactional, idempotent, concurrency-safe,
+  RLS-scoped and audited.
+- **Payments and exemptions:** InstaPay submissions carry a normalized reference, amount, and
+  transfer time; `submitted` and `under_review` never credit payment, screenshots are optional
+  evidence only, and no API/webhook/automatic detection or new production worker token/config is
+  claimed. Exemptions have a reason, optional notes, start/expiration, status and admin modifier,
+  keep the workspace fully functional and non-billable, never bill retroactively, and audit every
+  lifecycle event. Admin billing access is metadata-only: no student names, phones, notes, message
+  bodies, or session receipts.
+- **Migrations:** `20261127010000_usage_based_platform_billing` and
+  `20261127020000_billing_idempotency_and_review_state`; the second is the required readiness marker.
+- **Gate evidence from this run:** `npm run lint` and `npm run typecheck` pass; `npm test` reports
+  602 unit tests across 89 files and 32 UI tests across 4 files; `npm run test:integration` reports
+  168 tests across 29 files against the pinned embedded PostgreSQL with both billing migrations
+  applied; `npm run build` succeeds with `NEXT_BUILD_WORKERS=1`, an optional build-only override for
+  memory-constrained hosts (`next.config.ts`). No commit, push, deploy, or production
+  configuration/data change was made.
+
+**Billing decisions:** `OQ-23`, `OQ-24` and `OQ-25` are **closed** by the product owner's final
+decisions in `ADR-0051`. The lawyer's approval of the payment process is recorded only as reported
+by the product owner; no name, opinion, licence, advice text, or legal-invoice conclusion is
+invented. Exact bank-specific reference normalization, legal/tax invoice numbering, evidence
+retention, and external-accountant involvement were not specified and remain explicitly
+undecided details. No check is weakened.
+
+### 1.2 Billing audit remediation on 2026-11-28 — `ADR-0048`
+
+An independent read-only audit of the uncommitted billing implementation confirmed F1–F21. The
+remediation keeps the approved business model unchanged: 99 piastres per qualifying student per
+Cairo month, free and unlimited teacher access, manual InstaPay verification, no gateway, and no
+change to owner-only session receipts.
+
+- **Money and history:** retroactive exemptions append a signed `exemption_reversal` for unbilled
+  usage and an `invoice_credit` plus `billing_invoice_credit` for already-invoiced usage. Credits
+  reduce outstanding invoices oldest-first; a remainder is available credit, never a verified
+  payment. Paid submissions can be cancelled by a signed `payment_reversal`. No invoice, line item,
+  snapshot, or ledger row is rewritten.
+- **Authorisation and safety:** platform-admin status is rechecked inside each billing mutation;
+  review idempotency is action-specific; config links accept absolute HTTPS URLs on write and are
+  revalidated when projected for display; the admin workspace selector is server-backed and shows
+  name, slug, ID and owner name with a confirmation naming the target; review notes use coded
+  reasons; money is formatted from integer piastres; and the evidence-view audit event is written
+  only after the stored bytes are read successfully. The raw InstaPay reference stays in the tenant-scoped submission,
+  while the global registry holds only a fingerprint, status and append-only events.
+- **Reference recovery:** a disputed reference can be released by a platform administrator; its
+  payment credit is reversed, and a later approved submission can reclaim it. Both transitions are
+  audited and no history is deleted.
+- **Schema and operations:** three forward-only migrations add the correction/reversal tables and
+  fields, exemption revocation and review state, and the `file_scope_check` repair that lets
+  `billing_evidence` be stored. The readiness marker is
+  `20261128030000_billing_evidence_file_scope_check`. `billing_invoice_credit` is retained by
+  workspace restore because it is append-only.
+- **Tests:** unit coverage locks credit allocation, reversal amounts, HTTPS rejection, release
+  schemas and revocation dates. PostgreSQL integration coverage exercises the exemption/invoice
+  lifecycle, manual-credit allocation, reference release/reclaim, replay protection, in-transaction
+  admin recheck, RLS on every tenant billing table, concurrent cycles, and evidence
+  upload/download signing and audit ordering. No check was skipped or weakened.
+
+**Not claimed:** these gates do not constitute product approval, legal/accounting sign-off, a
+production migration, or a deployed release. A second independent audit was then performed and
+returned **BLOCK**; its follow-up is recorded in §1.3.
+
+### 1.3 Second-audit billing follow-up on 2026-11-28 — `ADR-0049`
+
+A second independent read-only audit verified most F1–F21 fixes but returned **BLOCK**. Its two high
+findings were an uncapped retroactive exemption credit that could manufacture available credit on an
+already-settled invoice, and billing error keys missing from both message catalogues. Medium and low
+findings concerned silent admin-list truncation, inaccurate `tenantScoped` metadata on two
+cross-workspace platform routes, non-idempotent config appends, and money labels that appended a
+literal `EGP` after a formatter-produced number.
+
+- **Financial correction:** a retroactive invoice credit is now capped at the invoice's current
+  outstanding balance, using the same verified-payment and existing-credit rule as manual credits.
+  A settled invoice gets no new credit; a partially settled invoice gets only the remainder.
+- **Replay safety:** a server-derived SHA-256 key over parsed config content and coded reason maps to
+  one immutable `billing_config` version through the new append-only `billing_config_idempotency`
+  table. A retry returns the original version; different content appends a new version.
+- **Operational honesty:** platform-admin exemption and submission lists query every visible
+  workspace in its own scoped transaction (sequentially, to bound the connection pool) and return
+  an explicit `truncated` flag. The route registry truthfully marks the overview and cycle routes
+  `tenantScoped: false` because they fan out into scoped transactions.
+- **Exemption lifecycle:** a scheduled exemption revoked before its start date covers no day and no
+  month, and an expired exemption is status-synced before an update so it cannot be extended back
+  into billable days without compensation.
+- **Localisation and UI:** every newly thrown billing error key exists in both catalogues; server
+  money labels contain the currency from `Intl` and components no longer append `EGP`; reviewer
+  confirmations name the workspace, invoice and action; high-impact money formatting is covered by
+  unit and integration tests.
+- **Migration:** `20261128040000_billing_second_audit_followup` adds only the new replay table with
+  an append-only trigger and grants. It is forward-only and is the readiness marker in
+  `src/lib/db/migration-state.ts`. It was applied locally with `npx prisma migrate deploy`; no
+  production migration was run.
+
+**Not claimed:** no third audit, release/production approval, legal/accounting sign-off, production
+migration, deployed release, or production data change. `OQ-23`–`OQ-25` were closed later by the
+product owner in `ADR-0051`; that decision is not release approval.
 
 | Item | State |
 |---|---|
@@ -25,7 +136,7 @@ health/readiness probes, the route registry, and the project-rule checks.
 | Data model | Complete — `docs/DATA_MODEL.md` |
 | Security and privacy | Complete — `docs/SECURITY_AND_PRIVACY.md` |
 | Integration contracts | Complete — `docs/INTEGRATIONS.md` |
-| Architecture decisions | Complete — `docs/decisions/` (41 ADRs + index) |
+| Architecture decisions | Complete — `docs/decisions/` (49 ADRs + index) |
 | Agent instructions | Complete — `../AGENTS.md` |
 | Application foundation | **Implemented** — scaffold, DB/RLS, tenancy substrate, probes, locale shell |
 | Authentication and workspace flows | **Implemented** — Better Auth UI, verification, recovery, workspace creation/settings, guarded shell |
@@ -39,9 +150,11 @@ health/readiness probes, the route registry, and the project-rule checks.
 
 - Next.js 16.4.2 App Router, React 19.2, TypeScript 5.9, Tailwind v4, next-intl 4.14.9, Vitest 5.
 - Prisma 7.10.1 with the PostgreSQL driver adapter and an explicit generated-client output.
-- Twenty-four tracked migrations are applied to the local development database, including academic
-  records and the session receipt/report migrations:
-  homework, assessment result details, follow-up records, transactional audit, and forced RLS.
+- Fifty-eight migrations are found and applied locally, including academic records, the session
+  receipt/report migrations, and all six usage-billing migrations: homework, assessment result details,
+  follow-up records, transactional audit, forced RLS, billing idempotency/review state, remediation
+  credits/reversals, exemption revocation state, the evidence file-scope repair, and the config replay
+  guard.
 - `withScope()`/`withUserScope()` transaction helpers and a tenant-table registry checked against the
   schema and SQL.
 - Deterministic, idempotent local seed with a production/loopback guard.
@@ -96,8 +209,8 @@ health/readiness probes, the route registry, and the project-rule checks.
 - Platform Administration & Centralized Workspace Plans (`F-P3-03` & `F-P3-04`) (`src/modules/platform-admin/`, `scripts/platform-admin.ts`, `docs/SUPPORT_RUNBOOK.md`):
   - Non-public CLI provisioning (`npm run platform-admin -- grant|revoke|list`) requiring verified email and audit reason — never auto-promoting the first user or hardcoded emails.
   - Metadata-only workspace inspection (`/api/platform-admin/overview`, `/api/platform-admin/workspaces/[workspaceId]`, `/[locale]/platform-admin`) exposing high-level status, created date, plan/status metadata, integration readiness, and usage summaries (`isEstimate` badges on video bandwidth and outbox counts) without exposing student notes, grades, or guardian contact details.
-  - Time-limited, reasoned, confirmation-gated break-glass support diagnostics (max 60 minutes, operational error codes only, visible to workspace owners via `/api/workspace/subscription`).
-  - Centralized plan catalog (`pilot`, `standard`, `expanded` in `manual_pilot` mode without card billing or hardcoded retail prices), per-workspace quota overrides, and server-side write/limit enforcement (`assertWorkspaceWriteAllowedTx`) across students, groups, assistant invitations, files, videos, and online exams.
+  - Time-limited, reasoned, confirmation-gated break-glass support diagnostics (max 60 minutes, operational error codes only, visible to workspace owners in their activity log). Billing verification is a separate narrow metadata-only admin path (`ADR-0047`).
+  - Legacy plan fields (`pilot`, `standard`, `expanded`) remain as metadata for exports and admin history only. All workspaces are free and unlimited: no quotas, feature gates, or payment-status write blocks; `assertWorkspaceWriteAllowedTx` checks only genuine `suspended`/`deleted` workspace states (`ADR-0046`).
 - `/healthz`, `/readyz`, and a bilingual status shell at `/ar` and `/en`.
 - Route registry, message-catalogue parity check, Prisma import boundary, logical-CSS check, and
   Railway build/start/migration configuration.
@@ -138,10 +251,10 @@ health/readiness probes, the route registry, and the project-rule checks.
 
 | Document | Lines | What it contains |
 |---|---|---|
-| `docs/PRODUCT_REQUIREMENTS.md` | 1,211 | Product definition, roles, tenancy, language/RTL/theming rules, design tokens, domain model, 45 requirement flows across P0–P3 with testable acceptance criteria, a 16-entry risk register (`R-01`–`R-16`), privacy register, integration dependencies, 13 hard prohibitions (`NF-1`–`NF-13`), and three appendices: the observed prototype inventory, 23 prototype defects not to carry forward (`DEF-01`–`DEF-23`), and the decision index (`D-01`–`D-18`). |
-| `docs/USER_FLOWS.md` | 794 | 28 end-to-end flows (`F1`–`F28`) with preconditions, step-by-step behaviour, error and edge cases, audit events, and a closing invariants appendix. Every flow names the requirements it satisfies and the prototype defect it resolves. |
-| `docs/RELEASE_PLAN.md` | 392 | Milestones M0–M3 with work packages, entry/exit criteria, scope-in and scope-out tables, a private-beta design, release gates, release cadence and hotfix policy, external dependencies with consequences, plan-level risks, a definition of done, and full requirement-to-milestone traceability. |
-| `docs/OPEN_QUESTIONS_AND_ASSUMPTIONS.md` | 184 | 17 assumptions (`A-01`–`A-17`) and 19 open questions (`OQ-01`–`OQ-19`), each with options, a conservative default that applies until answered, the impact of a different answer, and a decision deadline; plus the resolution procedure and the external-dependency register. |
+| `docs/PRODUCT_REQUIREMENTS.md` | 1,723 | Product definition, roles, tenancy, language/RTL/theming rules, design tokens, domain model, requirement flows across P0–P3 with testable acceptance criteria (`F-P3-04` now specifies usage-based billing), a 16-entry risk register (`R-01`–`R-16`), privacy register, integration dependencies with no billing provider, 13 hard prohibitions (`NF-1`–`NF-13`), and three appendices: the observed prototype inventory, 23 prototype defects not to carry forward (`DEF-01`–`DEF-23`), and the decision index (`D-01`–`D-18`). |
+| `docs/USER_FLOWS.md` | 1,203 | 28 end-to-end flows (`F1`–`F28`) with preconditions, step-by-step behaviour, error and edge cases, audit events, and a closing invariants appendix; F28 now covers free sign-up and manual usage billing. Every flow names the requirements it satisfies and the prototype defect it resolves. |
+| `docs/RELEASE_PLAN.md` | 513 | Milestones M0–M3 with work packages, entry/exit criteria, scope-in and scope-out tables, a private-beta design, release gates, release cadence and hotfix policy, external dependencies with consequences, plan-level risks, a definition of done, and full requirement-to-milestone traceability; M3 billing has no provider contract. |
+| `docs/OPEN_QUESTIONS_AND_ASSUMPTIONS.md` | 255 | 22 assumptions (`A-01`–`A-22`) and 25 open questions (`OQ-01`–`OQ-25`), each with options, a conservative default, the impact of a different answer, and a decision deadline; `OQ-04` resolved, `OQ-20` superseded, and `OQ-23`–`OQ-25` closed by the product owner in `ADR-0051`. |
 
 ### 2.2 Architecture
 
@@ -224,7 +337,7 @@ hardcoded student in both portals, and the hardcoded English placeholder.
 | **P0** (M0) | Tenancy, auth, i18n/RTL, theming, design system, data model, audit, privacy groundwork, infrastructure, in-app notifications | Any user-facing data entry beyond the workspace profile |
 | **P1** (M1) | Dashboard, students, import, groups, schedule, sessions, manual attendance, corrections, homework, paper assessments, parent updates, files, basic reports, search, account, quality gate | Second human roles, portals, money, camera/video, outbound integrations other than auth email, exports |
 | **P2** (M2) | Assistants with enforced permissions, parent portal, student portal, owner-only collected session earnings, QR attendance, progress and follow-up, notifications, multi-workspace, exports, import/restore, session corrections | Online exams, video, billing, admin console |
-| **P3** (M3) | Online exams, recorded video via an external provider, admin console, subscription and billing, scale hardening, richer notifications, advanced reporting, duplicate detection | — |
+| **P3** (M3) | Online exams, recorded video via an external provider, admin console, usage-based platform billing with a manual InstaPay ledger and exemptions, scale hardening, richer notifications, advanced reporting, duplicate detection | — |
 
 **Never in scope, at any tier:** online live video meetings.
 
@@ -254,8 +367,9 @@ buttons, seeded demo content in production, and silent data loss.
 ## 5. Verification performed
 
 The tables and subsections below are historical records with the counts from their own dates. The
-current gate and the current finance/status rules are in §5.24. In particular, §5.10, §5.11, and the
-first §5.19 describe financial rules later superseded by `ADR-0041` and `ADR-0043`.
+current gate and the current finance/status rules are in §5.26; the billing remediation evidence is
+in §1.2 and §5.26. In particular, §5.10, §5.11, and the first §5.19 describe financial rules later
+superseded by `ADR-0041` and `ADR-0043`.
 
 | Check | Result |
 |---|---|
@@ -486,7 +600,7 @@ local embedded PostgreSQL 17.9 on the seeded synthetic fixture.
 | S3 sink for archives | **Implemented, untested** — do not rely on `BACKUP_STORE_DRIVER=s3` in production until a non-prod bucket is exercised and retrieved |
 | Integration suite (`npm run test:integration`) | **Passed** — 99/99 tests across 16 files on the seeded dev fixture |
 | Integration shared-fixture hygiene | **Fixed** — `tests/integration/workspace-authorization.test.ts` "keeps the revision chain append-only" created an active `Revision Group` in NILE and never cleaned it up; repeated test runs accumulated 8 active groups, saturating pilot `maxActiveGroups=12`. The test now archives its group in a `finally` block, and the eight accumulated rows were archived on 2026-11-10, returning the dev NILE fixture to the 4 seed groups |
-| Test-order dependence | **Known risk** — integration tests share the mutable NILE fixture by design; the pilot quota makes the suite order-dependent if any test leaks active groups. `tests/integration/*` must run against the seeded dev fixture, not a shared external database |
+| Test-order dependence | **Known risk (historical note)** — this 2026-11-10 fix recorded that the then-enforced pilot group quota made the shared NILE fixture order-dependent. Plan quotas are no longer enforced (`ADR-0046`); the fixture is still shared, so integration tests must run against the seeded dev database, not a shared external database |
 
 **Procedure documented** in `docs/OPERATIONS_RUNBOOK.md` (procedure, 35-day retention, off-machine storage,
 monthly drill checklist, restore runbook, unverified items, log-output reference). No production database,
@@ -1418,7 +1532,8 @@ matching `to_regclass` relation check and the successful full migration deploy.
 The finance surface was reduced to the one amount the teacher actually received. It is visible and
 recordable only by the workspace owner. No assistant, parent, student, platform administrator, or
 public visitor receives a money screen, a locked money placeholder, a money notification, or a money
-field in a report or portal payload. Platform subscription and billing (`ADR-0036`) are unchanged.
+field in a report or portal payload. Platform subscription and billing (`ADR-0036`) were later
+superseded by `ADR-0045`/`ADR-0046`; see §1.1 for the current billing model.
 
 **Money rules now in force**
 
@@ -1499,7 +1614,8 @@ They were removed from the physical schema, not merely hidden behind product sur
 **Boundaries**
 
 - The append-only audit log is retained; payment events remain owner-only and redacted for the owner.
-- Platform subscription and billing (`ADR-0036`) are unchanged.
+- Platform subscription and billing (`ADR-0036`) were superseded by `ADR-0045`/`ADR-0046` on
+  2026-11-27; the current usage-billing model and migrations are recorded in §1.1.
 - The local seed no longer truncates dropped tables or writes legacy money fields.
 - The tenant-table registry, workspace-backup retained tables, grant script, route registry, message
   catalogues, specification documents, and tests were reconciled in the same change.
@@ -1535,17 +1651,20 @@ unverified commercial claims were not.
   teacher personas, one pricing card, four FAQs, and a final CTA.
 - Replaced the old `Landing` catalogue in both locales with the new section copy. Every figure on a
   mock panel is labelled as synthetic sample data; the sample student has no phone number.
-- Kept the real published price: 249 EGP/month, manual InstaPay transfer, manual confirmation by the
-  Kashkol team. No trial, unlimited-capacity, support-channel, migration, or automatic-delivery claim
-  was published.
+- Published the approved usage model, not a monthly subscription price: free account and unlimited
+  students with all features; 99 piastres per distinct qualifying student per `Africa/Cairo` month
+  from activation, paid by manual InstaPay transfer and confirmed by the platform team
+  (`ADR-0045`, `ADR-0046`). No trial, unlimited-capacity, support-channel, migration, or
+  automatic-delivery claim was published. The earlier 249 EGP/month subscription copy (`ADR-0036`)
+  is superseded.
 - Added `landing-v2-*` CSS built only from existing tokens and logical properties, with 1100/980/720/
   640px breakpoints. No dependency, route, tenant query, or finance code changed.
 
 **Verification**
 
-- New unit tests lock section order and anchors, catalogue parity, sample-data labels, the 249 EGP
-  price, the absence of rejected claims, and the responsive CSS hooks. Existing contrast tests still
-  pass.
+- New unit tests lock section order and anchors, catalogue parity, sample-data labels, the
+  usage-billing copy, the absence of rejected claims and subscription pricing, and the responsive CSS
+  hooks. Existing contrast tests still pass.
 - `npm run lint`: passed (ESLint + project rules).
 - `npm run typecheck`: passed (`prisma generate` + `tsc --noEmit`).
 - `npm test`: passed (87 unit files / 572 tests + 4 UI files / 34 tests).
@@ -1559,6 +1678,217 @@ unverified commercial claims were not.
 made, and no hosted/deployed page was checked. The hero remains an illustrative CSS mockup, not a
 live account.
 
+### 5.26 Billing remediation verification on 2026-11-28 — `ADR-0048`
+
+This subsection is the current gate record and the evidence for §1.2. It covers the confirmed
+audit findings F1–F21 in the uncommitted billing implementation. No commit, push, deploy,
+production migration, production configuration change, or production data change was made. The
+pre-existing untracked `scripts/tmp-db-check.mjs` was preserved.
+
+**Migration safety**
+
+- `20261128010000_billing_remediation` adds signed correction entry types, `billing_invoice_credit`,
+  action-specific review keys, reference status/revocation fields, and the append-only reference
+  event table with RLS, triggers, indexes and grants.
+- `20261128020000_billing_exemption_revocation_and_review_state` adds `revoked_on`, `review_action`,
+  overlap prevention and the state needed for scoped review.
+- `20261128030000_billing_evidence_file_scope_check` drops and rebuilds `file_scope_check` with the
+  same five prior predicates plus `billing_evidence`; no scope rule is weakened and no data row is
+  rewritten. It is the readiness marker in `src/lib/db/migration-state.ts`.
+- All three were applied to the pinned local PostgreSQL with `npx prisma migrate deploy`;
+  the latest follow-up migration is recorded in §5.27 and `npm run db:status` reports 58 migrations
+  found and the schema up to date. `db:migrate` was deliberately not used because it proposed
+  resetting the local database over historical drift.
+
+**Gates**
+
+| Check | Exact result |
+|---|---|
+| `npm run lint` | Passed — ESLint and project rules (`Project rules passed.`) |
+| `npm run typecheck` | Passed — `prisma generate` and `tsc --noEmit` |
+| `npm test` | Passed — 89 unit files / 611 tests and 4 UI files / 32 tests |
+| `npm run test:ui` | Passed — 4 files / 32 tests |
+| `npm run test:integration` | Passed — 31 files / 181 tests against the pinned embedded PostgreSQL |
+| `npm run build` | Passed with `NEXT_BUILD_WORKERS=1`; build-only override, runtime unchanged |
+| `npm run db:validate` | Passed — `prisma/schema.prisma` is valid |
+| `npm run db:status` | Passed — 58 migrations found, database schema up to date |
+| `git diff --check` | Passed — no whitespace errors |
+
+**Test evidence**
+
+- `tests/unit/billing-core.test.ts` locks credit allocation, signed payment reversal, HTTPS URL
+  rejection on write and on projection, release schema, revoked-exemption dates, and totals computed
+  from more than 200 ledger rows and 100 invoices/submissions;
+  `tests/unit/billing-access.test.ts` includes the release route.
+- `tests/integration/billing-remediation.test.ts` exercises the exemption-to-credit lifecycle,
+  oldest-first manual credit allocation, reference release/reversal/reclaim, action-specific replay
+  protection, in-transaction admin revocation, RLS on every tenant billing table, global registry
+  redaction, and concurrent cycles with one charge per qualifying student.
+- `tests/integration/billing-evidence.test.ts` exercises scoped upload and authenticated streaming,
+  and confirms the view audit event is appended only after the stored bytes are read; no bearer URL
+  is issued (`ADR-0050`).
+- Fixed clock values and per-test fixtures are used; no network, real-clock dependency, skipped
+  test, weakened assertion, or shared mutable fixture was introduced in this remediation.
+
+**Decisions after these gates:** `OQ-23`–`OQ-25` were closed by the product owner in `ADR-0051`.
+Passing these gates is not release approval, legal sign-off, or a declaration of production
+readiness. A second independent audit returned **BLOCK** and was followed up in §5.27; no third
+audit was performed.
+
+
+### 5.27 Second-audit follow-up verification on 2026-11-28 — `ADR-0049`
+
+This subsection records the follow-up to the second independent audit, which returned **BLOCK**.
+The remediations are forward-only and preserve the immutable-ledger rule. No commit, push, deploy,
+production migration, production configuration change, or production data change was made. The
+pre-existing untracked `scripts/tmp-db-check.mjs` was preserved.
+
+**Migration safety**
+
+- `20261128040000_billing_second_audit_followup` creates `billing_config_idempotency` with a
+  primary-key replay fingerprint, a unique reference to one immutable `billing_config` version, an
+  append-only trigger and least-privilege grants. It changes no existing row and weakens no scope
+  rule.
+- It is the new readiness marker in `src/lib/db/migration-state.ts` and was applied to the pinned
+  local PostgreSQL with `npx prisma migrate deploy`. `npm run db:status` reports 58 migrations found
+  and the schema up to date. `db:migrate` was not used because of historical local drift.
+
+**Gates**
+
+| Check | Exact result |
+|---|---|
+| `npm run lint` | Passed — ESLint and project rules (`Project rules passed.`) |
+| `npm run typecheck` | Passed — `prisma generate` and `tsc --noEmit` |
+| `npm test` | Passed — 89 unit files / 611 tests and 4 UI files / 32 tests |
+| `npm run test:ui` | Passed — 4 files / 32 tests |
+| `npm run test:integration` | Passed — 31 files / 181 tests against the pinned embedded PostgreSQL |
+| `npm run build` | Passed with `NEXT_BUILD_WORKERS=1`; build-only override, runtime unchanged |
+| `npm run db:validate` | Passed — `prisma/schema.prisma` is valid |
+| `npm run db:status` | Passed — 58 migrations found, database schema up to date |
+| `git diff --check` | Passed — no whitespace errors |
+
+**New test evidence**
+
+- `tests/integration/billing-remediation.test.ts` proves that a fully settled invoiced usage gets
+  no retroactive credit, a partially credited invoice receives only the outstanding remainder, the
+  same logical config change replays one immutable version, and bounded admin lists report
+  `truncated` while the workspace selector remains complete.
+- `tests/unit/billing-core.test.ts` proves the server-provided currency label and that all newly
+  thrown billing error keys plus the truncation label exist in both catalogues.
+- `tests/unit/billing-core.test.ts` also proves that a scheduled exemption revoked before its start
+  date covers neither the date nor the month. A PostgreSQL test in
+  `tests/integration/billing-remediation.test.ts` proves that an already-expired exemption cannot be
+  extended into billable days.
+- `tests/unit/billing-access.test.ts` locks the truthful `tenantScoped` values for all eleven billing
+  routes, including `false` for the two cross-workspace platform routes.
+- One unit run timed out under concurrent gate load and one integration run hit a transaction-start
+  timeout during parallel admin fan-out. The first was rerun serially without changing a test; the
+  second was fixed by replacing parallel per-workspace transactions with sequential scoped reads in
+  both admin list functions. No test was skipped, disabled or weakened.
+
+**Not claimed:** no third independent audit, release/production approval, legal/accounting sign-off,
+production migration, deployed release, or production data change. `OQ-23`–`OQ-25` were closed by
+the product owner in `ADR-0051`; that decision is not release approval.
+
+
+### 5.28 Residual hardening verification on 2026-11-28 — `ADR-0050`
+
+This subsection records the engineering-side items left after the audits: the CSRF origin policy,
+billing-evidence bearer URLs, platform-admin audit-diff redaction, and Cairo DST convergence. The
+gate counts below supersede the earlier counts in §5.26 and §5.27. No schema, migration, dependency,
+production configuration, or production data change was made; `db:status` still reports the same 58
+migrations.
+
+**Changes**
+
+- `src/lib/http/csrf.ts` accepts only the configured `BETTER_AUTH_URL` origin and exact origins in
+  `BETTER_AUTH_TRUSTED_ORIGINS`. Wildcards, paths, and malformed values are ignored rather than
+  trusted, and the same filter is used by `src/lib/auth/auth-options.ts` so Better Auth cannot
+  trust an entry the application guard rejects. `.env.example` documents the exact format. The
+  former blanket `*.trycloudflare.com` trust is removed; an existing local wildcard entry is now
+  inert without editing `.env.local`.
+- `src/modules/billing/service.ts` and the evidence API route no longer issue a signed URL. The route
+  re-authenticates the platform admin, resolves evidence inside the target workspace's scoped
+  transaction, streams the bytes with `private, no-store`, and appends the view audit only after a
+  successful read. `src/modules/files/service.ts` exposes `readStoredFileForDownload` for that path;
+  generic material downloads keep their existing scoped signed-URL flow.
+- `src/modules/platform-admin/repository.ts` writes tenant audit events through `writeAuditEvent` and
+  passes both tenant and platform diffs through `redactedPlatformDiff`. Structured `reason` and
+  `statusReason` fields are stripped. `writeAuditEvent` now accepts an injected `createdAt` so the
+  repository keeps deterministic audit timestamps.
+- `src/modules/billing/time.ts` derives Cairo UTC offsets from `Intl` on both sides of a target.
+  Ambiguous wall times resolve to the earliest matching instant; skipped wall times resolve forward.
+  No fixed offset or unbounded loop remains.
+
+**Gates**
+
+| Check | Exact result |
+|---|---|
+| `npm run lint` | Passed — ESLint and project rules (`Project rules passed.`) |
+| `npm run typecheck` | Passed — `prisma generate` and `tsc --noEmit` |
+| `npm test` | Passed — 90 unit files / 617 tests and 4 UI files / 32 tests |
+| `npm run test:ui` | Passed — 4 files / 32 tests |
+| `npm run test:integration` | Passed — 31 files / 181 tests against the pinned embedded PostgreSQL |
+| `npm run build` | Passed with `NEXT_BUILD_WORKERS=1`; build-only override, runtime unchanged |
+| `npm run db:validate` | Passed — `prisma/schema.prisma` is valid |
+| `npm run db:status` | Passed — 58 migrations found, database schema up to date |
+| `git diff --check` | Passed — no whitespace errors |
+
+**New test evidence**
+
+- `tests/unit/csrf.test.ts` accepts an explicitly configured exact tunnel origin and rejects an
+  unconfigured tunnel, wildcards, paths, and prefix attacks.
+- `tests/unit/auth-options.test.ts` proves Better Auth receives only the exact base origin and valid
+  configured tunnel origins; wildcard and path entries are filtered out.
+- `tests/unit/platform-admin-audit-redaction.test.ts` proves typed reasons and embedded personal
+  identifiers are removed from platform structured diffs.
+- `tests/unit/billing-core.test.ts` proves deterministic handling of an ambiguous fall-back wall
+  time and a nonexistent spring-forward wall time in Cairo.
+- `tests/integration/billing-evidence.test.ts` proves the evidence download returns bytes rather
+  than a URL and that a storage read failure leaves no false view audit event.
+- `tests/integration/notification-rules.test.ts`, `tests/integration/billing-remediation.test.ts`,
+  and `tests/integration/workspace-archive.test.ts` now use disposable workspaces, so bounded rule
+  queries, exemption-date uniqueness, and archive size cannot depend on earlier runs. All original
+  assertions remain unchanged; the integration suite passed 31 files / 181 tests from this state.
+
+**Not changed by this subsection:** exact bank reference normalization, legal/tax invoice numbering,
+evidence retention, large-workspace ledger scale, and restricting global billing-config reads to a
+dedicated database role. At the time those were recorded under `OQ-23`–`OQ-25`; the questions were
+later closed by `ADR-0051`, which decided archived-student inclusion but explicitly did not specify
+the other details. They still require a product/legal assignment or a production database/load-test
+decision. No third independent audit was performed, and passing gates are not approval,
+legal/accounting sign-off, or production readiness.
+
+### 5.29 Final billing decisions and qualification alignment on 2026-11-28 — `ADR-0051`
+
+- The product owner closed `OQ-23`, `OQ-24` and `OQ-25`. `ADR-0051` records the lawyer's approval of
+  the payment process **only as reported by the product owner**; no lawyer identity, legal opinion,
+  licence detail, advice text, retention term, legal/tax invoice conclusion, or external accountant
+  is invented. Bank-specific reference normalization and legal/tax invoice numbering remain
+  unspecified details.
+- The teacher billing UI and both message catalogues now state the designated WhatsApp number
+  `+201004574178`. The copy still says screenshot evidence is shown to an administrator for manual
+  approval and never claims a transfer was detected, sent, delivered, or settled.
+- `src/modules/billing/qualification.ts` now requires two distinct qualifying `present`/`late` marks
+  on non-cancelled sessions within 30 × 24 elapsed hours, with at least one mark in the billed Cairo
+  month. The lookup range is clamped to workspace activation, and qualification reads attendance
+  without filtering student status, so archival or a blocked hard delete cannot erase an earned
+  charge. `repository.ts` and `service.ts` share the same rule for the cycle and the teacher preview.
+- `ADR-0045` is superseded only on the qualification rule; `ADR-0048` and `ADR-0049` carry explicit
+  product-owner approval notes under `OQ-25` without changing their append-only credit and
+  reference-recovery policies.
+- `tests/unit/billing-core.test.ts` covers the exact-30-day boundary, a 31-day gap, cross-month
+  pairs, and activation clamping. `tests/integration/billing-qualification.test.ts` proves the stored
+  attendance path, month-boundary qualification, >30-day rejection, and charge preservation after
+  archival. The three `billing-remediation.test.ts` cases that still used the shared fixture
+  workspace now use disposable workspaces; no assertion was removed or weakened.
+- Final gate results: lint, typecheck, `npm test` (620 unit tests across 90 files plus 32 UI tests
+  across 4 files), `npm run test:ui` (32/4), `npm run test:integration` (184 across 32 files), build
+  with `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (58 migrations, current), and
+  `git diff --check` all pass.
+
+**Not claimed:** no third independent audit, release/production approval, legal/accounting sign-off,
+production migration, deployed release, or production data change. Passing gates are not approval.
 
 ## 6. Implementation plan
 
@@ -1760,7 +2090,7 @@ fills in and signs the evidence table. No simulated camera result is claimed.
 | 3.1 | Online exams | `F-P3-01` passes | ☑ |
 | 3.2 | Recorded video through an external provider | `F-P3-02` passes, gated on `OQ-08` | ☑ |
 | 3.3 | Admin console: metadata only, break-glass access | `F-P3-03` passes; no bulk tenant export exists | ☑ |
-| 3.4 | Subscription and billing | `F-P3-04` passes (manual pilot plans & server-enforced limits; no card data is stored or charged) | ☑ |
+| 3.4 | Usage-based platform billing and free access | `F-P3-04` and `F28`: 99 piastres per qualifying student per Cairo month from activation, immutable invoices and append-only ledger, manual InstaPay verification, exemptions, audited credits/reversals, and free/unlimited access with no paid tiers or payment-status write blocks (`ADR-0045`–`ADR-0049`) | ☑ implemented (`ADR-0045`–`ADR-0049`); evidence in §1.1–§1.3 and §5.26–§5.27; second-audit follow-up done, no approval claimed |
 | 3.5 | Scale, performance, and reliability hardening | `F-P3-05` passes; the budgets in `ARCHITECTURE.md` §21 are met with evidence | ☐ |
 | 3.6 | Rich notification channels | `F-P3-06` passes; every channel states only what it can observe | ☐ |
 | 3.7 | Advanced reporting and academic-year handling | `F-P3-07` passes | ☐ |
@@ -1886,21 +2216,25 @@ policy.
 | Know the rules for working in this repository | `../AGENTS.md` |
 | Know how to back up, restore, and verify the database | `OPERATIONS_RUNBOOK.md` |
 
-### 2026-11-23 — Two-step sign-up and Arabic ك identity (ADR-0036, ADR-0037)
+### 2026-11-23 — Two-step sign-up and Arabic ك identity (ADR-0036, ADR-0037) — billing steps superseded
 
-- `/{locale}/sign-up` now contains only the account form. A successful sign-up redirects through the
-  pure `signUpDestination()` helper to `/{locale}/subscribe?registered=1` (`&verify=1` when outbound
-  email is configured). No session is started by sign-up; verification rules are unchanged.
-- `/{locale}/subscribe` is the second, public step: the real InstaPay QR, handle, and direct link,
-  the two-step progress label, and links to verification (when required) and sign-in. The copy no
-  longer claims automatic activation; the receipt is confirmed manually (`NF-5`).
+> `ADR-0045`/`ADR-0046` supersede the payment step on 2026-11-27. `/subscribe` and the subscription
+> panel were removed; successful sign-up leads to sign-in/verify-email, and manual InstaPay
+> submissions belong to the owner-only `/app/billing` flow (F28, §1.1).
+
+- `/{locale}/sign-up` contains only the account form. A successful sign-up leads to sign-in /
+  verify-email; no session is started by sign-up and no payment instructions are shown. Verification
+  rules are unchanged.
+- The former `/{locale}/subscribe` step and shared subscription panel were removed with `ADR-0046`.
+  Manual InstaPay instructions now appear only in owner-only billing; no automatic activation,
+  transfer detection, or settlement is claimed (`NF-5`).
 - The shared `BrandMark` now renders the Arabic letter ك as a vector path in the existing rounded
   frame. It paints with `currentColor`, so light and dark variants come from the token layer. The
   landing header, auth layout, portal sign-in, workspace creation, and app sidebar all use it.
 - `/icon.svg`, `/pwa-192x192.png`, `/pwa-512x512.png`, `/pwa-maskable-512x512.png`, and
   `/apple-touch-icon.png` were regenerated with the same ك path and the ADR-0035 evergreen palette.
-- `USER_FLOWS.md` gained F28 for the payment step and a sequence note in F1. No schema, migration,
-  route-registry, or permission change was needed.
+- `USER_FLOWS.md` F28 was repurposed from the payment step to free sign-up plus manual usage billing,
+  and the F1 sequence note was updated accordingly.
 
 ### 2026-11-23 — Landing page light/dark contrast repair
 

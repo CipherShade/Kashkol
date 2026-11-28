@@ -15,6 +15,7 @@ export type AuditRecord = {
   requestId: string;
   ipHash: string | null;
   diff?: unknown;
+  createdAt?: Date;
 };
 
 /**
@@ -36,6 +37,7 @@ export async function insertAuditEvent(tx: AuditTransaction, data: AuditRecord):
       action: data.action,
       requestId: data.requestId,
       ipHash: data.ipHash,
+      ...(data.createdAt === undefined ? {} : { createdAt: data.createdAt }),
       ...(data.diff === undefined ? {} : { diff: data.diff as Prisma.InputJsonValue }),
     },
   });

@@ -1,23 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { signUpDestination } from "@/lib/auth/signup-destination";
 
-describe("two-step sign-up destination", () => {
-  it("sends a new teacher to the payment page after account creation", () => {
-    expect(signUpDestination("en", false)).toBe("/en/subscribe?registered=1");
-    expect(signUpDestination("ar", false)).toBe("/ar/subscribe?registered=1");
+describe("free account sign-up destination", () => {
+  it("sends a new teacher to sign-in when outbound email is not configured", () => {
+    expect(signUpDestination("en", false)).toBe("/en/sign-in?registered=1");
+    expect(signUpDestination("ar", false)).toBe("/ar/sign-in?registered=1");
   });
 
-  it("adds the verification hint only when outbound email is configured", () => {
-    expect(signUpDestination("en", true)).toBe("/en/subscribe?registered=1&verify=1");
-    expect(signUpDestination("ar", true)).toBe("/ar/subscribe?registered=1&verify=1");
+  it("sends a new teacher to verification first when outbound email is configured", () => {
+    expect(signUpDestination("en", true)).toBe("/en/verify-email?registered=1");
+    expect(signUpDestination("ar", true)).toBe("/ar/verify-email?registered=1");
   });
 
-  it("never returns the old sign-in or verify-email destinations", () => {
+  it("never sends a new teacher through the removed subscription payment step", () => {
     for (const configured of [true, false]) {
       const destination = signUpDestination("en", configured);
-      expect(destination).toContain("/subscribe");
-      expect(destination).not.toContain("/sign-in");
-      expect(destination).not.toContain("/verify-email");
+      expect(destination).not.toContain("/subscribe");
+      expect(destination).not.toContain("payment");
     }
   });
 });

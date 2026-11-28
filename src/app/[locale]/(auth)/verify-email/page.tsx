@@ -18,6 +18,7 @@ export default async function VerifyEmailPage({ params, searchParams }: PageProp
   const query = await searchParams;
   const verified = query.verified === "1";
   const failed = typeof query.error === "string";
+  const registered = query.registered === "1";
   const t = await getTranslations("Auth");
 
   return (
@@ -26,6 +27,11 @@ export default async function VerifyEmailPage({ params, searchParams }: PageProp
         {t("verifyTitle")}
       </h2>
       <p className="auth-subtitle">{t("verifyBody")}</p>
+      {registered ? (
+        <p className="form-alert" data-kind="success" role="status">
+          {t("accountCreatedNeedsVerification")}
+        </p>
+      ) : null}
       {verified ? (
         <p className="form-alert" data-kind="success" role="status">
           {t("verifySuccess")}

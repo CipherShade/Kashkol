@@ -2,6 +2,8 @@ import { Prisma } from "@/generated/prisma/client";
 import { getDb } from "@/lib/db/client";
 import { withPlatformAdminScope, withScope } from "@/lib/db/scope";
 import { newUuidV7 } from "@/lib/id";
+import { writeAuditEvent } from "@/modules/audit/service";
+import { redactedPlatformDiff } from "./audit-diff";
 import type {
   PlatformWorkspacesQuery,
   UpdateWorkspacePlanInput,
@@ -457,21 +459,18 @@ export async function updateWorkspacePlanInScope(params: {
       reason: params.input.reason,
     };
 
-    await tx.auditEvent.create({
-      data: {
-        id: newUuidV7(),
-        workspaceId: params.workspaceId,
-        actorUserId: params.actorUserId,
-        actorDisplayName: params.actorDisplayName,
-        actorType: "platform_admin",
-        entityType: "workspace",
-        entityId: params.workspaceId,
-        action: "platform_admin.workspace_plan_updated",
-        diff: diff as Prisma.InputJsonValue,
-        requestId: params.requestId,
-        ipHash: params.ipHash,
-        createdAt: params.now,
-      },
+    await writeAuditEvent(tx, {
+      workspaceId: params.workspaceId,
+      actorUserId: params.actorUserId,
+      actorDisplayName: params.actorDisplayName,
+      actorType: "platform_admin",
+      entityType: "workspace",
+      entityId: params.workspaceId,
+      action: "platform_admin.workspace_plan_updated",
+      diff: redactedPlatformDiff(diff),
+      requestId: params.requestId,
+      ipHash: params.ipHash,
+      createdAt: params.now,
     });
 
     await tx.platformAuditEvent.create({
@@ -484,7 +483,7 @@ export async function updateWorkspacePlanInScope(params: {
         entityId: params.workspaceId,
         action: "platform_admin.workspace_plan_updated",
         reason: params.input.reason,
-        diff: diff as Prisma.InputJsonValue,
+        diff: redactedPlatformDiff(diff) as Prisma.InputJsonValue,
         requestId: params.requestId,
         ipHash: params.ipHash,
         createdAt: params.now,
@@ -545,21 +544,18 @@ export async function updateWorkspaceStatusInScope(params: {
         ? "platform_admin.workspace_suspended"
         : "platform_admin.workspace_reactivated";
 
-    await tx.auditEvent.create({
-      data: {
-        id: newUuidV7(),
-        workspaceId: params.workspaceId,
-        actorUserId: params.actorUserId,
-        actorDisplayName: params.actorDisplayName,
-        actorType: "platform_admin",
-        entityType: "workspace",
-        entityId: params.workspaceId,
-        action,
-        diff: diff as Prisma.InputJsonValue,
-        requestId: params.requestId,
-        ipHash: params.ipHash,
-        createdAt: params.now,
-      },
+    await writeAuditEvent(tx, {
+      workspaceId: params.workspaceId,
+      actorUserId: params.actorUserId,
+      actorDisplayName: params.actorDisplayName,
+      actorType: "platform_admin",
+      entityType: "workspace",
+      entityId: params.workspaceId,
+      action,
+      diff: redactedPlatformDiff(diff),
+      requestId: params.requestId,
+      ipHash: params.ipHash,
+      createdAt: params.now,
     });
 
     await tx.platformAuditEvent.create({
@@ -572,7 +568,7 @@ export async function updateWorkspaceStatusInScope(params: {
         entityId: params.workspaceId,
         action,
         reason: params.input.reason,
-        diff: diff as Prisma.InputJsonValue,
+        diff: redactedPlatformDiff(diff) as Prisma.InputJsonValue,
         requestId: params.requestId,
         ipHash: params.ipHash,
         createdAt: params.now,
@@ -626,21 +622,18 @@ export async function createBreakGlassGrantInScope(params: {
       expiresAt: grant.expiresAt.toISOString(),
     };
 
-    await tx.auditEvent.create({
-      data: {
-        id: newUuidV7(),
-        workspaceId: params.workspaceId,
-        actorUserId: params.actorUserId,
-        actorDisplayName: params.actorDisplayName,
-        actorType: "platform_admin",
-        entityType: "break_glass_grant",
-        entityId: grant.id,
-        action: "platform_admin.break_glass_granted",
-        diff: diff as Prisma.InputJsonValue,
-        requestId: params.requestId,
-        ipHash: params.ipHash,
-        createdAt: params.now,
-      },
+    await writeAuditEvent(tx, {
+      workspaceId: params.workspaceId,
+      actorUserId: params.actorUserId,
+      actorDisplayName: params.actorDisplayName,
+      actorType: "platform_admin",
+      entityType: "break_glass_grant",
+      entityId: grant.id,
+      action: "platform_admin.break_glass_granted",
+      diff: redactedPlatformDiff(diff),
+      requestId: params.requestId,
+      ipHash: params.ipHash,
+      createdAt: params.now,
     });
 
     await tx.platformAuditEvent.create({
@@ -653,7 +646,7 @@ export async function createBreakGlassGrantInScope(params: {
         entityId: grant.id,
         action: "platform_admin.break_glass_granted",
         reason: params.reason,
-        diff: diff as Prisma.InputJsonValue,
+        diff: redactedPlatformDiff(diff) as Prisma.InputJsonValue,
         requestId: params.requestId,
         ipHash: params.ipHash,
         createdAt: params.now,
@@ -702,21 +695,18 @@ export async function revokeBreakGlassGrantInScope(params: {
       revokeReason: params.reason,
     };
 
-    await tx.auditEvent.create({
-      data: {
-        id: newUuidV7(),
-        workspaceId: params.workspaceId,
-        actorUserId: params.actorUserId,
-        actorDisplayName: params.actorDisplayName,
-        actorType: "platform_admin",
-        entityType: "break_glass_grant",
-        entityId: updated.id,
-        action: "platform_admin.break_glass_revoked",
-        diff: diff as Prisma.InputJsonValue,
-        requestId: params.requestId,
-        ipHash: params.ipHash,
-        createdAt: params.now,
-      },
+    await writeAuditEvent(tx, {
+      workspaceId: params.workspaceId,
+      actorUserId: params.actorUserId,
+      actorDisplayName: params.actorDisplayName,
+      actorType: "platform_admin",
+      entityType: "break_glass_grant",
+      entityId: updated.id,
+      action: "platform_admin.break_glass_revoked",
+      diff: redactedPlatformDiff(diff),
+      requestId: params.requestId,
+      ipHash: params.ipHash,
+      createdAt: params.now,
     });
 
     await tx.platformAuditEvent.create({
@@ -729,7 +719,7 @@ export async function revokeBreakGlassGrantInScope(params: {
         entityId: updated.id,
         action: "platform_admin.break_glass_revoked",
         reason: params.reason,
-        diff: diff as Prisma.InputJsonValue,
+        diff: redactedPlatformDiff(diff) as Prisma.InputJsonValue,
         requestId: params.requestId,
         ipHash: params.ipHash,
         createdAt: params.now,

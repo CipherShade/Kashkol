@@ -1,4 +1,5 @@
 import { withScope } from "@/lib/db/scope";
+import { writeAuditEvent } from "@/modules/audit/service";
 import type { Scope } from "@/modules/tenancy/types";
 import type { FilesQuery } from "./schemas";
 
@@ -27,9 +28,9 @@ export async function listMaterialRows(scope: Scope, query: FilesQuery) {
         workspaceId: scope.workspaceId,
         deletedAt: null,
         archivedAt: query.archived ? { not: null } : null,
-        // Form responses and student homework submissions belong to their own
-        // surfaces and must never appear in the learning-materials library.
-        scope: { notIn: ["form_upload", "homework_submission"] },
+        // Form responses, homework submissions, and billing evidence belong to
+        // their own surfaces and must never appear in the materials library.
+        scope: { notIn: ["form_upload", "homework_submission", "billing_evidence"] },
         ...(query.search
           ? {
               OR: [
@@ -56,11 +57,56 @@ export async function findMaterial(scope: Scope, fileId: string) {
         id: fileId,
         workspaceId: scope.workspaceId,
         deletedAt: null,
-        scope: { not: "form_upload" },
+        scope: { notIn: ["form_upload", "billing_evidence"] },
       },
       include: materialInclude,
     }),
   );
+}
+
+/**
+ * Billing evidence is deliberately hidden from the materials library and the
+ * generic file routes. Its row is created by the billing evidence service only
+ * after validation and a clean malware scan.
+ */
+export async function createBillingEvidenceFile(
+  scope: Scope,
+  input: {
+    id: string;
+    storageKey: string;
+    sizeBytes: number;
+    mime: string;
+    requestId: string;
+  },
+) {
+  return withScope(scope, async (tx) => {
+    const file = await tx.file.create({
+      data: {
+        id: input.id,
+        workspaceId: scope.workspaceId,
+        scope: "billing_evidence",
+        title: "Billing evidence",
+        storageKey: input.storageKey,
+        sizeBytes: input.sizeBytes,
+        mime: input.mime,
+        scanStatus: "clean",
+        uploadedBy: scope.actorUserId,
+      },
+      select: { id: true, scanStatus: true },
+    });
+    await writeAuditEvent(tx, {
+      workspaceId: scope.workspaceId,
+      actorUserId: scope.actorUserId,
+      actorDisplayName: scope.actorDisplayName,
+      actorType: "user",
+      entityType: "file",
+      entityId: file.id,
+      action: "file.billing_evidence_uploaded",
+      diff: { scope: "billing_evidence", sizeBytes: input.sizeBytes, mime: input.mime },
+      requestId: input.requestId,
+    });
+    return file;
+  });
 }
 
 export async function getWorkspaceStorageUsage(scope: Scope) {

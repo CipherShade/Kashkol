@@ -28,6 +28,10 @@ export type CreateNotificationInput = {
     | "assessment_pending_grades"
     | "backup_ready"
     | "export_ready"
+    | "billing_invoice_issued"
+    | "billing_submission_approved"
+    | "billing_submission_rejected"
+    | "billing_submission_flagged"
     | "general";
   severity?: "info" | "warning" | "critical";
   messageKey?: string | null;

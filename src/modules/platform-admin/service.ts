@@ -191,7 +191,9 @@ export function getPlatformIntegrationReadiness(): {
       },
       {
         key: "saasBilling",
-        driver: "manual_pilot",
+        driver: "manual_instapay_ledger",
+        // The internal ledger is always available; the real InstaPay handle is
+        // admin-supplied in the billing console and is never an env credential.
         configured: true,
         productionReady: true,
         measurementNoteKey: "PlatformAdmin.integrations.notes.saasBilling",

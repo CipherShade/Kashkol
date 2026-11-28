@@ -101,35 +101,35 @@ describe("landing page contracts", () => {
     }
   });
 
-  it("publishes the real 249 EGP manual subscription without inventing a plan", () => {
+  it("publishes free unlimited accounts and the approved 0.99 EGP usage rule", () => {
     for (const L of [arL, enL]) {
       const pricing = obj(L.pricing);
-      expect(text(pricing.amount)).toBe("249");
+      expect(["0.99", "٠٫٩٩"]).toContain(text(pricing.amount));
       text(pricing.planName);
       text(pricing.cta);
       expect(list(pricing.items)).toHaveLength(PRICING_FEATURES.length);
-      expect(text(obj(L.mobileCta).label)).toContain("249");
+      expect(text(pricing.planNote)).toMatch(/unlimited|غير محدود/);
+      expect(text(obj(L.mobileCta).label)).toMatch(/0\.99|٠٫٩٩/);
     }
-    expect(text(obj(obj(ar.Auth).subscription).price)).toBe("٢٤٩");
-    expect(text(obj(obj(en.Auth).subscription).price)).toBe("249");
     expect(text(obj(arL.pricing).currency)).toBe("جنيه مصري");
     expect(text(obj(enL.pricing).currency)).toBe("EGP");
   });
 
-  it("labels every sample visual and makes no trial, unlimited, support or delivery claim", () => {
+  it("labels every sample visual and makes no trial, auto-delivery or false capability claim", () => {
     for (const L of [arL, enL]) {
       const landing = allText(L);
       expect(landing).not.toContain("14 يوم");
       expect(landing).not.toContain("14-day");
       expect(landing).not.toContain("free trial");
-      expect(landing).not.toContain("مجاناً");
-      expect(landing).not.toContain("unlimited");
-      expect(landing).not.toContain("غير محدود");
+      expect(landing).not.toContain("unlimited messages");
+      expect(landing).not.toContain("رسائل غير محدودة");
       expect(landing).not.toContain("daily whatsapp");
       expect(landing).not.toContain("دعم فني مصري");
       expect(landing).not.toContain("sent automatically");
       expect(landing).not.toContain("delivered automatically");
       expect(landing).not.toContain("أُرسل");
+      expect(landing).not.toContain("249");
+      expect(landing).not.toContain("٢٤٩");
     }
     expect(text(obj(arL.hero).caption)).toContain("تجريبية");
     expect(text(obj(enL.hero).caption)).toMatch(/illustrative|synthetic/i);

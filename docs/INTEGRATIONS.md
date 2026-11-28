@@ -49,6 +49,7 @@ be pinned by an ADR before the milestone that uses them is closed:
 | `exceljs` | Yes — `4.4.0` | ADR-0016 |
 | Playwright / axe (E2E) | **No** | ADR, before M0 close |
 | Scheduling | **No** — no package; the app's own worker loop | ADR-0008 |
+| Billing provider | **None** — no gateway, webhook SDK, or card-vault package | ADR-0045; manual InstaPay ledger with versioned database config |
 
 **Rule.** Adding an unpinned dependency to `package.json` is allowed during M0 **only** with a
 matching ADR stub in `docs/decisions/` and an entry in the table above. A dependency with no ADR
@@ -68,7 +69,7 @@ entry fails the dependency-policy CI check. **[CI]**
 | IN-6 | QR / token service | Internal (not third-party) | M2 | — |
 | IN-7 | Railway (hosting, DB, secrets, cron) | Platform | M0 | Fatal |
 | IN-8 | Observability (logs, errors, metrics) | Platform | M0 | Degraded diagnosis, not a user-facing failure |
-| IN-9 | Payments (Kashier / PayMob / Fawry) | Payment gateway | P3 | Deferred |
+| IN-9 | Manual InstaPay ledger | **None** — teacher-submitted reference, admin-verified | M3b | No gateway, webhook, API, or automatic transfer detection; verification is human work (`ADR-0045`) |
 | IN-10 | Recorded video hosting (Cloudflare Stream) | Media provider | P3 | Video attachment/playback disabled with explicit setup state (`docs/VIDEO_PROVIDER.md`); core app unaffected |
 | IN-11 | PDF renderer (headless Chromium via `puppeteer-core`) | Local process, no network | M2 | PDF export fails closed with a translated error; CSV and XLSX exports continue (`ADR-0032`) |
 
@@ -332,7 +333,7 @@ The signature carries an expiry.
 | Migrations | Run in a release phase via `prisma migrate deploy`, never on app boot |
 | Health checks | `/api/health` (liveness) and `/api/health/ready` (readiness, checks the database) |
 | Scaling | The web service scales horizontally; the worker scales to one instance initially to avoid duplicate work, using the job claim protocol in ADR-0008 |
-| Cron | Railway cron triggers the recurring jobs (daily reminders, reconciliation, retention) |
+| Cron | Railway cron triggers the recurring jobs (daily reminders, reconciliation, retention). Billing cycles are admin-triggered from the console, not a new cron with a new token (`ADR-0045`) |
 | Rollback | A previous release is redeployed; migrations are forward-only with compensating migrations, so a rollback does not require a down migration (`F-P0-09` AC-2) |
 | Preview environments | A pull request creates an isolated preview with its own database and a seeded dataset |
 | Cost control | The worker and the database size are the main cost levers; the retention job keeps the database small |
@@ -362,22 +363,32 @@ includes it, and it is returned in the error envelope. A teacher reporting a pro
 
 ---
 
-## 12. IN-9 — Payments (deferred, P3)
+## 12. IN-9 — Manual InstaPay ledger (M3b)
 
-No payment integration is implemented. The requirements treat payments as P3 (`A-05`, `R-13`).
+No payment gateway, payment API, webhook, or automatic transfer detection is implemented. The
+approved platform-billing contract is a **manual InstaPay transfer** confirmed by a platform
+administrator (`ADR-0045`). This replaces the earlier deferred provider-webhook contract; no
+provider, merchant-of-record integration, or card data was added.
 
-When it happens, the constraints are already fixed by the requirements and are recorded here so the
-implementation does not renegotiate them later:
+| Aspect | Decision |
+|---|---|
+| Direction | The teacher transfers money in InstaPay outside Kashkol, then submits the transfer details in `/app/billing`. |
+| Contract | A submission carries a normalised transaction reference, the exact amount in integer piastres, the transfer date/time, the invoice it targets, and optional scanned evidence. Submission is never confirmation. |
+| Statuses | `submitted` → `under_review` → `approved`, `rejected`, or `flagged`. `under_review` grants **no** payment credit. A rejection does not delete the invoice. |
+| Verification | A platform administrator compares the reference and exact amount, then approves, rejects, or flags. Approval requires a unique current fingerprint, an unpaid invoice, and no prior credit for the submission. Partial payments and overpayments are not allocated. Review idempotency is action-specific and admin status is rechecked inside the mutation transaction (`ADR-0048`). |
+| Reference recovery | A platform administrator may release a disputed reference. Its fingerprint becomes `revoked`, the linked payment credit is cancelled by a signed `payment_reversal`, and a later approved submission may reclaim it. The global registry stores only fingerprints, status and append-only events; the raw reference stays in the tenant-scoped submission (`ADR-0048`). |
+| Evidence | Optional screenshot/PDF evidence is stored through the existing file-storage adapter (`IN-2`) as `file.scope = 'billing_evidence'`, scanned, and streamed by the authenticated platform-admin route during review. No bearer URL is issued; it is excluded from generic file access and is **never proof** of a transfer. The view audit event is appended only after the read succeeds (`ADR-0050`). |
+| Truthfulness | The system never claims a transfer was detected, sent, delivered, or settled (`NF-5`). No API, webhook, or polling job checks InstaPay. |
+| Configuration | The 99-piastre rate, 5000-piastre default threshold, currency, Cairo timezone, InstaPay handle/link, and optional QR key live in versioned `billing_config` rows in PostgreSQL — not in secret environment variables. The highest version is authoritative. No new deployment secret or worker token was added. |
+| Configuration change | A platform administrator appends a new config version through `/api/platform-admin/billing/config`; the old version is never rewritten. |
+| Cycle trigger | Billing cycles are triggered by an authenticated platform administrator from `/api/platform-admin/billing/cycle`. No dedicated billing worker token or configuration was introduced. |
+| Ledger effect | Approval appends a payment-credit ledger entry in the same scoped transaction as the audit event. Corrections append signed adjustments, invoice credits and reversals; invoices, line items, and snapshots stay immutable (`ADR-0048`). |
+| Privacy | Owner-only teacher billing; admin access is a narrow billing-metadata projection with no student names, phones, notes, grades, or session receipts (`ADR-0047`). |
 
-- The platform is a **merchant of record**: the teacher pays a platform fee, and the payment provider
-  holds the card data. Kashkol never stores a card number, a CVV, or a cardholder name.
-- A payment record stores the provider, the provider transaction id, the amount, the currency, the
-  status, and the timestamps. The card data stays with the provider.
-- A payment is reconciled by the provider's webhook; the webhook is verified by signature, is
-  idempotent, and may be delivered more than once.
-- A webhook receiver is an exempt, unauthenticated-by-session route, identified by a shared secret
-  and a provider signature — and it is still workspace-scoped, validated, and idempotent.
-- Payment state lives in our tables, so the provider can be replaced.
+**Interface.** There is no third-party adapter for InstaPay. The interface is the Zod submission and
+review schemas in `src/modules/billing/schemas.ts`, backed by the billing repository and service.
+Tests use deterministic in-memory fixtures; no transfer, bank, or gateway call is made. The only
+reused adapters are file storage and scanning for optional evidence.
 
 ---
 
@@ -391,6 +402,7 @@ implementation does not renegotiate them later:
 | Email | 10 s | 3 | 1 s / 5 s / 30 s | Yes, 5 failures | The message is queued; the teacher sees "the reminder will be sent" |
 | Observability | 2 s | 0 | — | Yes, and **fail open** | The request proceeds; a dropped log is counted internally |
 | WhatsApp | n/a | n/a | n/a | n/a | The deep link opens WhatsApp; the platform records `prepared` only |
+| Manual InstaPay billing | n/a — no outbound call | n/a | n/a | n/a | The submission stays `submitted`/`under_review`; no credit is granted until an admin approves after checking the reference and amount (`ADR-0045`) |
 
 **Rule:** no outbound call is made inside a database transaction, except the `set_config` statement
 that begins the transaction. A transaction that opens a network call holds a connection and a lock
@@ -404,7 +416,7 @@ while waiting on a third party, which is how a provider outage becomes a databas
 - [ ] Every adapter validates its own inputs and never trusts a client-supplied value.
 - [ ] Every adapter's outbound payload is reviewed for PII.
 - [ ] Every adapter's error message is sanitised before it is stored or displayed.
-- [ ] Every webhook receiver verifies a signature, is idempotent, and is workspace-scoped.
+- [ ] Every webhook receiver verifies a signature, is idempotent, and is workspace-scoped. No billing webhook receiver exists or is planned (`ADR-0045`).
 - [ ] Every adapter has a fake implementation used by tests, so no test needs a credential.
 - [ ] Every adapter's failure mode appears in the UI, not as a silent no-op.
 - [ ] Every provider choice is recorded in an ADR with the alternatives considered.
@@ -424,3 +436,8 @@ while waiting on a third party, which is how a provider outage becomes a databas
 | OI-7 | Confirm the Railway region against the legal review | Engineering + legal | Before M2 |
 | OI-8 | Confirm email deliverability setup (domain, SPF, DKIM, DMARC) | Operations | Before the private beta |
 | OI-9 | Confirm the privacy notice wording for outbound email | Legal | Before M2 |
+
+The former P3 payment-provider contract item is closed by `ADR-0045`: platform billing uses a manual
+InstaPay ledger with administrator verification, so no gateway, webhook, or provider credential is
+needed. Billing evidence retention remains subject to legal/accounting review; no window is invented
+here.

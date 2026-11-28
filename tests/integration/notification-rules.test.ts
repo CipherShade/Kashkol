@@ -6,15 +6,11 @@ import { findNotificationRuleSettingsTx } from "@/modules/notifications/reposito
 import { evaluateNotificationRules } from "@/modules/notifications/rules";
 import { updateNotificationRuleSettings } from "@/modules/notifications/service";
 import { DEFAULT_NOTIFICATION_RULE_CONFIG } from "@/modules/notifications/settings";
-import {
-  FIXTURES,
-  createStudent,
-  fixturesScope,
-} from "./helpers";
+import { createStudent, fixturesScope } from "./helpers";
 
 // The real clock keeps notification `createdAt` and the cooldown window on the
-// same timeline. Past fixture sessions from earlier runs are dated in the
-// future relative to this clock and cannot crowd out this test's queries.
+// same timeline. Each run uses a disposable workspace so the bounded rule
+// queries cannot be crowded out by records from earlier runs.
 const NOW = new Date();
 
 afterAll(async () => {
@@ -23,14 +19,41 @@ afterAll(async () => {
 
 describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
   it("creates each rule once, respects cooldown, and audits a settings change", async () => {
-    const scope = fixturesScope("Notification Rules");
     const suffix = randomUUID().slice(0, 8);
+    const workspaceId = randomUUID();
+    await withScope({ workspaceId }, async (tx) => {
+      await tx.workspace.create({
+        data: {
+          id: workspaceId,
+          name: `Notify ${suffix}`,
+          slug: `notify-${suffix}`,
+          teachingName: `Notify ${suffix}`,
+          primarySubject: null,
+          gradesTaught: [],
+          status: "active",
+          planTier: "pilot",
+          planStatus: "pilot_active",
+        },
+      });
+      await tx.workspaceSettings.create({
+        data: {
+          workspaceId,
+          atRiskAfter: 2,
+          inactiveAfter: 4,
+          locale: "en",
+          theme: "system",
+          timezone: "Africa/Cairo",
+          currency: "EGP",
+        },
+      });
+    });
+    const scope = { ...fixturesScope("Notification Rules"), workspaceId };
     const group = await withScope(scope, (tx) =>
       tx.group.create({
-        data: { workspaceId: FIXTURES, name: `Notify ${suffix}`, color: "indigo" },
+        data: { workspaceId, name: `Notify ${suffix}`, color: "indigo" },
       }),
     );
-    const studentId = await createStudent(FIXTURES, "Notify", suffix);
+    const studentId = await createStudent(workspaceId, "Notify", suffix);
 
     const past = (daysAgo: number) =>
       new Date(NOW.getTime() - daysAgo * 24 * 60 * 60 * 1000);
@@ -38,7 +61,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
     const sessions = await withScope(scope, async (tx) => {
       const unrecorded = await tx.teachingSession.create({
         data: {
-          workspaceId: FIXTURES,
+          workspaceId,
           groupId: group.id,
           startsAt: past(1),
           status: "started",
@@ -47,7 +70,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
       });
       const unreceipted = await tx.teachingSession.create({
         data: {
-          workspaceId: FIXTURES,
+          workspaceId,
           groupId: group.id,
           startsAt: past(40),
           status: "completed",
@@ -55,10 +78,10 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
         },
       });
       const absentA = await tx.teachingSession.create({
-        data: { workspaceId: FIXTURES, groupId: group.id, startsAt: past(2), status: "completed" },
+        data: { workspaceId, groupId: group.id, startsAt: past(2), status: "completed" },
       });
       const absentB = await tx.teachingSession.create({
-        data: { workspaceId: FIXTURES, groupId: group.id, startsAt: past(3), status: "completed" },
+        data: { workspaceId, groupId: group.id, startsAt: past(3), status: "completed" },
       });
       return { unrecorded, unreceipted, absentA, absentB };
     });
@@ -67,7 +90,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
       await tx.attendanceMark.createMany({
         data: [
           {
-            workspaceId: FIXTURES,
+            workspaceId,
             sessionId: sessions.absentA.id,
             studentId,
             mark: "absent",
@@ -75,7 +98,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
             createdAt: new Date(NOW.getTime() - 24 * 60 * 60 * 1000),
           },
           {
-            workspaceId: FIXTURES,
+            workspaceId,
             sessionId: sessions.absentB.id,
             studentId,
             mark: "absent",
@@ -83,7 +106,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
             createdAt: new Date(NOW.getTime() - 24 * 60 * 60 * 1000),
           },
           {
-            workspaceId: FIXTURES,
+            workspaceId,
             sessionId: sessions.unreceipted.id,
             studentId,
             mark: "present",
@@ -94,7 +117,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
       });
       await tx.homework.create({
         data: {
-          workspaceId: FIXTURES,
+          workspaceId,
           groupId: group.id,
           title: `Due soon ${suffix}`,
           dueAt: new Date(NOW.getTime() + 12 * 60 * 60 * 1000),
@@ -103,7 +126,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
       });
       await tx.assessment.create({
         data: {
-          workspaceId: FIXTURES,
+          workspaceId,
           groupId: group.id,
           title: `Pending ${suffix}`,
           date: past(10),
@@ -112,7 +135,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
     });
 
     const ruleSettings = await withScope(scope, (tx) =>
-      findNotificationRuleSettingsTx(tx, FIXTURES),
+      findNotificationRuleSettingsTx(tx, workspaceId),
     );
     expect(ruleSettings.rules).not.toHaveProperty("paymentOverdueEnabled");
     expect(ruleSettings.rules).not.toHaveProperty("paymentOverdueDays");
@@ -123,7 +146,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
     const stored = await withScope(scope, (tx) =>
       tx.notification.findMany({
         where: {
-          workspaceId: FIXTURES,
+          workspaceId,
           recipientUserId: scope.actorUserId,
           type: {
             in: [
@@ -175,7 +198,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
     const audit = await withScope(scope, (tx) =>
       tx.auditEvent.findFirst({
         where: {
-          workspaceId: FIXTURES,
+          workspaceId,
           action: "notification_rules.updated",
           requestId: "notification-rules-test",
         },
@@ -185,7 +208,7 @@ describe("F-P2-07 notification rules against PostgreSQL RLS", () => {
 
     await withScope(scope, (tx) =>
       tx.workspaceSettings.update({
-        where: { workspaceId: FIXTURES },
+        where: { workspaceId },
         data: {
           notificationRuleConfig: DEFAULT_NOTIFICATION_RULE_CONFIG,
           emailDigestEnabled: false,

@@ -27,11 +27,9 @@ type AccountStatus = "active" | "suspended" | "deleted";
 
 type LimitUtilization = {
   used: number;
-  limit: number;
-  remaining: number;
-  percentUsed: number;
-  exceeded: boolean;
-  nearLimit: boolean;
+  limit: number | null;
+  percent: number;
+  state: "ok" | "warning" | "exceeded" | "unlimited";
 };
 
 type WorkspaceProjection = {
@@ -51,7 +49,7 @@ type WorkspaceProjection = {
   plan: {
     tier: PlanTier;
     status: PlanStatus;
-    billingMode: "manual_pilot";
+    billingMode: "usage_billing";
     writesAllowed: boolean;
     writeRestrictionReason: string | null;
     limits: {
@@ -225,6 +223,14 @@ function formatBytes(bytes: number): string {
 
 export function PlatformAdminConsole() {
   const t = useTranslations("PlatformAdmin");
+
+  function displayLimit(value: number | null): string {
+    return value === null ? t("labels.unlimited") : String(value);
+  }
+
+  function displayBytes(value: number | null): string {
+    return value === null ? t("labels.unlimited") : formatBytes(value);
+  }
   const format = useFormatter();
 
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
@@ -249,22 +255,6 @@ export function PlatformAdminConsole() {
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Plan editor form state
-  const [editPlanTier, setEditPlanTier] = useState<PlanTier>("pilot");
-  const [editPlanStatus, setEditPlanStatus] = useState<PlanStatus>("pilot_active");
-  const [overrideStudents, setOverrideStudents] = useState<string>("");
-  const [overrideGroups, setOverrideGroups] = useState<string>("");
-  const [overrideAssistants, setOverrideAssistants] = useState<string>("");
-  const [overrideFileMb, setOverrideFileMb] = useState<string>("");
-  const [overrideVideoCount, setOverrideVideoCount] = useState<string>("");
-  const [featureOnlineExams, setFeatureOnlineExams] = useState<boolean>(true);
-  const [featureRecordedVideos, setFeatureRecordedVideos] = useState<boolean>(true);
-  const [featureReportExports, setFeatureReportExports] = useState<boolean>(true);
-  const [planNote, setPlanNote] = useState<string>("");
-  const [planReason, setPlanReason] = useState<string>("");
-  const [planConfirmSlug, setPlanConfirmSlug] = useState<string>("");
-  const [planConfirmChecked, setPlanConfirmChecked] = useState<boolean>(false);
-
   // Account status form state
   const [statusReason, setStatusReason] = useState<string>("");
   const [statusConfirmSlug, setStatusConfirmSlug] = useState<string>("");
@@ -277,33 +267,7 @@ export function PlatformAdminConsole() {
   const [bgConfirmSlug, setBgConfirmSlug] = useState<string>("");
   const [bgConfirmChecked, setBgConfirmChecked] = useState<boolean>(false);
 
-  const hydrateDetailForms = useCallback((ws: WorkspaceProjection) => {
-    setEditPlanTier(ws.plan.tier);
-    setEditPlanStatus(ws.plan.status);
-    const ov = ws.plan.overrides ?? {};
-    setOverrideStudents(
-      typeof ov.maxActiveStudents === "number" ? String(ov.maxActiveStudents) : "",
-    );
-    setOverrideGroups(typeof ov.maxActiveGroups === "number" ? String(ov.maxActiveGroups) : "");
-    setOverrideAssistants(
-      typeof ov.maxAssistants === "number" ? String(ov.maxAssistants) : "",
-    );
-    setOverrideFileMb(
-      typeof ov.maxFileStorageBytes === "number"
-        ? String(Math.round(ov.maxFileStorageBytes / (1024 * 1024)))
-        : "",
-    );
-    setOverrideVideoCount(
-      typeof ov.maxVideoCount === "number" ? String(ov.maxVideoCount) : "",
-    );
-    setFeatureOnlineExams(ws.plan.features.onlineExamsEnabled);
-    setFeatureRecordedVideos(ws.plan.features.recordedVideosEnabled);
-    setFeatureReportExports(ws.plan.features.reportExportsEnabled);
-    setPlanNote(ws.plan.note ?? "");
-    setPlanReason("");
-    setPlanConfirmSlug("");
-    setPlanConfirmChecked(false);
-
+  const hydrateDetailForms = useCallback((_ws: WorkspaceProjection) => {
     setStatusReason("");
     setStatusConfirmSlug("");
     setStatusConfirmChecked(false);
@@ -416,44 +380,6 @@ export function PlatformAdminConsole() {
     }
   }
 
-  async function handleSavePlan(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedWorkspace || !planConfirmChecked) return;
-
-    const overrides: Record<string, unknown> = {
-      onlineExamsEnabled: featureOnlineExams,
-      recordedVideosEnabled: featureRecordedVideos,
-      reportExportsEnabled: featureReportExports,
-    };
-
-    if (overrideStudents.trim() !== "") {
-      overrides.maxActiveStudents = Number(overrideStudents);
-    }
-    if (overrideGroups.trim() !== "") {
-      overrides.maxActiveGroups = Number(overrideGroups);
-    }
-    if (overrideAssistants.trim() !== "") {
-      overrides.maxAssistants = Number(overrideAssistants);
-    }
-    if (overrideFileMb.trim() !== "") {
-      overrides.maxFileStorageBytes = Number(overrideFileMb) * 1024 * 1024;
-    }
-    if (overrideVideoCount.trim() !== "") {
-      overrides.maxVideoCount = Number(overrideVideoCount);
-    }
-
-    await submitWorkspaceMutation({
-      operation: "update_plan",
-      planTier: editPlanTier,
-      planStatus: editPlanStatus,
-      limitOverrides: overrides,
-      planNote: planNote.trim() || null,
-      reason: planReason.trim(),
-      confirmationSlug: planConfirmSlug.trim(),
-      confirmAction: true,
-    });
-  }
-
   async function handleToggleAccountStatus(targetStatus: "active" | "suspended") {
     if (!selectedWorkspace || !statusConfirmChecked) return;
     await submitWorkspaceMutation({
@@ -513,6 +439,12 @@ export function PlatformAdminConsole() {
             >
               {t("refreshAction")}
             </button>
+            <Link
+              href="/platform-admin/billing"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] px-3 py-1.5 text-xs font-medium"
+            >
+              {t("billingConsole")}
+            </Link>
             <Link
               href="/app"
               className="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-accent-primary)] px-3 py-1.5 text-xs font-semibold text-white"
@@ -763,14 +695,14 @@ export function PlatformAdminConsole() {
                           <span className="font-medium">
                             {t("workspaces.studentsUsage", {
                               used: ws.utilization.students.used,
-                              limit: ws.utilization.students.limit,
+                              limit: displayLimit(ws.utilization.students.limit),
                             })}
                           </span>
                           {" · "}
                           <span>
                             {t("workspaces.groupsUsage", {
                               used: ws.utilization.groups.used,
-                              limit: ws.utilization.groups.limit,
+                              limit: displayLimit(ws.utilization.groups.limit),
                             })}
                           </span>
                         </div>
@@ -778,14 +710,14 @@ export function PlatformAdminConsole() {
                           <span>
                             {t("workspaces.assistantsUsage", {
                               used: ws.utilization.assistants.used,
-                              limit: ws.utilization.assistants.limit,
+                              limit: displayLimit(ws.utilization.assistants.limit),
                             })}
                           </span>
                           {" · "}
                           <span>
                             {t("workspaces.filesUsage", {
-                              used: formatBytes(ws.utilization.fileStorageBytes.used),
-                              limit: formatBytes(ws.utilization.fileStorageBytes.limit),
+                              used: displayBytes(ws.utilization.fileStorageBytes.used),
+                              limit: displayBytes(ws.utilization.fileStorageBytes.limit),
                             })}
                           </span>
                         </div>
@@ -793,7 +725,7 @@ export function PlatformAdminConsole() {
                           <span>
                             {t("workspaces.videosUsage", {
                               used: ws.utilization.videoCount.used,
-                              limit: ws.utilization.videoCount.limit,
+                              limit: displayLimit(ws.utilization.videoCount.limit),
                             })}
                           </span>
                           {" · "}
@@ -1135,201 +1067,16 @@ export function PlatformAdminConsole() {
 
                     {/* Column 2: Plan Configuration & Account Status */}
                     <div className="space-y-5">
-                      {/* Manual Plan & Quota Editor */}
-                      <form
-                        onSubmit={(e) => void handleSavePlan(e)}
-                        className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-4 text-xs"
-                      >
+                      {/* Free access is not a configurable plan. Billing is usage-based. */}
+                      <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-4 text-xs">
                         <h3 className="text-sm font-semibold">{t("detail.planSection")}</h3>
                         <p className="mt-1 text-[var(--color-text-secondary)]">
                           {t("detail.planBillingNotice")}
                         </p>
-
-                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <div>
-                            <label className="block font-medium">{t("filters.planTierLabel")}</label>
-                            <select
-                              value={editPlanTier}
-                              onChange={(e) => setEditPlanTier(e.target.value as PlanTier)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            >
-                              <option value="pilot">{t("planTier.pilot")}</option>
-                              <option value="standard">{t("planTier.standard")}</option>
-                              <option value="expanded">{t("planTier.expanded")}</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block font-medium">
-                              {t("filters.planStatusLabel")}
-                            </label>
-                            <select
-                              value={editPlanStatus}
-                              onChange={(e) => setEditPlanStatus(e.target.value as PlanStatus)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            >
-                              <option value="pilot_active">{t("planStatus.pilot_active")}</option>
-                              <option value="active">{t("planStatus.active")}</option>
-                              <option value="past_due">{t("planStatus.past_due")}</option>
-                              <option value="suspended">{t("planStatus.suspended")}</option>
-                              <option value="cancelled">{t("planStatus.cancelled")}</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block font-medium">
-                              {t("detail.overrideStudents")}
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={overrideStudents}
-                              onChange={(e) => setOverrideStudents(e.target.value)}
-                              placeholder={String(selectedWorkspace.plan.limits.maxActiveStudents)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-medium">
-                              {t("detail.overrideGroups")}
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={overrideGroups}
-                              onChange={(e) => setOverrideGroups(e.target.value)}
-                              placeholder={String(selectedWorkspace.plan.limits.maxActiveGroups)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-medium">
-                              {t("detail.overrideAssistants")}
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={overrideAssistants}
-                              onChange={(e) => setOverrideAssistants(e.target.value)}
-                              placeholder={String(selectedWorkspace.plan.limits.maxAssistants)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-medium">
-                              {t("detail.overrideFileStorageMb")}
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={overrideFileMb}
-                              onChange={(e) => setOverrideFileMb(e.target.value)}
-                              placeholder={String(
-                                Math.round(
-                                  selectedWorkspace.plan.limits.maxFileStorageBytes / (1024 * 1024),
-                                ),
-                              )}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block font-medium">
-                              {t("detail.overrideVideoCount")}
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={overrideVideoCount}
-                              onChange={(e) => setOverrideVideoCount(e.target.value)}
-                              placeholder={String(selectedWorkspace.plan.limits.maxVideoCount)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Feature Flags */}
-                        <div className="mt-3 space-y-1.5 border-t border-[var(--color-border-subtle)] pt-3">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={featureOnlineExams}
-                              onChange={(e) => setFeatureOnlineExams(e.target.checked)}
-                            />
-                            <span>{t("detail.featureOnlineExams")}</span>
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={featureRecordedVideos}
-                              onChange={(e) => setFeatureRecordedVideos(e.target.checked)}
-                            />
-                            <span>{t("detail.featureRecordedVideos")}</span>
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={featureReportExports}
-                              onChange={(e) => setFeatureReportExports(e.target.checked)}
-                            />
-                            <span>{t("detail.featureReportExports")}</span>
-                          </label>
-                        </div>
-
-                        <div className="mt-3 space-y-2.5 border-t border-[var(--color-border-subtle)] pt-3">
-                          <div>
-                            <label className="block font-medium">{t("detail.planNoteLabel")}</label>
-                            <input
-                              type="text"
-                              value={planNote}
-                              onChange={(e) => setPlanNote(e.target.value)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-medium">{t("detail.reasonLabel")}</label>
-                            <input
-                              type="text"
-                              required
-                              minLength={5}
-                              value={planReason}
-                              onChange={(e) => setPlanReason(e.target.value)}
-                              placeholder={t("detail.reasonPlaceholder")}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-medium">
-                              {t("detail.confirmSlugLabel", { slug: selectedWorkspace.slug })}
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={planConfirmSlug}
-                              onChange={(e) => setPlanConfirmSlug(e.target.value)}
-                              className="mt-1 w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-2.5 py-1.5 font-mono"
-                            />
-                          </div>
-                          <label className="flex items-start gap-2">
-                            <input
-                              type="checkbox"
-                              checked={planConfirmChecked}
-                              onChange={(e) => setPlanConfirmChecked(e.target.checked)}
-                              className="mt-0.5"
-                            />
-                            <span>{t("detail.confirmCheckbox")}</span>
-                          </label>
-                          <button
-                            type="submit"
-                            disabled={
-                              submitting ||
-                              !planConfirmChecked ||
-                              planConfirmSlug.trim() !== selectedWorkspace.slug
-                            }
-                            className="rounded-md bg-[var(--color-accent-primary)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                          >
-                            {t("detail.savePlanAction")}
-                          </button>
-                        </div>
-                      </form>
+                        <p className="mt-2 text-[var(--color-text-secondary)]">
+                          {t("detail.freeUnlimitedNotice")}
+                        </p>
+                      </div>
 
                       {/* Account Suspension / Reactivation Control */}
                       <div className="rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-bg-elevated)] p-4 text-xs">

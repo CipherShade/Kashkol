@@ -8,6 +8,7 @@ import {
   verificationEmail,
 } from "@/modules/identity/email";
 import { SESSION_SLIDING_DAYS } from "@/lib/auth/session-policy";
+import { exactTrustedOrigins } from "@/lib/http/csrf";
 
 /**
  * Social provider configuration is parsed here so unit tests can assert the
@@ -59,15 +60,11 @@ export function buildAuthOptions(env: ServerEnv): Omit<BetterAuthOptions, "datab
   const trustedOrigin = new URL(env.BETTER_AUTH_URL).origin;
   const rateLimitEnabled = env.AUTH_RATE_LIMIT_ENABLED ?? env.APP_ENV !== "local";
 
-  // Collect additional trusted origins from the env var that Better Auth also
-  // reads natively. We duplicate them here so the application-level option is
-  // explicit and testable. In local dev this includes Cloudflare quick-tunnel
-  // origins; in production this list must only contain the deployment origin.
-  const extraTrustedOrigins: string[] = env.BETTER_AUTH_TRUSTED_ORIGINS
-    ? env.BETTER_AUTH_TRUSTED_ORIGINS.split(",")
-        .map((o: string) => o.trim())
-        .filter(Boolean)
-    : [];
+  // Collect exact additional trusted origins from the env var that Better Auth
+  // also reads natively. We duplicate them here so the application-level option
+  // is explicit and testable. Wildcards are never accepted; in production this
+  // list must only contain the deployment origin.
+  const extraTrustedOrigins = exactTrustedOrigins(env.BETTER_AUTH_TRUSTED_ORIGINS ?? "");
 
   return {
     appName: "Kashkol",

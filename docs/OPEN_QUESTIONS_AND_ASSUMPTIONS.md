@@ -1,8 +1,11 @@
 # Kashkol — Open Questions and Assumptions
 
-**Status:** Draft v0.3 · **Date:** 2026-11-13 · **Owner:** Product
+**Status:** Draft v0.5 · **Date:** 2026-11-28 · **Owner:** Product
 **Change:** `OQ-20` added on 2026-11-11 to record that the direct student-level fee rule vs. group monthly fee interaction in `ADR-0025` is an **open product decision**; the implementation's behaviour is recorded as the default until decided, not as a decided rule.
 **Change:** `OQ-20` marked **superseded by `ADR-0028`** on 2026-11-13; student-level fee rules no longer exist, so the question can no longer arise. `F-P2-04` and `D-14` are likewise superseded by `ADR-0028`.
+**Change:** `OQ-04` resolved and `A-10` superseded on 2026-11-27 by `ADR-0045` and `ADR-0046`: free, unlimited teacher access with usage-based platform billing and a manual InstaPay ledger. `A-12` is narrowed for billing verification and exemptions by `ADR-0047`. `OQ-23` and `OQ-24` record the remaining legal/product questions; `OQ-20`–`OQ-22` were already assigned, so no existing ID was renumbered.
+**Change:** `OQ-25` added on 2026-11-28 to record the product/accounting default for retroactive-exemption credits and disputed-reference recovery approved by `ADR-0048`.
+**Change:** `OQ-23`, `OQ-24` and `OQ-25` were **closed on 2026-11-28** by the product owner's final decisions recorded in `ADR-0051`. The qualification rule is now two qualifying sessions within a rolling 30 days that includes a session in the billed Cairo month; `ADR-0045` is superseded only on that point. Legal approval of the payment process is recorded as reported by the product owner; no specific advice or legal-invoice conclusion is invented.
 **Companions:** `PRODUCT_REQUIREMENTS.md`, `USER_FLOWS.md`, `RELEASE_PLAN.md`
 
 > **Nothing in this document blocks the build.** Every open question below already carries a
@@ -27,7 +30,7 @@
 1. A default may only be changed by an explicit written decision recorded here, with a date and an
    owner.
 2. Changing a default requires a **traceability sweep**: the affected `F-Px-nn` requirements,
-   `F1`–`F26` flows, and milestone scope in `RELEASE_PLAN.md` §12 are updated in the same change.
+   `F1`–`F28` flows, and milestone scope in `RELEASE_PLAN.md` §12 are updated in the same change.
 3. No default is ever resolved by "building it and seeing what happens" when the answer affects a
    stored data model. Data-model defaults are the most expensive to change.
 4. An open question that is still open at the start of its deadline milestone is **escalated**, not
@@ -39,8 +42,8 @@
 
 | Class | Count | Blocking? |
 |---|---|---|
-| Assumptions | 22 (`A-01`–`A-22`) | No — each has a default |
-| Open questions | 22 (`OQ-01`–`OQ-22`) | No — each has a default and a decision deadline |
+| Assumptions | 22 (`A-01`–`A-22`); `A-10` superseded by `ADR-0045`/`ADR-0046` | No — each has a default |
+| Open questions | 25 (`OQ-01`–`OQ-25`): `OQ-04` resolved, `OQ-20` superseded, `OQ-23`–`OQ-25` closed by `ADR-0051` | No — remaining questions each have a conservative default and a decision deadline |
 | External dependencies tracked in §7 | 6 | Yes for the milestone that depends on them — see `RELEASE_PLAN.md` §9 |
 
 **Deadline horizon**
@@ -48,9 +51,9 @@
 | Milestone | Questions that must be closed by its start | Questions that may remain open |
 |---|---|---|
 | M0 | `OQ-01` (team), `OQ-18` (audit visibility), `OQ-10` (retention) | all others |
-| M1 | `OQ-07` (search scope), `OQ-14` (offline), `OQ-12` (file limits) | portal, payments, QR, video, billing questions |
-| M2 | `OQ-02` (parent linking), `OQ-03` (student auth), `OQ-05` (QR capture), `OQ-06` (notes to parents), `OQ-09` (OTP provider) | `OQ-20` moot (superseded by `ADR-0028`); video, billing, exam-bank questions |
-| M3 | `OQ-04` (pricing), `OQ-08` (video provider), `OQ-11` (question source) | — |
+| M1 | `OQ-07` (search scope), `OQ-14` (offline), `OQ-12` (file limits) | portal, payments, QR, video questions; `OQ-04` resolved by `ADR-0045`/`ADR-0046` |
+| M2 | `OQ-02` (parent linking), `OQ-03` (student auth), `OQ-05` (QR capture), `OQ-06` (notes to parents), `OQ-09` (OTP provider) | `OQ-20` moot (superseded by `ADR-0028`); video and exam-bank questions |
+| M3 | `OQ-08` (video provider), `OQ-11` (question source) | `OQ-23`–`OQ-25` are closed by `ADR-0051`; the product-owner decisions apply to billing GA |
 
 ---
 
@@ -72,14 +75,14 @@ what would invalidate it, and what it affects.
 | **A-07** | Grade scale. | Each assessment carries its own `max_score`; results are shown as a score and a percentage. No GPA, no class rank, no weighted cumulative average in P1/P2. | Percentage-per-assessment is unambiguous and is what the prototype's score inputs already imply. Cumulative weighting requires a curriculum model that does not exist. | A curriculum model is adopted (then see `OQ-11`). | `F-P1-09`, `F-P1-12`, `F-P2-06` |
 | **A-08** | Session materialisation horizon. | Sessions are generated per group on a rolling **8-week** horizon and are individually editable/cancellable. A "generate more" action extends the horizon. | The prototype generated sessions ad hoc; a bounded horizon prevents a 10-group workspace from creating thousands of rows. | Teachers report that 8 weeks is too short to plan term. | `F-P1-05`, `F-P2-12` |
 | **A-09** | File limits. | PDF, images (JPG/PNG), and Office documents. Max **25 MB** per file. Every upload is virus-scanned and stored outside the web root with signed, expiring URLs. | A conservative size limit protects shared hosting and the scanner pipeline; signed URLs are the minimum for tenant isolation of files. | The real-world distribution of teacher files shows PDFs of a different size class. | `F-P1-11`, `F-P2-11` |
-| **A-10** | Commercial model during the build. | **No pricing is implemented** in P1/P2. The private beta is free; a paid pilot is manual (invoice + access control) until billing exists in P3. | Implementing billing before the product is proven risks charging for the wrong thing; manual access control keeps money out of the P1/P2 codebase entirely. | `OQ-04` resolves differently. | `F-P3-04`, M1/M2 pilot |
+| **A-10** | Commercial model — **superseded by `ADR-0045` and `ADR-0046` (2026-11-27); qualification refined by `ADR-0051` (2026-11-28)**. | Every teacher account is free and unlimited with all features. Platform usage is billed at **99 piastres per distinct qualifying student per `Africa/Cairo` calendar month** from workspace activation; payment is a manual InstaPay submission verified by a platform admin. No paid tiers, quotas, feature gates, or payment-status write blocks. | The product owner approved this model explicitly; computing usage from real attendance and verifying payments manually keeps the charge traceable without claiming a provider, webhook, or transfer detection. | A new ADR supersedes `ADR-0045`/`ADR-0046` with a different commercial model. | `F-P3-04`, `F28`, M3 billing |
 
 ### 3.2 Privacy, legal, and operational
 
 | ID | Assumption | Default | Why this is conservative | Invalidated if | Affects |
 |---|---|---|---|---|---|
 | **A-11** | The categories of personal data Kashkol handles. | Only what the teaching relationship requires: name, grade, phone, parent phone, and teacher-authored notes. **No** national ID, **no** biometrics, **no** precise location, **no** religion/political data, **no** sensitive-category data of any kind. | A private teacher's roster does not need government identifiers. Collecting less is the safest default for minors' data. | A legally required field appears (for example, a national registry obligation). | `F-P0-08`, §9 privacy register |
-| **A-12** | Platform-administrator visibility. | Administrators see **operational metadata only** (workspace status, plan, counts). Break-glass content access is explicit, time-boxed, audited, and **visible to the workspace owner in their Activity Log**. | The prototype had no admin concept; the safest default is that a tenant's data is invisible to the platform unless a human, accountable, time-boxed exception is made. | The support model proves unworkable without content access. | `F-P3-03`, `D-13`, `F26` |
+| **A-12** | Platform-administrator visibility — **narrowed for billing by `ADR-0047` (2026-11-27)**. | Administrators see **operational metadata only** (workspace status, plan, counts). The sole billing exception is purpose-limited verification and exemption metadata: invoice number/amount, submission reference/amount/time, evidence status, and review state — never student names, phones, notes, grades, message bodies, or session receipts. Break-glass content access remains explicit, time-boxed, audited, and **visible to the workspace owner in their Activity Log**. | Billing verification needs a transaction reference and exact amount, not tenant content; the exception is audited and stays inside the billing domain. | The support model proves unworkable without content access, or a new ADR widens billing access. | `F-P3-03`, `F-P3-04`, `D-13`, `F26`, `ADR-0047` |
 | **A-13** | Theme default. | Default follows the operating-system preference; the user can override with an explicit control; the choice persists per user. | The prototype defined dark tokens but never set `data-theme`, so dark mode was only reachable by OS preference. Making the OS preference the default preserves that behaviour while adding a real control. | — | `F-P0-04`, `D-02`, DEF-13 |
 | **A-14** | Data retention for deleted workspaces and accounts. | A deleted workspace is soft-deleted for **30 days** (recoverable by the owner), then hard-deleted from the database and from object storage within a further **30 days**. Backups expire on a **35-day** cycle. | Teachers delete a workspace by accident; a reversible window is cheap insurance. Backups must not become an unbounded shadow copy of deleted data. | A legal review requires a different window. | `F-P0-08`, `F-P2-11`, `F-P3-04` |
 | **A-15** | How ungraded assessment results affect averages. | Only `graded` results contribute; their percentages (`score / max_score`) are averaged arithmetically. `missing`, `excused`, and `not_taken` results are excluded, never converted to zero. | A zero would misstate a result that is absent or not applicable and would silently depress the student's average. | A curriculum-approved weighted or alternative grading policy is adopted. | `F-P1-09`, `F-P2-06` |
@@ -108,7 +111,7 @@ of each answer, and the deadline. No question blocks the build.
 | **OQ-10** | What happens to a student's history when the teacher deletes the student? | (a) soft-delete, records retained; (b) hard-delete cascade; (c) soft-delete with anonymisation after N years | **(a)** — soft-delete with full retention; the teacher can reactivate. | (b) risks destroying attendance history a teacher may need for a dispute. (c) requires a background anonymisation job. | Before M0 data-model freeze |
 | **OQ-06** | Are teacher notes about a student visible to that student's parents? | (a) no — private; (b) yes; (c) teacher chooses per note | **(a)** — notes are private to the workspace staff. | (b) risks a parent seeing an unflattering observation with no teacher intent; (c) adds a per-note visibility control and a portal filter. | Before M2 portal build |
 | **OQ-11** | Where do online-exam questions come from? | (a) teacher-authored only; (b) a platform question bank; (c) import from a source | **(a)** — teacher-authored only, in M3a. | (b)/(c) require a curriculum model, content moderation, licensing, and Arabic-content review — a separate programme, not a feature. | Before M3a scope freeze |
-| **OQ-04** | What is the commercial model? | (a) flat monthly per teacher; (b) per student; (c) freemium with a student cap; (d) not yet decided | **Undecided — no billing code until M3b.** During beta, access is granted manually. | Determines plan limits, entitlement checks, upgrade UX, and the admin console's billing views. Building billing before the model is decided is wasted work and a source of customer-hostile behaviour. | Before M3b starts |
+| **OQ-04** | What is the commercial model? | (a) flat monthly per teacher; (b) per student; (c) freemium with a student cap; (d) not yet decided | **Resolved 2026-11-27 by `ADR-0045`/`ADR-0046`; qualification refined 2026-11-28 by `ADR-0051`.** Approved default: free, unlimited teacher access with all features; 99 piastres per distinct qualifying student per `Africa/Cairo` month from activation, paid by manual InstaPay submission and admin verification; qualification is two sessions in a rolling 30 days that includes the billed month. No paid tiers, quotas, or payment-status write blocks. | A different model requires a new ADR superseding `ADR-0045`/`ADR-0046`; plan fields remain metadata only and must not become an access gate. | Resolved (`ADR-0045`, `ADR-0046`) |
 
 ### 4.2 Multi-user, portals, and access
 
@@ -139,6 +142,9 @@ of each answer, and the deadline. No question blocks the build.
 | **OQ-18** | Who sees the workspace Activity Log, and what does it retain? | (a) owner only; (b) owner plus assistants; (c) owner plus assistants for their own actions | **(a) — owner only** in P1/P2, with an assistant-visible subset added in M2 (assistants see their own actions and the actions of others on the entities they can access). Entries are retained for **24 months**, then aggregated. | (c) is simpler but less useful; (a) is the strictest. Audit retention interacts with `A-14` and with the delete request path. | Before M0 data-model freeze |
 | **OQ-15** | Are student names stored in Arabic only? | (a) as entered, single field; (b) separate Arabic/Latin fields; (c) transliteration generated | **(a)** — stored and displayed as entered, with the UI never translating teacher-authored content. | (b)/(c) add a second field, a matching problem, and a merge workflow. | Before M0 data-model freeze |
 | **OQ-19** | Where must tenant data be hosted? | (a) any region; (b) Egypt/EU; (c) in-country (Egypt) | **(a)** for build and beta, subject to the legal review. | (b)/(c) constrains provider choice and can materially affect cost and latency. | Before M2 (privacy review) |
+| **OQ-23** | How are manual InstaPay references, invoice numbering, and optional screenshot evidence handled for legal and accounting purposes? | (a) normalize references per bank format, use sequential legal invoice numbers, and retain evidence for a defined term; (b) keep internal invoice numbers and metadata-only evidence with a short retention window; (c) have an external accountant issue the legal invoice | **CLOSED — product-owner decision, 2026-11-28 (`ADR-0051`).** The product owner reports that a lawyer reviewed and approved the proposed payment process: invoice → manual InstaPay transfer → screenshot to `+201004574178` → manual verification → explicit administrator approval/rejection → ledger entry on approval only. Screenshots are evidence, not proof; no gateway or automatic approval. Immutable internal invoices, snapshots, line items, and existing reference normalization are preserved. Internal numbering is not claimed to be a legal/tax invoice. | Approval authority is the product owner; the legal approval is recorded only as reported by them. No lawyer name, opinion, licence details, advice text, retention period, bank-specific normalization rule, or external-accountant decision is fabricated. Those details remain explicitly unspecified. | Closed by product-owner decision (`ADR-0051`); engineering verifies flow, access control, and audit logging |
+| **OQ-24** | Which students count for billing when archived or soft-deleted, and may billing rules change retroactively? | (a) count only currently active, non-archived qualifying students and apply threshold changes strictly forward-only; (b) include archived/soft-deleted students with qualifying attendance; (c) allow re-invoicing earlier months when rules change | **CLOSED — product-owner decision, 2026-11-28 (`ADR-0051`).** A student becomes billable after at least two qualifying sessions within a rolling 30-day period that includes at least one session in the billed `Africa/Cairo` month. `present`/`late` marks on non-cancelled sessions count; the window is 30 × 24 elapsed hours. Deleting or archiving a student never erases historical attendance or billing eligibility and never removes an earned charge; a student with linked attendance must be archived, not hard-deleted. Activation is unchanged, rule changes are forward-only, and earlier invoices/months are never rewritten or re-billed. | The product owner chose (b) with the exact rolling rule and rejected retroactive re-invoicing. Qualification reads attendance history, not current student status. | Closed by product-owner decision (`ADR-0051`); verified by unit and database tests |
+| **OQ-25** | How must a retroactive exemption that overlaps an issued invoice, and a disputed transaction reference, be represented? | (a) reject the overlapping exemption until a separate credit is issued and keep references permanently revoked; (b) append an audited credit that names the affected invoice and allow an audited reference release/reclaim with append-only history | **CLOSED — explicit product-owner approval, 2026-11-28 (`ADR-0051`).** Option (b) exactly as implemented and recorded in `ADR-0048` and `ADR-0049`: append-only compensation, an audited `invoice_credit` naming the immutable invoice, oldest-first allocation with the outstanding-balance cap and any remainder as available credit, signed `payment_reversal` on release, append-only reference events, later reclaim, and no raw reference exposed globally. No invoice is rewritten. | Approval authority is the product owner; the policy is unchanged and was audited in the F1–F21 and second-audit follow-ups. No new credit sequence or reference policy is invented. | Closed by product-owner approval (`ADR-0051`) |
 
 ---
 
@@ -150,7 +156,7 @@ They are recorded here so they are not re-opened in review.
 | Topic | Position | Source |
 |---|---|---|
 | Should live video meetings be built? | **No. Never.** The prototype's meeting room is a UI exploration. | `PRODUCT_REQUIREMENTS.md` §1.2, `D-17` |
-| Should Kashkol process payments? | **No.** Money is recorded manually; Kashkol moves no money. | `D-14`, `NF-5` |
+| Should Kashkol process payments? | **No.** Teacher receipts are recorded manually; the platform fee is paid by a manual InstaPay transfer and verified by an admin. No gateway, webhook, automatic detection, or settlement is claimed. | `D-14`, `NF-5`, `ADR-0045` |
 | Should the portal show mock data as a demo? | **No.** Portals require real authentication; a teacher-side preview must be labelled a preview. | `NF-3` |
 | Should attendance percentages be estimated or shown as "approximate"? | **No.** Every rate is computed from records. | `NF-1`, `D-08` |
 | Should the teacher see a "message sent" state? | **No.** Only "opened in WhatsApp" / "prepared". | `NF-2`, `F-P1-10` |
@@ -191,7 +197,7 @@ they gate milestones.
 | Legal review of minors'-data handling | The validity of `A-11`, `A-14`, `OQ-02`, `OQ-03` | M2 | The parent and student portals cannot ship; M2 splits into wave A and wave B (`RELEASE_PLAN.md` §4.2). | Product + legal |
 | SMS/OTP provider contract | `OQ-09` | M2 wave B | Portals fall back to emailed links only — a viable scope reduction. | Engineering |
 | Video provider decision and contract | `OQ-08` | M3b | `F-P3-02` is deferred; no placeholder is released. | Engineering |
-| Billing provider contract | `OQ-04` | M3b | `F-P3-04` is deferred; the pilot stays manually provisioned. | Product |
+| Legal/product/accounting decisions for usage billing (`OQ-23`, `OQ-24`, `OQ-25`) | Payment process and lawyer approval reported by the product owner; rolling qualification and archival/deletion treatment; approved credit/reference policy | M3b / billing GA | **Closed by the product owner on 2026-11-28 (`ADR-0051`).** No provider contract is needed; no automatic detection is claimed. Bank-specific normalization, legal/tax invoice numbering, evidence retention, and an external accountant remain unspecified details and are not claimed as decided. | Product owner; legal approval recorded only as reported |
 | Beta teacher recruitment | The truth of `A-05`, `OQ-07`, `OQ-14` | M1 private beta | The M1 gate cannot be evaluated with real usage; engineering continues. | Product |
 | Arabic native-speaker reviewer | The quality of every Arabic string | Every release | The Arabic QA release gate cannot pass. | Product |
 
@@ -210,9 +216,9 @@ they gate milestones.
 | `A-07` | `F-P1-09`, `F-P1-12`, `F-P2-06` | Assumption |
 | `A-08` | `F-P1-05`, `F-P2-12` | Assumption |
 | `A-09` | `F-P1-11`, `F-P2-11` | Assumption |
-| `A-10` | `F-P3-04` | Assumption |
+| `A-10` | `F-P3-04`, `F28`, `ADR-0045`, `ADR-0046` | Superseded by `ADR-0045`/`ADR-0046` |
 | `A-11` | `PRODUCT_REQUIREMENTS.md` §1.2, `F-P0-08`, §9 | Assumption |
-| `A-12` | `F-P3-03`, `D-13`, `F26` | Assumption |
+| `A-12` | `F-P3-03`, `F-P3-04`, `D-13`, `F26`, `ADR-0047` | Assumption, narrowed for billing by `ADR-0047` |
 | `A-13` | `D-02`, `F-P0-04` | Assumption |
 | `A-14` | `F-P0-08`, `F-P2-11` | Assumption |
 | `A-15` | `F-P1-09`, `F-P2-06` | Assumption |
@@ -226,7 +232,7 @@ they gate milestones.
 | `OQ-01` | `RELEASE_PLAN.md` §2 | Open question |
 | `OQ-02` | `F-P2-02`, `F17` | Open question |
 | `OQ-03` | `F-P2-03`, `F18` | Open question |
-| `OQ-04` | `F-P3-04` | Open question |
+| `OQ-04` | `F-P3-04`, `F28`, `ADR-0045`, `ADR-0046` | Resolved by `ADR-0045`/`ADR-0046` |
 | `OQ-05` | `F-P2-05`, `F20` | Open question |
 | `OQ-06` | `F-P2-02`, `F17` | Open question |
 | `OQ-07` | `F-P1-13` | Open question |
@@ -245,3 +251,6 @@ they gate milestones.
 | `OQ-20` | `F-P2-04`, `ADR-0025` | Superseded by `ADR-0028` |
 | `OQ-21` | `F-P2-11`, `ADR-0026` | Open question |
 | `OQ-22` | `F-P2-05`, `F20`, `ADR-0027` | Open question |
+| `OQ-23` | `F-P3-04`, `F28`, `ADR-0045`, `ADR-0047`, `ADR-0051` | Closed by product-owner decision |
+| `OQ-24` | `F-P3-04`, `F28`, `ADR-0045`, `ADR-0046`, `ADR-0051` | Closed by product-owner decision |
+| `OQ-25` | `F-P3-04`, `F28`, `ADR-0047`, `ADR-0048`, `ADR-0049`, `ADR-0051` | Closed by explicit product-owner approval |

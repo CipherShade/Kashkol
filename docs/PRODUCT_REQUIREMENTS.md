@@ -28,7 +28,7 @@ downgraded.
 | Explicitly out of scope | Notes |
 |---|---|
 | Online live meetings / video conferencing | **Never** in scope. The reference prototype contains a mock meeting room; it is a UI exploration, not a product commitment. |
-| Payment gateway / card processing | Money is tracked **manually** by the teacher. Kashkol never moves money. |
+| Payment gateway / card processing | Money is tracked **manually**. Teacher-to-student receipts are recorded facts; the platform fee is paid by manual InstaPay transfer and verified by a platform administrator (`ADR-0045`). Kashkol never moves money. |
 | Built-in video hosting | Recorded video is delivered by an **external provider** (P3). |
 | Marketplace / student–teacher discovery | Not in the brief. |
 | Government school registry / national ID verification | Not in the brief; see `A-11`. |
@@ -41,7 +41,7 @@ downgraded.
 | **Assistant** | One workspace, granted subset | Scoped by explicit permission grants (e.g. attendance + students, but no settings). Cannot invite members, cannot delete the workspace, and **never** sees money — there is no payment grant (`ADR-0041`). |
 | **Parent** | One workspace, one or more linked children | Read-only access only through an explicitly authorized portal route and field projection for their own child. Staff-only grades, feedback, and follow-up notes are excluded unless a specific requirement and allowlisted route authorize them. No access to other students or ability to change teacher data. |
 | **Student** | One workspace, own record | Read-only view of own attendance, results, homework, files. Can mark homework submitted and upload a submission (P2). |
-| **Platform administrator** | Platform-wide | Operational metadata only: workspace status, plan, aggregate counts, support tooling. **No standing access to tenant content.** Break-glass content access is explicit, time-boxed, and audited (`D-13`). |
+| **Platform administrator** | Platform-wide | Operational metadata only: workspace status, plan, aggregate counts, support tooling. **No standing access to tenant content.** Break-glass content access is explicit, time-boxed, and audited (`D-13`). The only billing exception is narrow, audited verification and exemption metadata: no student names, phones, notes, message bodies, or session receipts (`ADR-0047`). |
 
 ### 1.4 Tenancy model
 
@@ -168,7 +168,7 @@ Workspace
 | **P0 — Foundation** | The non-negotiable substrate: tenancy, auth, i18n/RTL, theming, design system, data model, audit, security. Nothing user-facing ships without it. | M0 |
 | **P1 — First usable release** | The smallest set a real teacher can run their teaching week on: students, groups, schedule, attendance with corrections, homework, paper grades, parent updates, files, a usable dashboard, minimal reports. | M1 (public beta) |
 | **P2 — Expansion** | Multi-user and multi-audience: assistants with real permissions, parent portal, student portal, owner-only collected session receipts, notifications, QR attendance, progress & follow-up, exports, data portability. | M2 |
-| **P3 — Advanced** | High-cost / external-dependency / later-phase: online exams, recorded video via external provider, admin console, subscription & billing, scale hardening. | M3+ |
+| **P3 — Advanced** | High-cost / external-dependency / later-phase: online exams, recorded video via external provider, admin console, usage-based platform billing with a manual InstaPay ledger, scale hardening. | M3+ |
 
 **Scope discipline rules**
 
@@ -192,8 +192,9 @@ Workspace
 
 ### F-P0-01 — Multi-tenant workspace isolation
 
-**User story:** As a teacher on a paid plan, I want my students' data to be invisible to teachers in
-other workspaces, so that I can trust the platform with my students' personal information.
+**User story:** As a teacher on a free, unlimited account, I want my students' data to be invisible
+to teachers in other workspaces, so that I can trust the platform with my students' personal
+information.
 
 **Dependencies:** DB schema with `workspace_id` on all tenant tables; identity provider; RLS or
 equivalent repository-level scoping.
@@ -1281,25 +1282,81 @@ trouble, without reading their students' data by default.
 3. There is no bulk export of tenant content.
 4. Admin actions are rate-limited and themselves audited in a platform-level log.
 5. The console is not reachable with a teacher session, and a teacher session cannot call admin APIs.
+6. Billing verification and exemption management are the only billing-related admin exceptions. The
+   admin receives metadata only — workspace id, invoice number and amount, submission reference,
+   submitted amount, transfer time, evidence status, and review state — never student names,
+   phones, notes, grades, message bodies, or session receipts (`ADR-0047`, `ADR-0048`). Verification
+   and reference-recovery mutations run in the target workspace's scoped transaction with an
+   active-admin assertion.
 
 ---
 
-### F-P3-04 — Subscription, plan, and billing
+### F-P3-04 — Usage-based platform billing (manual InstaPay ledger)
 
-**User story:** As a teacher, I want to know what my plan allows and how much I owe, so that the
-service is predictable.
+**User story:** As a teacher, I want a fee computed from real attendance and a truthful way to submit
+my InstaPay transfer, while keeping every feature free and unlimited.
 
-**Dependencies:** Payment provider (a real one — this is separate from the *manual* payment tracking
-of F-P2-04, which tracks teacher↔parent money, not teacher↔Kashkol money).
+**Dependencies:** Real attendance marks, workspace activation, and the separate `billing` domain.
+No payment provider, card data, webhook, or automatic transfer detection (`ADR-0045`). The
+qualification rule and final payment decisions are recorded in `ADR-0051`. This is distinct from
+F-P2-04, which records teacher↔student session receipts at `/app/payments`.
 
 **Acceptance criteria**
-1. Plans define limits on students, groups, and file storage, with over-limit behaviour that is
-   explicit (block or prompt upgrade) and communicated **before** the limit is hit.
-2. Billing state (active / past due / cancelled) is visible to the owner in Settings.
-3. Downgrading does not delete data; it restricts new writes and says so.
-4. The billing provider's webhooks are the source of truth for subscription state, consumed
-   idempotently.
-5. An Arabic and English invoice/receipt is available for each charge.
+1. Every teacher account is free and unlimited: no paid tiers, student caps, quotas, feature gates,
+   or payment-status write blocks. An unpaid invoice never blocks educational writes; only a
+   genuinely `suspended` or `deleted` workspace blocks them (`ADR-0046`).
+2. Usage is the count of **distinct students** per workspace per `Africa/Cairo` calendar month with
+   at least two qualifying `present`/`late` marks on non-cancelled sessions whose `startsAt`
+   timestamps fall within a **rolling 30-day window** (30 × 24 elapsed hours) that includes at
+   least one session in that billed month (`ADR-0051`). The preceding 30 days may establish the
+   pair; `absent`, `excused`, and cancelled-session marks do not count; a student counts once per
+   month; group and independent sessions both count. Attendance before workspace activation is
+   never used. Archiving or deleting a student never erases historical attendance or earned
+   eligibility, and never rewrites or re-bills an earlier month. Balances carry forward.
+3. The charge is `qualifying_students × 99` piastres, stored as integer EGP minor units and computed
+   from records (`NF-1`).
+4. A platform admin triggers the cycle; no new production worker token or config is introduced. The
+   append-only ledger records usage charges, signed adjustments, invoice allocations, payment
+   credits, reversals, and invoice credits. Issued invoices and line items are immutable; later
+   corrections add ledger entries and never rewrite an invoice or a past charge. Credits reduce
+   outstanding invoices oldest-first and any remainder is available credit, never a verified
+   payment. All mutations are transactional, idempotent, concurrency-safe, tenant-scoped with
+   forced RLS, and audited in the same transaction (`ADR-0048`).
+5. The default invoice threshold is `5000` piastres, admin-configurable in a versioned, audited
+   configuration. Balances below it carry forward; at or above it the full accumulated balance is
+   invoiced once.
+6. The teacher owner-only billing UI is `/app/billing`; assistants are denied by server-side checks.
+   The teacher session-receipt screen at `/app/payments` stays separate and unaffected (`ADR-0041`,
+   `ADR-0043`). `/subscribe` and the subscription panel are removed; sign-up leads to sign-in /
+   verify-email (`ADR-0046`).
+7. Payment follows the lawyer-reviewed process reported by the product owner (`ADR-0051`): Kashkol
+   issues an internal invoice; the teacher transfers the amount by InstaPay and sends the
+   transaction screenshot to the designated WhatsApp number **`+201004574178`**; an authorized
+   platform administrator reviews it and explicitly approves or rejects it; only approval writes
+   the payment to the ledger and updates the balance. The submission records a normalized
+   reference, amount, and transfer date/time, with optional evidence upload/download. States are
+   `submitted`, `under_review`, `approved`, `rejected`, and `flagged`; submission never credits a
+   payment and `under_review` does not either. A disputed reference may be released with a coded
+   reason and reclaimed by a later approved submission; the global registry holds only fingerprints
+   and append-only events, never the raw reference. Screenshots are supporting evidence, never
+   proof of transfer. Internal invoices are not claimed to be government-issued tax invoices. No
+   API, webhook, automatic detection, automatic approval, or settlement is claimed (`NF-5`,
+   `ADR-0048`).
+8. `/platform-admin/billing` provides versioned config, exemption management, submission review,
+   evidence access, signed balance adjustments, reference release, and the cycle trigger. Approval
+   requires an exact amount match, a unique current fingerprint, an unpaid invoice, and no prior
+   credit; partial and overpayments are not allocated and rejection does not delete the invoice
+   (`ADR-0045`, `ADR-0047`, `ADR-0048`).
+9. Exemptions are first-class records with a reason (`internal_testing`, `beta_tester`,
+   `testimonial`, `promotional`, `partner`, `custom`), optional internal notes, a start date,
+   optional expiration, a status, and the creating/modifying admin. Exempt workspaces keep all
+   features and unlimited usage but are non-billable; expiration or revocation never bills earlier
+   months retroactively. A retroactive exemption that overlaps issued usage appends a signed
+   compensation or invoice credit instead of rewriting history. Every lifecycle event writes a
+   tenant and platform audit event in the same transaction (`ADR-0047`, `ADR-0048`).
+10. Balances, invoices, submission states, and exemption states are rendered in Arabic and English
+    with truthful copy: no "paid", "detected", "delivered", or "settled" claim beyond a verified
+    manual approval.
 
 ---
 
@@ -1500,7 +1557,7 @@ affiliation, no biometrics, no precise location, no third-party behavioural trac
 | SMS/OTP provider | P2 parent/student portal login | P2 | Hard dependency for portal | Fallback to emailed link; rate-limited; cost per OTP |
 | Push provider | P3 rich notifications | P3 | Hard dependency | Opt-in only |
 | External video provider | P3 recorded video | P3 | Hard dependency | Provider outage ⇒ "unavailable", never a broken player |
-| Billing provider | P3 subscription | P3 | Hard dependency | Webhook-driven state; never store raw card data |
+| Manual InstaPay ledger (no provider) | P3 usage-based platform billing | P3 | Internal — no external contract | Teacher submits a reference, amount, and transfer time; a platform admin verifies manually. No API, webhook, automatic detection, or card data; optional evidence is never proof on its own (`ADR-0045`) |
 | Background job runner | P2 exports, P3 heavy reports | P2 | Hard dependency | Idempotent jobs; visible job status in UI |
 | Error monitoring / analytics | P0-09 | P0 | Hard dependency | Must redact PII (P0-08) |
 
@@ -1540,14 +1597,14 @@ regardless of tier.
 | NF-2 | **No simulated delivery.** Parent messages may only be described as "opened in WhatsApp" / "prepared". Never "sent", "delivered", "read", "received". | Kashkol has no WhatsApp Business API integration and cannot observe any of those states. |
 | NF-3 | **No mocked portals.** The parent and student portals require real authentication and real authorisation. A teacher-side preview must be labelled as a preview. | The prototype's portals render a hardcoded student with no auth. Shipping that as "the portal" would misrepresent data protection. |
 | NF-4 | **No mocked QR attendance.** A scan must be validated server-side against a real hashed token, real session, and real enrolment. No client-side "simulate scan" in a shipped build. | Attendance is the highest-trust record in the product. |
-| NF-5 | **No mocked payments or settlement.** Payments are teacher-recorded facts. No "paid", "settled", "reconciled" claim beyond "recorded by the teacher". | Kashkol moves no money. |
+| NF-5 | **No mocked payments or settlement.** Teacher receipts are recorded facts; platform fees are manual InstaPay submissions reviewed by an admin. No "detected", "sent", "settled", or "reconciled" claim beyond the recorded state and a verified approval. | Kashkol moves no money and has no provider, webhook, or transfer-detection integration (`ADR-0045`). |
 | NF-6 | **No mock video hosting or a fake player.** Recorded video must come from the real provider, or the feature ships as absent. | A fake player that "works" but streams nothing is worse than absence. |
 | NF-7 | **No fake audit trail.** Audit events are written server-side in the same transaction as the mutation. | A client-written log can be lost or forged. |
 | NF-8 | **No UI-only authorisation.** A hidden button is not a permission. Every restricted endpoint enforces the rule server-side. | The prototype's permission checkboxes were purely cosmetic. |
 | NF-9 | **No fake tenant isolation.** Isolation is enforced in the data layer and verified by tests that run on every build. | Cross-tenant leakage is the single most damaging failure mode for this product. |
 | NF-10 | **No fake theme, locale, or direction.** Dark mode and Arabic RTL must be fully functional, not token-only scaffolding. | The prototype defines dark tokens but never sets `data-theme`, so dark mode was reachable only via OS preference. |
 | NF-11 | **No placeholder buttons.** A control that does nothing must not ship. The prototype's "Export summary" (toast only) and "Open file" (`window.alert`) are the canonical examples. | A teacher who clicks a button and sees nothing will assume the app is broken and lose trust in the data. |
-| NF-12 | **No seeded demo content in production.** Demo accounts are clearly separated and labelled, and cannot be promoted to a paid workspace. | The prototype's seed data (64 students, fake phone numbers, "Ahmed Physics") is presentation-only. |
+| NF-12 | **No seeded demo content in production.** Demo accounts are clearly separated and labelled, and cannot be promoted to a real tenant workspace or used as a source of billing. | The prototype's seed data (64 students, fake phone numbers, "Ahmed Physics") is presentation-only; billing is computed from real attendance after activation (`ADR-0045`). |
 | NF-13 | **No silent data loss.** A failed import, restore, or export reports exactly what happened, including partial outcomes. | Silent partial failure in a teacher's roster is unacceptable. |
 
 ---

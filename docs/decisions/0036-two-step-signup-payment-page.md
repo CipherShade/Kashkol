@@ -1,9 +1,14 @@
 # ADR-0036: Two-step teacher sign-up with a separate payment page
 
-- **Status:** Accepted (approved 2026-11-23)
+- **Status:** Accepted (approved 2026-11-23); superseded in part by ADR-0045/0046/0047 (2026-11-27)
 - **Date:** 2026-11-23
 - **Deciders:** Product owner (user direction) and engineering
 - **Scope:** M0 / public self-signup, manual subscription pilot
+
+> **Annotation (2026-11-27):** Superseded in part by `ADR-0045`, `ADR-0046`, and `ADR-0047`.
+> The manual subscription pilot and the `/{locale}/subscribe` sign-up step are removed. Sign-up now
+> goes to sign-in or email verification; platform charges are usage-based, paid by manual InstaPay
+> submission, and verified by a platform administrator. The historical reasoning below is retained.
 
 ## Context
 

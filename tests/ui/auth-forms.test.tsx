@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
 import { SignInForm, SignUpForm } from "@/components/auth/forms";
-import { SubscriptionPanel } from "@/components/auth/subscription-panel";
 
 /**
  * A `<form>` inside a `<form>` is invalid HTML. The browser parser drops the
@@ -29,20 +28,6 @@ const messages = {
     noAccount: "Do not have an account?",
     createAccount: "Create one",
     haveAccount: "Already have an account?",
-    subscription: {
-      title: "How to Subscribe & Activate",
-      planTitle: "Monthly Kashkol Subscription",
-      price: "249",
-      currency: "EGP",
-      period: "per month",
-      step1: "Create your account.",
-      step2: "Pay via InstaPay.",
-      step3: "Keep the receipt.",
-      instapayId: "youssefahmed.telda@instapay",
-      payButton: "Pay via direct InstaPay link",
-      qrAlt: "InstaPay QR Code",
-      note: "The receipt is confirmed manually.",
-    },
   },
 };
 
@@ -104,25 +89,5 @@ describe("credential and social forms never nest", () => {
 
     expect((html.match(/<form\b/g) ?? []).length).toBe(1);
     expect(html).not.toContain('name="provider"');
-  });
-});
-
-describe("step-two payment panel", () => {
-  it("shows the real InstaPay link and QR, and never claims automatic activation", () => {
-    const html = render(<SubscriptionPanel locale="en" />);
-
-    expect(html).toContain("https://ipn.eg/S/youssefahmed.telda/instapay/2PusEP");
-    expect(html).toContain("landing%2Finstapay-qr.jpg");
-    expect(html).toContain("The receipt is confirmed manually.");
-    expect(html).not.toContain("activated upon payment confirmation");
-    expect(html).not.toContain("<form");
-  });
-
-  it("uses Arabic step numbers for the Arabic locale", () => {
-    const html = render(<SubscriptionPanel locale="ar" />);
-
-    expect(html).toContain(">١<");
-    expect(html).toContain(">٢<");
-    expect(html).toContain(">٣<");
   });
 });

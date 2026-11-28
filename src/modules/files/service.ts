@@ -10,9 +10,14 @@ import type { PortalContext } from "@/modules/identity/session";
 import { resolvePortalPermissions } from "@/modules/portals/tokens";
 import { getFileStorageAdapter, getMalwareScanAdapter } from "./adapters";
 import { DOWNLOAD_URL_TTL_SECONDS } from "./constants";
-import { findMaterial, getWorkspaceStorageUsage, listMaterialRows } from "./repository";
+import {
+  createBillingEvidenceFile,
+  findMaterial,
+  getWorkspaceStorageUsage,
+  listMaterialRows,
+} from "./repository";
 import type { CreateMaterialInput, FilesQuery, UpdateMaterialInput } from "./schemas";
-import { safeDownloadFilename } from "./validation";
+import { safeDownloadFilename, validateFileContent } from "./validation";
 
 type RequestContext = { requestId?: string };
 const contextId = (request?: RequestContext) => request?.requestId ?? newRequestId();
@@ -24,6 +29,93 @@ export function isStorageConfigured(): boolean {
 
 export function isScannerConfigured(): boolean {
   return Boolean(getServerEnv().CLAMAV_HOST);
+}
+
+const BILLING_EVIDENCE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
+
+/**
+ * Optional proof a teacher attaches to a manual InstaPay submission. The file
+ * is scanned before it is stored, so no unscanned evidence can be downloaded.
+ * Screenshots remain claims: a platform administrator must still verify the
+ * transaction reference and exact amount (ADR-0045, ADR-0047).
+ */
+export async function createBillingEvidence(
+  scope: Scope,
+  upload: { body: Buffer; mime: string; filename: string; sizeBytes: number },
+  request?: RequestContext,
+) {
+  if (!isScannerConfigured())
+    throw new AppError("CONFLICT", { messageKey: "errors.fileScannerUnavailable" });
+  if (!isStorageConfigured())
+    throw new AppError("CONFLICT", { messageKey: "errors.fileStorageUnavailable" });
+  await withScope(scope, (tx) =>
+    assertWorkspaceWriteAllowedTx(tx, scope.workspaceId, {
+      kind: "files",
+      additionalBytes: upload.sizeBytes,
+    }),
+  );
+
+  const validated = validateFileContent(upload);
+  if (!BILLING_EVIDENCE_EXTENSIONS.has(validated.extension)) {
+    throw new AppError("VALIDATION_FAILED", { messageKey: "errors.fileTypeNotAllowed" });
+  }
+  const scan = await getMalwareScanAdapter().scan(upload.body);
+  if (!scan.clean) throw new AppError("VALIDATION_FAILED", { messageKey: "errors.fileMalware" });
+
+  const id = newUuidV7();
+  const storageKey = `ws/${scope.workspaceId}/billing-evidence/${id}.${validated.extension}`;
+  const storage = getFileStorageAdapter();
+  await storage.put({ key: storageKey, body: upload.body, contentType: validated.mime });
+
+  try {
+    return await createBillingEvidenceFile(scope, {
+      id,
+      storageKey,
+      sizeBytes: upload.sizeBytes,
+      mime: validated.mime,
+      requestId: contextId(request),
+    });
+  } catch (error) {
+    await storage.delete(storageKey);
+    throw error;
+  }
+}
+
+/** Sign a file whose scope and tenancy have already been asserted by its owner module. */
+export async function signStoredFileDownload(input: {
+  storageKey: string;
+  mime: string;
+  title: string;
+}) {
+  const extension = input.storageKey.split(".").pop() ?? "pdf";
+  return getFileStorageAdapter().signDownload({
+    key: input.storageKey,
+    ttlSeconds: DOWNLOAD_URL_TTL_SECONDS,
+    filename: safeDownloadFilename(input.title, extension),
+    contentType: input.mime,
+  });
+}
+
+/**
+ * Read a file for an authorised app route to stream directly to the caller.
+ * No bearer URL leaves the server, so an intercepted link cannot be replayed
+ * by another principal. Scope and tenancy are asserted by the owner module.
+ */
+export async function readStoredFileForDownload(input: {
+  storageKey: string;
+  mime: string;
+  title: string;
+}) {
+  const extension = input.storageKey.split(".").pop() ?? "pdf";
+  return {
+    bytes: await getFileStorageAdapter().get(input.storageKey),
+    filename: safeDownloadFilename(input.title, extension),
+    contentType: input.mime,
+  };
+}
+
+export async function deleteStoredFile(storageKey: string) {
+  await getFileStorageAdapter().delete(storageKey);
 }
 
 export async function listMaterials(scope: Scope, query: FilesQuery) {

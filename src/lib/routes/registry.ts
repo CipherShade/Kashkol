@@ -189,6 +189,24 @@ export const ROUTES: RouteEntry[] = [
     description: "Owner-only: read collected session receipts, or append a receipt. No projections.",
   },
   {
+    path: "/api/billing",
+    methods: ["GET", "POST"],
+    access: "workspace",
+    tenantScoped: true,
+    ownerOnly: true,
+    description:
+      "Owner-only: read computed platform usage billing and submit a manual InstaPay payment for verification.",
+  },
+  {
+    path: "/api/billing/evidence",
+    methods: ["POST"],
+    access: "workspace",
+    tenantScoped: true,
+    ownerOnly: true,
+    description:
+      "Owner-only: validate, scan, and store optional evidence for a manual InstaPay submission. Evidence is never proof of payment.",
+  },
+  {
     path: "/api/reports",
     methods: ["GET"],
     access: "workspace",
@@ -963,7 +981,7 @@ export const ROUTES: RouteEntry[] = [
     access: "workspace",
     tenantScoped: true,
     description:
-      "Read workspace plan tier, manual pilot status, quota utilization, and any active break-glass support banner.",
+      "Read free/unlimited plan metadata, descriptive utilization, and any active break-glass support banner. Plan metadata never gates access.",
   },
   {
     path: "/api/platform-admin/overview",
@@ -979,7 +997,74 @@ export const ROUTES: RouteEntry[] = [
     access: "session",
     tenantScoped: false,
     description:
-      "Platform administration workspace detail, manual plan/limit assignment, account status change, and time-limited reasoned break-glass support grant.",
+      "Platform administration workspace detail, legacy plan metadata, account status change, and time-limited reasoned break-glass support grant.",
+  },
+  {
+    path: "/api/platform-admin/billing",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: false,
+    description:
+      "Narrow cross-workspace platform-admin billing verification metadata. Each tenant read runs in its own scoped transaction; no student or session-receipt data.",
+  },
+  {
+    path: "/api/platform-admin/billing/config",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: false,
+    description: "Append a versioned platform billing configuration with an audited reason.",
+  },
+  {
+    path: "/api/platform-admin/billing/exemptions",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description: "Create a first-class, time-bounded, audited workspace billing exemption.",
+  },
+  {
+    path: "/api/platform-admin/billing/exemptions/[exemptionId]",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description: "Update or revoke a workspace billing exemption with an audited reason.",
+  },
+  {
+    path: "/api/platform-admin/billing/adjustments",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description: "Append an audited balance adjustment for one workspace without rewriting history.",
+  },
+  {
+    path: "/api/platform-admin/billing/submissions/[submissionId]/review",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description: "Approve, reject, or flag a manual InstaPay submission with an audited decision.",
+  },
+  {
+    path: "/api/platform-admin/billing/submissions/[submissionId]/evidence",
+    methods: ["GET"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Short-lived, audited admin access to a scanned InstaPay evidence file. No student or session-receipt data is exposed.",
+  },
+  {
+    path: "/api/platform-admin/billing/submissions/[submissionId]/release",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: true,
+    description:
+      "Release a disputed transaction reference from the global registry with an audited compensating ledger reversal. The reference is never client-supplied.",
+  },
+  {
+    path: "/api/platform-admin/billing/cycle",
+    methods: ["POST"],
+    access: "session",
+    tenantScoped: false,
+    description:
+      "Run one usage-billing cycle for all active workspaces, each in its own scoped transaction, from a verified platform admin.",
   },
 ];
 

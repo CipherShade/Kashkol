@@ -7,6 +7,12 @@
 - **Supersedes:** `ADR-0028` (expected revenue, assistant payment grants, fee rules, and adjustments), `ADR-0038` (the unreceipted-session alert)
 - **Related:** `D-14`, `F-P2-04`, `A-04`, `OQ-17`, `NF-1`–`NF-13`, `DM-4`
 
+> **Annotation (2026-11-27):** Superseded in part by `ADR-0045` and `ADR-0046` for platform billing
+> only. The owner-only collected session-receipt rules below remain in force. The statement that
+> platform subscription and billing are unchanged no longer holds: platform billing is now
+> usage-based with manual InstaPay verification (`ADR-0045`), and all teacher access is free and
+> unlimited (`ADR-0046`). The historical reasoning below is retained.
+
 ---
 
 ## Context
@@ -82,6 +88,8 @@ unchanged. The decision covers money between the teacher and the students only.
 **Neutral**
 
 - Platform subscription payments are unaffected; this decision does not touch `ADR-0036`.
+  Annotation (2026-11-27): superseded in part by `ADR-0045` and `ADR-0046`; platform billing now uses
+  its own usage ledger and has no subscription payment page.
 - EGP-only integer-piastre storage stays (`A-04`).
 
 ---

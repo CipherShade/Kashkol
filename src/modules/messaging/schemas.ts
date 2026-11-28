@@ -10,6 +10,16 @@ export const NotificationTypeSchema = z.enum([
   "homework_assigned",
   "homework_reminder",
   "exam_result",
+  "student_at_risk",
+  "session_unrecorded",
+  "homework_due_soon",
+  "assessment_pending_grades",
+  "backup_ready",
+  "export_ready",
+  "billing_invoice_issued",
+  "billing_submission_approved",
+  "billing_submission_rejected",
+  "billing_submission_flagged",
   "general",
 ]);
 
