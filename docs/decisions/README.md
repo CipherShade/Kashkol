@@ -75,6 +75,7 @@ Every ADR uses the same sections:
 | [0050](0050-residual-hardening.md) | Residual hardening after the second audit | Accepted (hardening decision, 2026-11-28) | M3b |
 | [0051](0051-final-billing-decisions.md) | Final billing decisions for OQ-23, OQ-24 and OQ-25 | Accepted (final product-owner decisions, 2026-11-28) | M3b |
 | [0052](0052-required-teacher-phone-at-signup.md) | Required teacher phone at account creation | Accepted (product-owner decision, 2026-11-28) | M0 |
+| [0053](0053-interactive-labelled-landing-preview.md) | Interactive labelled landing preview | Accepted (product-owner request, 2026-11-28; supersedes ADR-0044 static hero only) | M0 |
 
 ## Conventions
 

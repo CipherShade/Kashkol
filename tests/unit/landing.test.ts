@@ -64,6 +64,25 @@ describe("landing page contracts", () => {
     }
   });
 
+  it("defines both locales for the interactive hero demo", () => {
+    for (const L of [arL, enL]) {
+      const demo = obj(obj(L.hero).demo);
+      expect(Object.keys(obj(demo.tabs)).sort()).toEqual(["attendance", "overview", "schedule"]);
+      text(demo.label);
+      text(demo.hint);
+      text(demo.rateLabel);
+      text(demo.sampleRoster);
+      text(demo.scheduleHint);
+      text(demo.sessionReview);
+      for (const status of ["Present", "Absent", "Late", "Excused"]) {
+        text(demo[`status${status}`]);
+      }
+      for (const student of [1, 2, 3]) {
+        text(demo[`student${student}`]);
+      }
+    }
+  });
+
   it("covers problem mapping, intelligence, pillars, steps and personas", () => {
     for (const L of [arL, enL]) {
       for (const { key } of PROBLEM_ITEMS) {
@@ -130,9 +149,12 @@ describe("landing page contracts", () => {
       expect(landing).not.toContain("أُرسل");
       expect(landing).not.toContain("249");
       expect(landing).not.toContain("٢٤٩");
+      expect(landing).not.toContain("94.8%");
     }
+    expect(text(obj(arL.hero).caption)).toContain("تفاعلية");
     expect(text(obj(arL.hero).caption)).toContain("تجريبية");
-    expect(text(obj(enL.hero).caption)).toMatch(/illustrative|synthetic/i);
+    expect(text(obj(enL.hero).caption)).toMatch(/interactive/i);
+    expect(text(obj(enL.hero).caption)).toMatch(/synthetic/i);
     expect(text(obj(arL.intelligence).note)).toContain("تجريبية");
     expect(text(obj(enL.intelligence).note)).toMatch(/illustrative|synthetic/i);
     expect(text(obj(arL.features).previewNote)).toContain("تجريبية");
@@ -157,7 +179,12 @@ describe("landing page contracts", () => {
   });
 
   it("builds metadata/robots/sitemap for public landing only", () => {
-    const meta = buildLandingMetadata({ locale: "ar", title: "T", description: "D", siteUrl: "https://kashkol.example" });
+    const meta = buildLandingMetadata({
+      locale: "ar",
+      title: "T",
+      description: "D",
+      siteUrl: "https://kashkol.example",
+    });
     expect(meta.robots).toEqual({ index: true, follow: true });
     expect(meta.alternates?.canonical).toBe("/ar");
     const robots = buildRobots("https://kashkol.example");
@@ -165,6 +192,9 @@ describe("landing page contracts", () => {
     const disallow = rules.flatMap((r) => r.disallow ?? []);
     expect(disallow).toContain("/ar/app");
     const sitemap = buildSitemap("https://kashkol.example", new Date("2026-01-01T00:00:00Z"));
-    expect(sitemap.map((e) => e.url)).toEqual(["https://kashkol.example/ar", "https://kashkol.example/en"]);
+    expect(sitemap.map((e) => e.url)).toEqual([
+      "https://kashkol.example/ar",
+      "https://kashkol.example/en",
+    ]);
   });
 });

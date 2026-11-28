@@ -1,6 +1,6 @@
 # Kashkol — Status
 
-**Date:** 2026-11-28 · **Status:** Usage-based platform billing, free/unlimited teacher access, first-class billing exemptions, the audited remediation of F1–F21, the second-audit follow-up, the residual hardening, and the owner's final billing decisions are implemented (`ADR-0045`–`ADR-0051`). Teacher accounts are free with unlimited students and all features; 99 piastres per distinct qualifying student whose two qualifying sessions fall within a rolling 30-day period that includes a session in the billed `Africa/Cairo` month, from workspace activation, is recorded in an append-only ledger with immutable invoices and a manual InstaPay submission/review flow. Teachers send transaction screenshots to `+201004574178` for explicit administrator approval. Corrections are signed credits and reversals; invoices are never rewritten. `/app/billing` is teacher owner-only, `/platform-admin/billing` provides narrow verification, exemptions, evidence, adjustments, release/recovery and the admin-triggered cycle, and `/subscribe` plus the subscription panel are removed; `/app/payments` remains the separate owner-only session-receipt surface. Owner-only collected session earnings, the private status page and physical removal of legacy workspace money storage remain in force (`ADR-0041`–`ADR-0044`). Gate results from this run: lint, typecheck, `npm test` (620 unit tests across 90 files plus 32 UI tests across 4 files), `npm run test:ui` (32/4), `npm run test:integration` (184 across 32 files), build with `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (58 migrations, current), and `git diff --check` all pass. Passing gates are not approval or production readiness. Phase: M1/M2 core + P3 learning media, online assessments, forms, billing, and operational workflows
+**Date:** 2026-11-28 · **Status:** Usage-based platform billing, free/unlimited teacher access, first-class billing exemptions, the audited remediation of F1–F21, the second-audit follow-up, the residual hardening, and the owner's final billing decisions are implemented (`ADR-0045`–`ADR-0051`). Teacher accounts are free with unlimited students and all features; 99 piastres per distinct qualifying student whose two qualifying sessions fall within a rolling 30-day period that includes a session in the billed `Africa/Cairo` month, from workspace activation, is recorded in an append-only ledger with immutable invoices and a manual InstaPay submission/review flow. Teachers send transaction screenshots to `+201004574178` for explicit administrator approval. Corrections are signed credits and reversals; invoices are never rewritten. `/app/billing` is teacher owner-only, `/platform-admin/billing` provides narrow verification, exemptions, evidence, adjustments, release/recovery and the admin-triggered cycle, and `/subscribe` plus the subscription panel are removed; `/app/payments` remains the separate owner-only session-receipt surface. Owner-only collected session earnings, the private status page and physical removal of legacy workspace money storage remain in force (`ADR-0041`–`ADR-0044`). Gate results from this run: lint, typecheck, `npm test` (628 unit tests across 92 files plus 36 UI tests across 5 files), `npm run test:ui` (36/5), `npm run test:integration` (185 across 32 files), build with `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (59 migrations, current), and `git diff --check` all pass. Passing gates are not approval or production readiness. Phase: M1/M2 core + P3 learning media, online assessments, forms, billing, and operational workflows
 
 ---
 
@@ -1922,6 +1922,24 @@ production migration, deployed release, or production data change. Passing gates
   `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (59 migrations, current), and `git diff --check`
   all pass. `prisma migrate dev` refuses because eight older local migrations were modified after
   application; the new migration was applied with `prisma migrate deploy` without resetting data.
+
+### 5.33 Interactive labelled landing preview — 2026-11-28 — `ADR-0053`
+
+- The hero product illustration is now a client-side demo with three labelled sample screens:
+  overview, attendance, and sessions. Tabs support click and keyboard navigation; changing a sample
+  attendance status recomputes the displayed count and rate. Nothing is persisted or sent, and the
+  caption states in both locales that the data is synthetic and not a real workspace.
+- The old fixed `94.8%` sample figure was removed. The stale `workspace-ar.png` / `workspace-en.png`
+  captures remain disabled because they show M2 UI; they are not re-enabled or given clickable
+  hotspots. Feature cards and the intelligence spotlight remain labelled static previews.
+- Unit tests cover the pure attendance calculation and the bilingual demo catalogue; UI tests cover
+  the accessible tab/panel structure, the synthetic roster controls, and the computed default rate.
+- Final gate results: lint, typecheck, `npm test` (628 unit tests across 92 files plus 36 UI tests
+  across 5 files), `npm run test:integration` (185 across 32 files), build with
+  `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (59 migrations, current), and `git diff --check`
+  all pass. No migration, route, permission, or dependency changed. One earlier integration run was
+  invalidated when the local embedded PostgreSQL process was stopped by a background shell timeout;
+  the clean rerun against a live database passed 185/185.
 
 ## 6. Implementation plan
 

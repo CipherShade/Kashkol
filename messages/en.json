@@ -41,7 +41,7 @@
         "bilingual": "Arabic and English, correct direction",
         "isolated": "Your data stays inside your workspace"
       },
-      "caption": "Illustrative preview with synthetic data — not a real workspace.",
+      "caption": "Interactive demo with synthetic data — not a real workspace.",
       "mock": {
         "title": "Teacher workspace — illustrative example",
         "status": "Sample view",
@@ -52,8 +52,6 @@
         "sessionsValue": "4",
         "sessionsNote": "Center + online · sample",
         "attendance": "Attendance rate",
-        "attendanceValue": "94.8%",
-        "attendanceNote": "Steady week · sample",
         "scheduleTitle": "Today's schedule — example",
         "time": "Sample time",
         "session1Title": "Senior 3 — Physics (sample center)",
@@ -65,6 +63,28 @@
         "alertTitle": "Sample alert: 3 students need attention",
         "alertAction": "Example alert",
         "alertBody": "A quiz dip and repeated absences — illustrative figures from a sample workspace."
+      },
+      "demo": {
+        "label": "Choose a demo screen",
+        "tabs": {
+          "overview": "Overview",
+          "attendance": "Attendance",
+          "schedule": "Sessions"
+        },
+        "hint": "Demo controls change only this preview. Nothing is saved.",
+        "rateLabel": "Sample attendance",
+        "sampleRoster": "{present} of {total} sample students marked present",
+        "student1": "Sample student 1",
+        "student2": "Sample student 2",
+        "student3": "Sample student 3",
+        "statusPresent": "Present",
+        "statusAbsent": "Absent",
+        "statusLate": "Late",
+        "statusExcused": "Excused",
+        "scheduleHint": "Choose a session, then preview its sample attendance.",
+        "select": "Select",
+        "selected": "Selected",
+        "sessionReview": "View sample attendance"
       }
     },
     "problem": {
