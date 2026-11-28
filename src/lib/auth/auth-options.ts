@@ -1,7 +1,9 @@
+import { APIError } from "better-auth/api";
 import type { BetterAuthOptions } from "better-auth";
 import type { ServerEnv } from "@/lib/config/env";
 import { isEmailConfigured, usesSecureCookies } from "@/lib/config/env";
 import { authHooks, recordPasswordReset } from "@/modules/identity/hooks";
+import { normalizeTeacherPhone, saveTeacherPhone } from "@/modules/identity/phone";
 import {
   createEmailTransport,
   passwordResetEmail,
@@ -38,6 +40,29 @@ export function socialProviderConfig(env: ServerEnv) {
       callbackURL: `${env.BETTER_AUTH_URL}/api/auth/callback/facebook`,
     },
   };
+}
+
+type PhoneHookContext = { path?: string; body?: unknown } | null;
+
+function isCredentialSignUp(context: PhoneHookContext): boolean {
+  // Social registration has no phone field in the OAuth request; it is collected
+  // by /complete-phone after the session exists. Direct calls to the public
+  // email sign-up endpoint must carry the phone (ADR-0052).
+  return context?.path === "/sign-up/email";
+}
+
+function phoneFromBody(context: PhoneHookContext): unknown {
+  if (!context?.body || typeof context.body !== "object") return null;
+  return (context.body as { phone?: unknown }).phone ?? null;
+}
+
+function invalidTeacherPhone(): APIError {
+  // The message is generic and never contains the submitted value. Field-level
+  // translated errors are produced by the server action before this endpoint.
+  return new APIError("BAD_REQUEST", {
+    message: "A valid phone number is required.",
+    code: "INVALID_TEACHER_PHONE",
+  });
 }
 
 /**
@@ -162,6 +187,24 @@ export function buildAuthOptions(env: ServerEnv): Omit<BetterAuthOptions, "datab
       disableOriginCheck: false,
     },
     hooks: authHooks,
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (_user, context) => {
+            if (!isCredentialSignUp(context as PhoneHookContext)) return;
+            if (normalizeTeacherPhone(phoneFromBody(context as PhoneHookContext)) === null) {
+              throw invalidTeacherPhone();
+            }
+          },
+          after: async (user, context) => {
+            if (!isCredentialSignUp(context as PhoneHookContext)) return;
+            const phone = normalizeTeacherPhone(phoneFromBody(context as PhoneHookContext));
+            if (phone === null) throw invalidTeacherPhone();
+            await saveTeacherPhone(user.id, phone);
+          },
+        },
+      },
+    },
     socialProviders: {
       ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? {

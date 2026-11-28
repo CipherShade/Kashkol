@@ -36,6 +36,7 @@ export default async function AppLayout({
   }
 
   if (gate.state === "anonymous") redirect(`/${locale}/sign-in`);
+  if (gate.state === "phone_missing") redirect(`/${locale}/complete-phone`);
   if (gate.state === "no_workspace") redirect(`/${locale}/workspace/new`);
 
   let workspace;

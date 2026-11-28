@@ -158,7 +158,7 @@ describe("P1 — /unlink-account enforces session freshness", () => {
 describe("P1 — sign-up does not reveal whether an email exists", () => {
   const createdEmails: string[] = [];
 
-  async function signUp(body: { name: string; email: string; password: string }) {
+  async function signUp(body: { name: string; email: string; phone: string; password: string }) {
     return authRequest("/sign-up/email", {
       method: "POST",
       body: JSON.stringify(body),
@@ -182,7 +182,12 @@ describe("P1 — sign-up does not reveal whether an email exists", () => {
     const email = `signup-${randomUUID()}@kashkol.test`;
     createdEmails.push(email);
 
-    const first = await signUp({ name: "Signup One", email, password: TEST_PASSWORD });
+    const first = await signUp({
+      name: "Signup One",
+      email,
+      phone: "01012345678",
+      password: TEST_PASSWORD,
+    });
     expect(first.status).toBe(200);
     const firstBody = (await first.json()) as {
       token?: string | null;
@@ -191,7 +196,12 @@ describe("P1 — sign-up does not reveal whether an email exists", () => {
     // A real account was created; remember it for cleanup.
     expect(firstBody.user?.email).toBe(email);
 
-    const second = await signUp({ name: "Signup Two", email, password: TEST_PASSWORD });
+    const second = await signUp({
+      name: "Signup Two",
+      email,
+      phone: "01012345678",
+      password: TEST_PASSWORD,
+    });
     const secondBody = (await second.json()) as {
       token?: string | null;
       user?: { id?: string; email?: string };
@@ -215,13 +225,23 @@ describe("P1 — sign-up does not reveal whether an email exists", () => {
       const email = `signup-none-${randomUUID()}@kashkol.test`;
       createdEmails.push(email);
 
-      const first = await signUp({ name: "Signup None", email, password: TEST_PASSWORD });
+      const first = await signUp({
+        name: "Signup None",
+        email,
+        phone: "01012345678",
+        password: TEST_PASSWORD,
+      });
       expect(first.status).toBe(200);
       // No session is issued without a verified address and a configured
       // transport, which is what makes the duplicate response identical.
       expect(first.headers.getSetCookie().join("\n")).not.toContain("session_token=");
 
-      const second = await signUp({ name: "Signup Again", email, password: TEST_PASSWORD });
+      const second = await signUp({
+        name: "Signup Again",
+        email,
+        phone: "01012345678",
+        password: TEST_PASSWORD,
+      });
       const secondBody = await errorBody(second);
 
       // Duplicate must not be distinguishable from a fresh registration.

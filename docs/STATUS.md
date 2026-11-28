@@ -162,7 +162,9 @@ product owner in `ADR-0051`; that decision is not release approval.
   reset, database-backed rate limits, account lockout, and a session-token-free JSON response.
 - Session policy: 30-day sliding expiry, 12-hour idle timeout, 90-day absolute cap, server-side
   revocation on sign-out and membership change.
-- Sign-in, sign-up, forgot-password, reset-password, and verify-email screens in Arabic and English.
+- Sign-in, sign-up, forgot-password, reset-password, verify-email, and complete-phone screens in Arabic
+  and English. Every new teacher account requires a phone; existing accounts are grandfathered
+  (`ADR-0052`).
 - Workspace creation (atomic with the owner membership, settings, checklist, and audit event) and a
   settings screen for workspace identity, locale, timezone, attendance thresholds, theme defaults,
   and functional parent-notification preferences.
@@ -1890,6 +1892,37 @@ legal/accounting sign-off, or production readiness.
 **Not claimed:** no third independent audit, release/production approval, legal/accounting sign-off,
 production migration, deployed release, or production data change. Passing gates are not approval.
 
+### 5.30 Sign-in visual refresh — 2026-11-28 — `F-P0-02`
+
+- Reworked the teacher sign-in surface into a centered responsive card based on the supplied
+  reference. Email/password authentication, configured social providers, recovery links, locale,
+  theme, server validation, and honest pending/error states remain connected to their existing flows.
+- The card and trust note use translated content and the existing evergreen tokens in both themes.
+
+### 5.31 Sign-up visual refresh — 2026-11-28 — `F-P0-01`
+
+- Applied the same centered responsive card, book mark, and translated security note to teacher
+  account creation while keeping the existing registration and configured social-auth flows.
+
+### 5.32 Required teacher phone at account creation — 2026-11-28 — `F-P0-02`, `F1`, `ADR-0052`
+
+- New teacher accounts must supply email and phone. The phone is normalised to E.164, stored on the
+  app-owned global `user_phone` table, is not unique, and carries no SMS, OTP, or verification claim.
+- Credential sign-up is guarded by a Better Auth `user.create` database hook so the public
+  `/api/auth/sign-up/email` endpoint cannot bypass the requirement. First-time social accounts are
+  sent to `/complete-phone`, which writes the phone from the verified session before `/app` access.
+- Accounts created before the rollout cutoff are grandfathered. No real account is backfilled and no
+  phone verification is faked. Local-only synthetic seed users and disposable integration users carry
+  synthetic contact rows so the new gate is exercised rather than bypassed.
+- Deterministic unit tests cover schema validation, normalisation, the cutoff, and the hook; UI tests
+  cover the required phone field on sign-up and completion; integration tests cover direct endpoint
+  rejection and persisted E.164 storage.
+- Final gate results: lint, typecheck, `npm test` (624 unit tests across 91 files plus 33 UI tests
+  across 4 files), `npm run test:integration` (185 across 32 files), build with
+  `NEXT_BUILD_WORKERS=1`, `db:validate`, `db:status` (59 migrations, current), and `git diff --check`
+  all pass. `prisma migrate dev` refuses because eight older local migrations were modified after
+  application; the new migration was applied with `prisma migrate deploy` without resetting data.
+
 ## 6. Implementation plan
 
 The plan below is the working checklist. It is ordered so that the expensive, load-bearing work
@@ -2215,6 +2248,16 @@ policy.
 | Know the current state and the next task | `STATUS.md` (this file) |
 | Know the rules for working in this repository | `../AGENTS.md` |
 | Know how to back up, restore, and verify the database | `OPERATIONS_RUNBOOK.md` |
+
+### 2026-11-28 — Required teacher phone at account creation (ADR-0052)
+
+- Teacher registration now requires both email and phone. The phone is E.164-normalised, stored on
+  the new app-owned `user_phone` table, deliberately non-unique, and never claimed as verified or as
+  an SMS channel.
+- Credential sign-up stores it through a Better Auth database hook; first-time Google/Facebook
+  accounts complete it at `/{locale}/complete-phone` from a verified session before `/app` is usable.
+- Earlier accounts are grandfathered. `PRODUCT_REQUIREMENTS.md`, `USER_FLOWS.md`, `DATA_MODEL.md`,
+  `SECURITY_AND_PRIVACY.md`, and `OPEN_QUESTIONS_AND_ASSUMPTIONS.md` were updated with the new rule.
 
 ### 2026-11-23 — Two-step sign-up and Arabic ك identity (ADR-0036, ADR-0037) — billing steps superseded
 

@@ -84,7 +84,12 @@ describe("Better Auth session and cookie behaviour", () => {
     const email = `pending.${Date.now()}.${Math.random().toString(16).slice(2)}@kashkol.test`;
     const response = await authRequest("/sign-up/email", {
       method: "POST",
-      body: JSON.stringify({ name: "Pending User", email, password: "Velvet-Harbour-92" }),
+      body: JSON.stringify({
+        name: "Pending User",
+        email,
+        phone: "010 1234 5678",
+        password: "Velvet-Harbour-92",
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -93,8 +98,22 @@ describe("Better Auth session and cookie behaviour", () => {
     const created = await getDb().user.findUnique({ where: { email } });
     expect(created?.emailVerified).toBe(false);
     if (created) {
+      const phone = await getDb().userPhone.findUnique({ where: { userId: created.id } });
+      expect(phone?.phoneE164).toBe("+201012345678");
       await getDb().user.delete({ where: { id: created.id } });
     }
+  });
+
+  it("refuses a public sign-up without a phone", async () => {
+    const email = `no-phone.${Date.now()}.${Math.random().toString(16).slice(2)}@kashkol.test`;
+    const response = await authRequest("/sign-up/email", {
+      method: "POST",
+      body: JSON.stringify({ name: "No Phone", email, password: "Velvet-Harbour-92" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.getSetCookie().join("\n")).not.toContain("session_token=");
+    await expect(getDb().user.findUnique({ where: { email } })).resolves.toBeNull();
   });
 
   it("rejects a sign-in request from a foreign origin", async () => {

@@ -564,6 +564,7 @@ model User {
   sessions     Session[]
   accounts     Account[]
   preference   UserPreference?
+  phone        UserPhone?
   memberships  WorkspaceMember[]
   auditEvents  AuditEvent[]
   portalGrants PortalGrant[]
@@ -686,6 +687,21 @@ model UserPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preference")
+}
+
+/// App-owned teacher phone. Global identity data, not tenant-scoped: no
+/// workspace id and no RLS. E.164-normalised and deliberately NOT unique —
+/// two teachers may share a number. Store-only: Kashkol never sends an SMS.
+model UserPhone {
+  userId    String   @id @map("user_id")
+  phoneE164 String   @map("phone_e164")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phoneE164])
+  @@map("user_phone")
 }
 
 // ---------------------------------------------------------------------------

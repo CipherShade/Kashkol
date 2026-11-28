@@ -5,8 +5,8 @@
  * database is on the loopback interface. Production credentials cannot be used
  * by accident, and nothing here runs automatically during a deploy.
  *
- * The people, phone-number-free emails, workspaces, and grants below are
- * synthetic. The passwords are development-only and are documented in README.
+ * The people, contact details, workspaces, and grants below are synthetic.
+ * The passwords are development-only and are documented in README.
  */
 import { config as loadEnv } from "dotenv";
 import { hashPassword } from "better-auth/crypto";
@@ -40,6 +40,7 @@ type SeedUser = {
   id: string;
   name: string;
   email: string;
+  phone: string;
 };
 
 const USERS: SeedUser[] = [
@@ -47,16 +48,19 @@ const USERS: SeedUser[] = [
     id: OWNER_NILE_ID,
     name: "منى عبد الرحمن",
     email: "demo.owner@kashkol.local",
+    phone: "+201000000001",
   },
   {
     id: ASSISTANT_NILE_ID,
     name: "عمر السيد",
     email: "demo.assistant@kashkol.local",
+    phone: "+201000000002",
   },
   {
     id: OWNER_DELTA_ID,
     name: "هدى مصطفى",
     email: "demo.owner2@kashkol.local",
+    phone: "+201000000003",
   },
 ];
 
@@ -76,6 +80,14 @@ async function seedUsers(passwordHash: string): Promise<void> {
         name: user.name,
         emailVerified: true,
       },
+    });
+
+    // New accounts require a phone (ADR-0052). These are synthetic local-only
+    // contact values, never used for SMS, verification, or account lookup.
+    await db.userPhone.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, phoneE164: user.phone },
+      update: { phoneE164: user.phone },
     });
 
     await db.account.upsert({

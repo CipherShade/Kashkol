@@ -33,7 +33,7 @@ export type TestUser = {
   password: string;
 };
 
-export async function createTestUser(prefix = "user"): Promise<TestUser> {
+export async function createTestUser(prefix = "user", withPhone = true): Promise<TestUser> {
   const id = randomUUID();
   const email = `${prefix}.${id}@kashkol.test`;
   const password = TEST_PASSWORD;
@@ -42,6 +42,13 @@ export async function createTestUser(prefix = "user"): Promise<TestUser> {
   await db.user.create({
     data: { id, name: `Test ${prefix}`, email, emailVerified: true },
   });
+  if (withPhone) {
+    // Test users are created after the ADR-0052 cutoff, so the normal staff
+    // gate expects a stored contact phone. The number is deliberately shared.
+    await db.userPhone.create({
+      data: { userId: id, phoneE164: "+201012345678" },
+    });
+  }
   await db.account.create({
     data: {
       id: `account-${id}`,

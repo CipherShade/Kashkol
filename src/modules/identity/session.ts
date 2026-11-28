@@ -3,6 +3,7 @@ import { getAuth } from "@/lib/auth/auth";
 import { evaluateSessionPolicy, SESSION_ACTIVITY_TOUCH_MS } from "@/lib/auth/session-policy";
 import { AppError } from "@/lib/http/errors";
 import { selectActiveMembership } from "./active-workspace";
+import { staffHasRequiredPhone } from "./phone";
 import type { Permission } from "@/modules/tenancy/types";
 import { permissionKey, type MemberRole, type Scope } from "@/modules/tenancy/types";
 import {
@@ -37,6 +38,7 @@ export type StaffSession = {
 
 export type StaffGate =
   | { state: "anonymous" }
+  | { state: "phone_missing"; user: AuthUser; sessionId: string }
   | { state: "no_workspace"; user: AuthUser; sessionId: string }
   | { state: "staff"; user: AuthUser; sessionId: string; scope: Scope };
 
@@ -129,7 +131,16 @@ export async function getStaffGate(requestHeaders?: Headers): Promise<StaffGate>
     if (grants.length > 0) {
       throw new AppError("FORBIDDEN", { messageKey: "errors.portalActor" });
     }
+    if (!(await staffHasRequiredPhone(user.id, result.user.createdAt))) {
+      return { state: "phone_missing", user, sessionId };
+    }
     return { state: "no_workspace", user, sessionId };
+  }
+
+  // A new teacher account is not usable until its required phone is stored.
+  // Server-side: hiding a button or a page is never the permission check.
+  if (!(await staffHasRequiredPhone(user.id, result.user.createdAt))) {
+    return { state: "phone_missing", user, sessionId };
   }
 
   const selectedWorkspaceId = await findSessionWorkspaceSelection(sessionId);
@@ -173,6 +184,9 @@ export async function requireStaffSession(): Promise<StaffSession> {
   const gate = await getStaffGate();
   if (gate.state === "anonymous") {
     throw new AppError("UNAUTHORIZED");
+  }
+  if (gate.state === "phone_missing") {
+    throw new AppError("FORBIDDEN", { messageKey: "errors.phoneRequired" });
   }
   if (gate.state === "no_workspace") {
     throw new AppError("FORBIDDEN", { messageKey: "errors.noWorkspace" });

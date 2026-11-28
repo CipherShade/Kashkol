@@ -7,6 +7,7 @@ import { getServerEnv } from "@/lib/config/env";
 import { routing } from "@/i18n/routing";
 import { AppError } from "@/lib/http/errors";
 import { getStaffGate } from "@/modules/identity/session";
+import { Icon } from "@/components/ui/icon";
 
 type PageProps = { params: Promise<{ locale: string }> };
 
@@ -22,6 +23,7 @@ export default async function SignUpPage({ params }: PageProps) {
   let portalOnly = false;
   try {
     const gate = await getStaffGate();
+    if (gate.state === "phone_missing") redirect(`/${locale}/complete-phone`);
     if (gate.state !== "anonymous") redirect(`/${locale}/app`);
   } catch (error) {
     if (error instanceof AppError && error.messageKey === "errors.portalActor") {
@@ -37,7 +39,10 @@ export default async function SignUpPage({ params }: PageProps) {
     facebook: socialProviderConfig(env).facebook.enabled,
   };
   return (
-    <section className="auth-card" aria-labelledby="sign-up-title">
+    <section className="auth-card auth-centered-card" aria-labelledby="sign-up-title">
+      <div className="auth-centered-mark" aria-hidden="true">
+        <Icon name="book" size={25} />
+      </div>
       <h2 id="sign-up-title" className="auth-title">
         {t("signUpTitle")}
       </h2>
@@ -49,6 +54,10 @@ export default async function SignUpPage({ params }: PageProps) {
       ) : (
         <SignUpForm locale={locale} providers={providers} />
       )}
+      <p className="auth-centered-trust">
+        <Icon name="shield" size={16} />
+        <span>{t("secureWorkspace")}</span>
+      </p>
     </section>
   );
 }

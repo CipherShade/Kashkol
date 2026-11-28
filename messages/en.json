@@ -410,10 +410,13 @@
   "Auth": {
     "signInTitle": "Sign in",
     "signInSubtitle": "Enter your account details to continue.",
+    "secureWorkspace": "Secure teacher workspace · Student data protected",
     "signUpTitle": "Create an account",
     "signUpSubtitle": "Create your free account. Unlimited students and every feature are available immediately.",
     "name": "Name",
     "email": "Email",
+    "phone": "Phone number",
+    "phoneHint": "Stored for account contact only. Kashkol does not send SMS.",
     "password": "Password",
     "confirmPassword": "Confirm password",
     "newPassword": "New password",
@@ -446,7 +449,11 @@
     "socialDivider": "Or continue with",
     "continueWithGoogle": "Continue with Google",
     "continueWithFacebook": "Continue with Facebook",
-    "accountCreatedNeedsVerification": "Your account was created. Confirm your email to continue."
+    "accountCreatedNeedsVerification": "Your account was created. Confirm your email to continue.",
+    "completePhoneTitle": "Add your phone number",
+    "completePhoneSubtitle": "A phone number is required for every new teacher account. It is stored for contact only; no SMS is sent.",
+    "completePhoneAction": "Save phone number",
+    "completePhoneSaved": "Your phone number was saved."
   },
   "auth": {
     "errors": {
@@ -460,6 +467,8 @@
       "passwordMismatch": "The two passwords do not match.",
       "nameRequired": "Enter your name.",
       "nameTooLong": "That name is too long.",
+      "phoneRequired": "Enter your phone number.",
+      "phoneInvalid": "Enter a valid Egyptian or international phone number.",
       "tokenInvalid": "That recovery link is not valid.",
       "generic": "The request could not be completed. Try again.",
       "providerUnavailable": "That sign-in provider is not available in this environment.",
@@ -1882,6 +1891,7 @@
     "sessionExpired": "Your session expired. Sign in again.",
     "originRejected": "The request came from an untrusted origin.",
     "noWorkspace": "Create a workspace before opening the application.",
+    "phoneRequired": "Add your phone number before opening the application.",
     "workspaceInactive": "This workspace is not active.",
     "portalActor": "This account is a parent or student account. It cannot open the teacher application.",
     "notPortalActor": "This account is not linked to a student record.",

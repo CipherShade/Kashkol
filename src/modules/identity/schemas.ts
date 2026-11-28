@@ -1,6 +1,15 @@
 import { z } from "zod";
+import { normalizePhoneNumber } from "@/modules/students/schemas";
 
 const emailField = z.string().trim().toLowerCase().pipe(z.email("Auth.errors.emailInvalid"));
+
+/** Required teacher phone (ADR-0052): normalised to E.164, never a lookup key. */
+const teacherPhoneField = z
+  .string()
+  .trim()
+  .min(1, "auth.errors.phoneRequired")
+  .refine((value) => normalizePhoneNumber(value) !== null, "auth.errors.phoneInvalid")
+  .transform((value) => normalizePhoneNumber(value) as string);
 
 const passwordField = z
   .string()
@@ -11,6 +20,7 @@ export const signUpSchema = z
   .object({
     name: z.string().trim().min(2, "Auth.errors.nameRequired").max(80, "Auth.errors.nameTooLong"),
     email: emailField,
+    phone: teacherPhoneField,
     password: passwordField,
     confirmPassword: z.string(),
   })
@@ -18,6 +28,9 @@ export const signUpSchema = z
     path: ["confirmPassword"],
     message: "Auth.errors.passwordMismatch",
   });
+
+/** Phone-only completion for accounts created by social sign-in (ADR-0052). */
+export const completePhoneSchema = z.object({ phone: teacherPhoneField });
 
 export const signInSchema = z.object({
   email: emailField,
@@ -73,6 +86,7 @@ export const preferenceSchema = z.object({
 export type PreferenceInput = z.infer<typeof preferenceSchema>;
 
 export type SignUpInput = z.infer<typeof signUpSchema>;
+export type CompletePhoneInput = z.infer<typeof completePhoneSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
 export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

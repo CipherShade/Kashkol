@@ -30,6 +30,7 @@
 | Asset | Sensitivity | Where it lives |
 |---|---|---|
 | Teacher account credentials and sessions | Secret | `user`, `session`, `account`; password hashes with a memory-hard KDF |
+| Teacher phone | Personal | `user_phone`; E.164 contact data, not unique, no verification or SMS claim (`ADR-0052`) |
 | Student names, grades, phone numbers | Personal (minor) | `student` |
 | Parent names, phones | Personal | `student.parent_*` |
 | Attendance records | Sensitive (can imply health or family circumstance) | `attendance_mark`, `attendance_revision` |
@@ -145,7 +146,7 @@ Implements `F-P0-02`.
 | Minimum password length | 10 characters, enforced **server-side** (`F-P0-02` AC-1) |
 | Breached-password check | The password is checked against a public breached-password list before the hash is stored |
 | Hashing | Better Auth's default memory-hard KDF; the hash is never logged, never exported, and never in an audit diff |
-| Registration | The email must be unique; the response is identical whether or not the account exists. Sign-up never starts a session, so the absent session cookie cannot distinguish a new address from a duplicate one, and this holds even when no email transport is configured |
+| Registration | Email and phone are both required for a new account, including social sign-in. The phone is validated and normalised to E.164 server-side before storage; a duplicate phone is allowed and is never used to identify an account. The email must be unique; the response is identical whether or not the account exists. Sign-up never starts a session, so the absent session cookie cannot distinguish a new address from a duplicate one, and this holds even when no email transport is configured (`ADR-0052`) |
 | Email verification | Required before the workspace is marked active; an unverified account can sign in only into the "verify your email" state (`F-P0-02` AC-2) |
 | Verification link | Single use, 24 h validity, resend with a 60 s cooldown |
 | Password reset | Single-use link, valid 30 minutes, invalidated on use (`F-P0-02` AC-8) |
@@ -343,7 +344,7 @@ name is never used as a filesystem path.
 ### 8.1 The redaction rule
 
 `F-P0-08` AC-6 and `PRODUCT_REQUIREMENTS.md` §9 are strict: **logs, error reports, and analytics
-never contain student names, phone numbers, note bodies, or message bodies.**
+never contain student names, student or teacher phone numbers, note bodies, or message bodies.**
 
 The implementation is an **allowlist per event type**, not a blocklist:
 
@@ -368,7 +369,7 @@ someone adds a field.
 | L-4 | Error reports carry a stack trace, a request id, and non-identifying context. Source maps are uploaded for the production build so a stack trace is readable. (`F-P0-09` AC-4) |
 | L-5 | Analytics record **event names and counts only**. The payload schema is reviewed against this document before analytics is enabled (`RELEASE_PLAN.md` §3.4). |
 | L-6 | Request/response bodies are never logged. A malformed body is logged as a length and an error code. |
-| L-7 | A redaction test runs against a seeded fixture containing known student names, phones, note bodies, and message bodies, and asserts that none of them appear in the captured log output, error report, or analytics payload. **[TEST]** |
+| L-7 | A redaction test runs against a seeded fixture containing known student names, student and teacher phones, note bodies, and message bodies, and asserts that none of them appear in the captured log output, error report, or analytics payload. **[TEST]** |
 | L-8 | The audit log is **not** a log. It is a product record, tenant-visible, and is handled by the rules in §9. |
 | L-9 | Billing transaction references, review note codes, evidence bytes, and evidence file contents are outside the logging allowlist. Audit diffs use ids and stable codes; a raw InstaPay reference is never printed in a log, an error report, or an analytics event (`ADR-0045`, `ADR-0047`). |
 
@@ -396,13 +397,17 @@ someone adds a field.
 
 The system collects **only** what the teaching relationship requires:
 
-**Collected:** teacher name and email; student first name, last name, grade, phone; parent name and
+**Collected:** teacher name, email and phone; student first name, last name, grade, phone; parent name and
 phone; attendance marks; homework submission status; assessment scores; teacher notes; group and
 schedule data; files the teacher chooses to upload; message drafts the teacher prepares; session and
 device metadata for security.
 
 **Never collected** (`A-11`, `PRODUCT_REQUIREMENTS.md` §9): national ID, date of birth, biometrics,
 precise location, religion, political affiliation, or any other sensitive-category data.
+
+The teacher phone is collected only as account contact data for new teacher accounts. It is stored
+E.164-normalised, is not unique, is never sent to a third party, and does not imply SMS delivery or
+phone verification (`ADR-0052`).
 
 Each field in the schema has a stated purpose. A new field requires a purpose and a privacy note,
 and the schema check fails the build for an undocumented column.
@@ -412,6 +417,7 @@ and the schema check fails the build for an undocumented column.
 | Data | Retention | Source |
 |---|---|---|
 | Business records | Workspace lifetime | `OQ-10` (a) |
+| Teacher phone | Teacher account lifetime; cascades with account deletion, with no separate invented window | `ADR-0052` |
 | Workspace soft-deletion | 30 days, recoverable by the owner | `A-14` |
 | Hard deletion after soft deletion | Within a further 30 days | `A-14` |
 | Backups | 35-day cycle | `A-14`, `F-P0-09` AC-3 |

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
-import { SignInForm, SignUpForm } from "@/components/auth/forms";
+import { CompletePhoneForm, SignInForm, SignUpForm } from "@/components/auth/forms";
 
 /**
  * A `<form>` inside a `<form>` is invalid HTML. The browser parser drops the
@@ -17,6 +17,9 @@ const messages = {
     email: "Email",
     password: "Password",
     name: "Name",
+    phone: "Phone number",
+    phoneHint: "Stored for contact only.",
+    completePhoneAction: "Save phone number",
     confirmPassword: "Confirm password",
     passwordHint: "At least 10 characters",
     signInAction: "Sign in",
@@ -80,6 +83,17 @@ describe("credential and social forms never nest", () => {
     const preceding = html.lastIndexOf("<form", providerForm);
     const precedingClose = html.lastIndexOf("</form>", providerForm);
     expect(preceding).toBeGreaterThan(precedingClose);
+  });
+
+  it("requires a phone on credential sign-up and on social completion", () => {
+    for (const html of [
+      render(<SignUpForm locale="en" providers={providers} />),
+      render(<CompletePhoneForm locale="en" />),
+    ]) {
+      const input = html.match(/<input[^>]*name="phone"[^>]*>/)?.[0] ?? "";
+      expect(input).toContain('type="tel"');
+      expect(input).toContain("required");
+    }
   });
 
   it("omits the social block entirely when no provider is enabled", () => {

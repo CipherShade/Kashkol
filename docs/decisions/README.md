@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 This directory holds the Architecture Decision Records (ADRs) for Kashkol. As of 2026-11-28 it
-contains 51 ADRs plus this index.
+contains 52 ADRs plus this index.
 
 An ADR captures a decision that is **expensive to reverse** and that a future engineer would
 otherwise have to re-derive from the code. Anything that can be changed in an afternoon without
@@ -74,6 +74,7 @@ Every ADR uses the same sections:
 | [0049](0049-second-audit-billing-followup.md) | Second-audit billing follow-up | Accepted (follow-up remediation decision, 2026-11-28) | M3b |
 | [0050](0050-residual-hardening.md) | Residual hardening after the second audit | Accepted (hardening decision, 2026-11-28) | M3b |
 | [0051](0051-final-billing-decisions.md) | Final billing decisions for OQ-23, OQ-24 and OQ-25 | Accepted (final product-owner decisions, 2026-11-28) | M3b |
+| [0052](0052-required-teacher-phone-at-signup.md) | Required teacher phone at account creation | Accepted (product-owner decision, 2026-11-28) | M0 |
 
 ## Conventions
 
@@ -137,3 +138,5 @@ risk register (`PRODUCT_REQUIREMENTS.md` §11). `NF-n` are the hard prohibitions
 | 0048 | `F-P3-04`, `F28`, `R-01`, `R-15`, `NF-1`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `ADR-0045`, `ADR-0047` |
 | 0049 | `F-P3-04`, `F28`, `R-01`, `R-15`, `NF-1`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `NF-13`, `ADR-0045`, `ADR-0047`, `ADR-0048` |
 | 0050 | `F-P0-07`, `F-P3-03`, `F-P3-04`, `F28`, `R-01`, `R-08`, `R-15`, `NF-5`, `NF-7`, `NF-8`, `NF-9`, `ADR-0014`, `ADR-0045`, `ADR-0047`, `ADR-0048`, `ADR-0049` |
+| 0051 | `F-P3-04`, `OQ-23`, `OQ-24`, `OQ-25`, `ADR-0045`, `ADR-0048`, `ADR-0049` |
+| 0052 | `F-P0-02`, `F-P0-08`, `F1`, `F28`, `R-01`, `R-06`, `NF-1`, `NF-8`, `NF-11`, `NF-12`, `A-11`, `OQ-09`, `ADR-0003`, `ADR-0030`, `ADR-0036` |

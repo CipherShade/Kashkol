@@ -64,12 +64,17 @@ workspace is activated.
 1. Teacher opens the app. The **sign-in** screen is shown with the Arabic/English switch in the corner
    (top-right in LTR, top-left in RTL — matching the prototype's `inset-inline-end` placement).
 2. Teacher selects **"Create an account"**.
-3. **[BOUNDARY]** Teacher submits: teaching display name, personal name, main subject, email, password.
+3. **[BOUNDARY]** Teacher submits: teaching display name, personal name, main subject, email, phone,
+   password.
    - Client-side validation runs first; server-side validation is authoritative.
    - Password rules: ≥ 10 characters, not in the breached-password list.
    - Email must be a valid address and must not already be registered.
+   - Phone is required and normalised to E.164. It is stored as contact data, is not unique, and does
+     not become a login identifier (`ADR-0052`).
 4. **[WRITE]** The server creates the user record in a `pending_verification` state and sends a
    verification email containing a single-use link (24 h validity).
+   - In the same sign-up operation the server writes the normalised phone to app-owned `user_phone`,
+     keyed by the created user id. No SMS is sent and no verification state is claimed.
    - Audit: `user.created`.
    - **No workspace is created yet** — this avoids orphaned workspaces (F-P0-06 AC-2).
 5. Teacher opens the verification link. **[WRITE]** `user.email_verified`. Audit: `user.email_verified`.
@@ -88,13 +93,15 @@ workspace is activated.
 | Case | Behaviour |
 |---|---|
 | Email already registered | The response is identical to a new registration (a synthetic success, no session). No message reveals which accounts exist. |
+| Phone missing or invalid | Inline field error in the active locale; no user or phone row is created. |
+| First social sign-in without a phone | A session is created, but `/complete-phone` collects the phone before `/app` is usable. Returning social accounts continue to `/app`. |
 | Verification link expired | Show "link expired" + a resend button with a 60-second cooldown. |
 | Email provider down | Show a retryable banner "we could not send the email"; the account exists and can be verified later. Do not delete the account. |
 | Workspace creation fails after user creation | Transaction rolls back; the user lands on a retry screen. The user must never end up with an account and no workspace, or vice versa. |
 | Teacher abandons onboarding | Account and workspace remain; the dashboard shows the checklist. |
 | Workspace name collision | Allowed — workspaces are not globally named. |
 
-**AC:** F-P0-01, F-P0-02, F-P0-06
+**AC:** F-P0-01, F-P0-02, F-P0-06, `ADR-0052`
 
 ---
 
@@ -1115,7 +1122,8 @@ homework history
 **Preconditions:** F1 account creation has succeeded; the workspace is activated and has real
 attendance. **Supersedes `ADR-0036`** (the `/subscribe` page and subscription panel are removed).
 
-1. Sign-up is free. The teacher is sent to sign-in / verify-email, then creates a workspace and uses
+1. Sign-up is free and requires both an email address and a phone number (`ADR-0052`). The teacher is
+   sent to sign-in / verify-email, then creates a workspace and uses
    every feature with unlimited students, groups, assistants, files, videos, exams, reports, and
    forms. There is no paid tier, quota, feature gate, or payment-status write block; only a genuinely
    suspended or deleted workspace blocks writes (`ADR-0046`).
@@ -1176,7 +1184,7 @@ attendance. **Supersedes `ADR-0036`** (the `/subscribe` page and subscription pa
 | Exemption active or newly expired | Active: no billable usage, invoices, or payment obligation. Expired/revoked: billing starts with the next uncovered Cairo month; earlier months are never invoiced retroactively. |
 | Provider or webhook suggested | No provider contract, API, webhook, automatic detection, or new worker token exists or is claimed (`NF-5`). |
 
-**AC:** F-P3-04, F-P3-03, F1, F19, `ADR-0045`, `ADR-0046`, `ADR-0047`, `ADR-0048`, NF-5, NF-10
+**AC:** F-P3-04, F-P3-03, F1, F19, `ADR-0045`, `ADR-0046`, `ADR-0047`, `ADR-0048`, `ADR-0052`, NF-5, NF-10
 
 ---
 

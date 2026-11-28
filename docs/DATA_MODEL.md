@@ -156,7 +156,8 @@ are present on every tenant table by convention (`DM-1`, `DM-5`).
 | `image` | text nullable | |
 
 Better Auth owns this table and the `session`, `account`, and `verification` tables. Kashkol
-does not add columns to them; profile extensions live in `user_preference` and `workspace_member`.
+does not add columns to them; profile extensions live in `user_preference`, `user_phone`, and
+`workspace_member`.
 On `account`, migration `20261115000000_social_auth_account_constraints` adds the two unique
 indexes the social-auth feature needs: `account_provider_id_account_id_key` on
 `(provider_id, account_id)` — an OAuth identity is at most one account row — and
@@ -174,6 +175,21 @@ satisfies both.
 
 Per-user, not per-workspace, so a person keeps their preferences when they switch workspace in M2.
 `F-P3-03`/`F-P0-03`/`F-P0-04` are satisfied here.
+
+#### `user_phone` (identity support, not tenant-scoped)
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | text | PK, FK → `user` on delete cascade |
+| `phone_e164` | text | CHECK `^\+[1-9][0-9]{6,14}$`; non-unique plain index |
+| `created_at`, `updated_at` | timestamptz | |
+
+Required teacher contact data for accounts created after the `ADR-0052` cutoff (`F-P0-02`, `F1`).
+It is app-owned global identity data: no workspace id, no RLS, and never queried as a tenant table.
+The value is normalised by `normalizePhoneNumber`, is deliberately not unique, is not a login
+identifier, and carries no verification claim. Credential sign-up writes it through a Better Auth
+`user.create` database hook; first-time social accounts write it from the verified session at
+`/complete-phone`. Existing earlier accounts are grandfathered and are not backfilled.
 
 #### `session_activity` (identity support, not tenant-scoped)
 
@@ -1177,6 +1193,8 @@ consolidated form rather than one directory per row above:
 | `20261128010000_billing_remediation` | Adds signed correction entry types, `billing_invoice_credit`, action-specific review idempotency, reference status/revocation fields, and the append-only `billing_reference_event` table with RLS, triggers, indexes and grants (`ADR-0048`) |
 | `20261128020000_billing_exemption_revocation_and_review_state` | Adds exemption `revoked_on`, submission `review_action`, forward-only overlap prevention, and the scoped review/readiness state required by the remediation (`ADR-0048`) |
 | `20261128030000_billing_evidence_file_scope_check` | Extends `file_scope_check` so `billing_evidence` files can be stored; the enum value was added earlier but the check constraint still rejected it (`ADR-0048`) |
+| `20261128040000_billing_second_audit_followup` | Adds the append-only `billing_config_idempotency` table with a unique config index and application-role grants (`ADR-0049`) |
+| `20261128050000_user_phone_required_teacher_phone` | Adds the app-owned, global `user_phone` table with an E.164 check, a deliberately non-unique phone index, a cascade FK to `user`, and application-role grants; no workspace id and no RLS (`ADR-0052`) |
 
 The current local development database tracks all migrations above. `student` and
 `subject`/`group` carry the derived search columns described in §8.
@@ -1195,7 +1213,7 @@ Run in CI and after every production migration.
 | No naive timestamps | No `timestamp without time zone` column on a time-bearing table |
 | Envelope integrity | Every `attendance_mark` has exactly one head row and an ordered revision chain |
 | Money integrity | Every `payment.amount_minor > 0`; `currency` is always populated |
-| Phone integrity | Every `phone_e164` matches `^\+[1-9]\d{6,14}$` |
+| Phone integrity | Every `phone_e164` matches `^\+[1-9]\d{6,14}$`; every `user_phone.phone_e164` matches `^\+[1-9][0-9]{6,14}$` and is not a unique key |
 | No delivery claims | The `message_state` enum has no member matching `sent`, `delivered`, or `read` |
 | Audit integrity | `audit_event` rows exist for every mutating service path exercised by the test suite |
 | Billing append-only | `UPDATE`/`DELETE` are refused by trigger on billing config, snapshots, line items, invoices, ledger entries, review events, and the fingerprint registry; exemptions and submissions change only through controlled paths |

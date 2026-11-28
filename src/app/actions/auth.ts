@@ -18,8 +18,10 @@ import {
 } from "@/lib/forms/action-state";
 import { AppError } from "@/lib/http/errors";
 import { routing } from "@/i18n/routing";
-import { requireStaffSession } from "@/modules/identity/session";
+import { saveTeacherPhone } from "@/modules/identity/phone";
+import { getStaffGate, requireStaffSession } from "@/modules/identity/session";
 import {
+  completePhoneSchema,
   fieldErrorsFrom,
   requestPasswordResetSchema,
   resendVerificationSchema,
@@ -73,6 +75,7 @@ export async function signUpAction(
   const parsed = signUpSchema.safeParse({
     name: text(formData, "name"),
     email: text(formData, "email"),
+    phone: text(formData, "phone"),
     password: text(formData, "password"),
     confirmPassword: text(formData, "confirmPassword"),
   });
@@ -94,14 +97,23 @@ export async function signUpAction(
   // Sign-up never starts a session. The account is free and unrestricted; the
   // destination is sign-in, or email verification when a transport is configured.
   const destination = signUpDestination(locale, isEmailConfigured(env));
+  // Better Auth's runtime sign-up schema accepts extra body fields; its generated
+  // TypeScript input omits them. The database hook reads `phone` from this body.
+  const signUpBody = {
+    name: parsed.data.name,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+    password: parsed.data.password,
+    callbackURL: `${env.BETTER_AUTH_URL}/${locale}/app`,
+  } as unknown as {
+    name: string;
+    email: string;
+    password: string;
+    callbackURL?: string;
+  };
   try {
     await getAuth().api.signUpEmail({
-      body: {
-        name: parsed.data.name,
-        email: parsed.data.email,
-        password: parsed.data.password,
-        callbackURL: `${env.BETTER_AUTH_URL}/${locale}/app`,
-      },
+      body: signUpBody,
       headers: await headers(),
     });
   } catch (error) {
@@ -109,6 +121,45 @@ export async function signUpAction(
   }
 
   redirect(destination);
+}
+
+/**
+ * Store the required phone for an account created by social sign-in (ADR-0052).
+ * The user id comes from the verified session gate, never from form data.
+ */
+export async function completePhoneAction(
+  _previous: FormActionState = initialFormState,
+  formData: FormData,
+): Promise<FormActionState> {
+  const locale = localeFrom(formData);
+  try {
+    await guardOrigin();
+  } catch (error) {
+    return errorState(error instanceof AppError ? error.messageKey : "errors.forbidden");
+  }
+
+  let gate: Awaited<ReturnType<typeof getStaffGate>>;
+  try {
+    gate = await getStaffGate();
+  } catch (error) {
+    return errorState(error instanceof AppError ? error.messageKey : "errors.forbidden");
+  }
+  if (gate.state === "anonymous") return errorState("errors.unauthorized");
+  // A user who already supplied a phone has nothing to complete.
+  if (gate.state === "staff") redirect(`/${locale}/app`);
+
+  const parsed = completePhoneSchema.safeParse({ phone: text(formData, "phone") });
+  if (!parsed.success) {
+    return errorState("errors.validationFailed", fieldErrorsFrom(parsed.error));
+  }
+  try {
+    await saveTeacherPhone(gate.user.id, parsed.data.phone);
+  } catch {
+    console.error("[auth] a required phone could not be stored");
+    return errorState("auth.errors.generic");
+  }
+
+  redirect(`/${locale}/app`);
 }
 
 export async function signInAction(
@@ -301,7 +352,7 @@ export async function signInSocialAction(
       body: {
         provider: parsed.data,
         callbackURL: `${env.BETTER_AUTH_URL}/${locale}/app`,
-        newUserCallbackURL: `${env.BETTER_AUTH_URL}/${locale}/app`,
+        newUserCallbackURL: `${env.BETTER_AUTH_URL}/${locale}/complete-phone`,
         errorCallbackURL: `${env.BETTER_AUTH_URL}/${locale}/sign-in?signInError=1`,
         disableRedirect: true,
       },

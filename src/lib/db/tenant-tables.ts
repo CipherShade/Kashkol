@@ -124,7 +124,8 @@ export const RLS_TABLES = [TENANT_ROOT_TABLE, ...TENANT_TABLES] as const;
  * Better Auth owns `user`, `session`, `account`, `verification`, and
  * `rate_limit`. `portal_login` is Kashkol's student sign-in identity: it is
  * reachable before a workspace is known, so it stores no workspace or student
- * id and must never be queried by a tenant route.
+ * id and must never be queried by a tenant route. `user_phone` is the app-owned
+ * teacher phone: global identity data, reachable before any workspace exists.
  */
 export const IDENTITY_TABLES = [
   "user",
@@ -132,5 +133,6 @@ export const IDENTITY_TABLES = [
   "account",
   "verification",
   "rate_limit",
+  "user_phone",
   "portal_login",
 ] as const;

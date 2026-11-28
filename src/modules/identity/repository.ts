@@ -127,6 +127,24 @@ export async function findUserPreference(userId: string) {
   });
 }
 
+/** Store the teacher's E.164 phone on the app-owned global identity row. */
+export async function upsertUserPhone(userId: string, phoneE164: string): Promise<void> {
+  await getDb().userPhone.upsert({
+    where: { userId },
+    create: { userId, phoneE164 },
+    update: { phoneE164 },
+  });
+}
+
+/** Session-only read: the user id comes from the verified session, never a body. */
+export async function findUserPhone(userId: string): Promise<string | null> {
+  const row = await getDb().userPhone.findUnique({
+    where: { userId },
+    select: { phoneE164: true },
+  });
+  return row?.phoneE164 ?? null;
+}
+
 export async function findUser(userId: string) {
   return getDb().user.findUnique({
     where: { id: userId },

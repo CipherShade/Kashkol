@@ -410,10 +410,13 @@
   "Auth": {
     "signInTitle": "تسجيل الدخول",
     "signInSubtitle": "أدخل بيانات حسابك للمتابعة.",
+    "secureWorkspace": "مساحة عمل آمنة للمعلم · بيانات الطلاب محمية",
     "signUpTitle": "إنشاء حساب",
     "signUpSubtitle": "أنشئ حسابك المجاني. الطلاب غير المحدودين وكل المميزات متاحة فورًا.",
     "name": "الاسم",
     "email": "البريد الإلكتروني",
+    "phone": "رقم الهاتف",
+    "phoneHint": "يُخزّن للتواصل بشأن الحساب فقط. لا ترسل كشكول رسائل نصية.",
     "password": "كلمة المرور",
     "confirmPassword": "تأكيد كلمة المرور",
     "newPassword": "كلمة المرور الجديدة",
@@ -446,7 +449,11 @@
     "socialDivider": "أو تابع باستخدام",
     "continueWithGoogle": "تابع عبر Google",
     "continueWithFacebook": "تابع عبر Facebook",
-    "accountCreatedNeedsVerification": "تم إنشاء حسابك. أكّد بريدك الإلكتروني للمتابعة."
+    "accountCreatedNeedsVerification": "تم إنشاء حسابك. أكّد بريدك الإلكتروني للمتابعة.",
+    "completePhoneTitle": "أضف رقم هاتفك",
+    "completePhoneSubtitle": "رقم الهاتف مطلوب لكل حساب معلم جديد. يُخزّن للتواصل فقط، ولا تُرسل رسائل نصية.",
+    "completePhoneAction": "حفظ رقم الهاتف",
+    "completePhoneSaved": "تم حفظ رقم هاتفك."
   },
   "auth": {
     "errors": {
@@ -460,6 +467,8 @@
       "passwordMismatch": "كلمتا المرور غير متطابقتين.",
       "nameRequired": "أدخل اسمك.",
       "nameTooLong": "الاسم طويل جدًا.",
+      "phoneRequired": "أدخل رقم هاتفك.",
+      "phoneInvalid": "أدخل رقم هاتف مصري أو دولي صالحًا.",
       "tokenInvalid": "رابط الاستعادة غير صالح.",
       "generic": "تعذّر إكمال الطلب. حاول مرة أخرى.",
       "providerUnavailable": "طريقة الدخول هذه غير متاحة في هذه البيئة.",
@@ -1882,6 +1891,7 @@
     "sessionExpired": "انتهت صلاحية جلستك. سجّل الدخول من جديد.",
     "originRejected": "جاء الطلب من أصل غير موثوق.",
     "noWorkspace": "أنشئ مساحة عمل قبل فتح التطبيق.",
+    "phoneRequired": "أضف رقم هاتفك قبل فتح التطبيق.",
     "workspaceInactive": "مساحة العمل هذه غير نشطة.",
     "portalActor": "هذا حساب ولي أمر أو طالب، ولا يمكنه فتح تطبيق المعلّم.",
     "notPortalActor": "هذا الحساب غير مرتبط بسجل طالب.",

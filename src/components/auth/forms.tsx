@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import {
+  completePhoneAction,
   requestPasswordResetAction,
   resendVerificationAction,
   resetPasswordAction,
@@ -165,6 +166,17 @@ export function SignUpForm({
           errors={state.fieldErrors?.email}
         />
         <Field
+          label={t("Auth.phone")}
+          name="phone"
+          type="tel"
+          autoComplete="tel"
+          inputMode="tel"
+          dir="ltr"
+          hint={t("Auth.phoneHint")}
+          required
+          errors={state.fieldErrors?.phone}
+        />
+        <Field
           label={t("Auth.password")}
           name="password"
           type="password"
@@ -196,6 +208,31 @@ export function SignUpForm({
         </div>
       </div>
     </>
+  );
+}
+
+/** Required phone collection for first-time social accounts (ADR-0052). */
+export function CompletePhoneForm({ locale }: { locale: string }) {
+  const t = useTranslations();
+  const [state, action] = useActionState(completePhoneAction, initialFormState);
+
+  return (
+    <form action={action} className="form-stack" noValidate>
+      <input type="hidden" name="locale" value={locale} />
+      <Field
+        label={t("Auth.phone")}
+        name="phone"
+        type="tel"
+        autoComplete="tel"
+        inputMode="tel"
+        dir="ltr"
+        hint={t("Auth.phoneHint")}
+        required
+        errors={state.fieldErrors?.phone}
+      />
+      <FormMessage state={state} />
+      <SubmitButton idleKey="Auth.completePhoneAction" />
+    </form>
   );
 }
 

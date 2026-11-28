@@ -227,8 +227,11 @@ not have to log in before every session I teach.
 **Dependencies:** Email delivery provider (transactional email); password hashing; session store.
 
 **Acceptance criteria**
-1. A teacher can register with email + password; password rules enforced server-side (min 10 chars,
-   breached-password check against a public list).
+1. A teacher can register with email + phone + password; email is unique, phone is required for every
+   new account including social sign-in, password rules are enforced server-side (min 10 chars,
+   breached-password check against a public list). The phone is normalised to E.164, stored as contact
+   data on the app-owned `user_phone` table, and is deliberately not unique. No SMS, OTP, or phone
+   verification is claimed (`ADR-0052`).
 2. Email verification is required before the workspace is marked active; unverified accounts cannot
    create data but can sign in to a "verify your email" state.
 3. Sign-in issues a server-side session stored in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The
@@ -386,8 +389,9 @@ able to get it out, so that I can exercise my rights.
    retention period and then purged.
 5. Every file object has a retention/lifecycle policy; deleting a file removes the storage object
    within a bounded window, verified by a scheduled reconciliation job.
-6. Logs, error reports, and analytics never contain student names, phone numbers, note bodies, or
-   message bodies. A redaction test asserts this against a seeded fixture.
+6. Logs, error reports, and analytics never contain student names, student phone numbers, teacher
+   phone numbers, note bodies, or message bodies. A redaction test asserts this against a seeded
+   fixture.
 7. A published privacy notice and, if/when Kashkol is offered in the Egyptian market, a
    localised Arabic version of it, exist before P2 launch. **Legal review is required and is not
    performed by this document.**
@@ -1527,6 +1531,7 @@ performance, so that I can identify who needs help, why, and what I should do ne
 
 | Data | Class | Why sensitive | Controls |
 |---|---|---|---|
+| Teacher phone | Personal | Direct identifier and contact channel for a teacher account | E.164 on app-owned `user_phone`, keyed by user id; not unique; never in logs, errors, analytics, audit diffs, or third-party payloads; store-only, no SMS claim (`ADR-0052`) |
 | Student full name, grade | Personal | Identifies a minor; Arabic names are less ambiguous than Latin but still identifying | Tenant-scoped; never in logs; export gated by `settings`/owner |
 | Student phone | Personal | Direct identifier, contactable | Stored E.164; masked in lists (`01x *** ***`); shown LTR |
 | Parent name, parent phone | Personal | Identifies a household; a parent may have several children | Separate entity; parent sees only own children; no group aggregates |
